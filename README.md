@@ -159,7 +159,8 @@ This also puts the `barnowl` command on your PATH. Or download it yourself:
 3. The setup guide takes it from there.
 
 Barn Owl is signed and notarized by Apple, so it opens like any other app.
-It checks for updates once a day and asks before installing one. Settings →
+It can update itself: after the second launch it asks whether to check for
+updates automatically, and it always asks before installing one. Settings →
 General has the switch and a **Check for Updates…** button.
 
 <p>
@@ -201,9 +202,9 @@ Prefer building it yourself? See [Building from source](#building-from-source).
 ## Privacy and permissions
 
 Barn Owl works entirely on your Mac. It has no accounts and no analytics. Its
-only network request is the daily update check, which downloads the list of
-releases from GitHub and sends nothing about you. You can switch it off in
-Settings → General.
+only network request is checking GitHub for new versions: it downloads the
+list of releases and sends nothing about you or your Mac. Switch automatic
+checks off in Settings → General.
 
 - **Accessibility** lets it list menu bar icons, move them and open them.
 - **Screen Recording** lets it show real pictures of hidden icons. Without
@@ -248,8 +249,7 @@ To make a release, `Scripts/release.sh` builds Barn Owl with your Developer
 ID, has Apple notarize it, staples the ticket, signs the zip for updates and
 adds it to the update feed (`appcast.xml`) and the Homebrew cask. `--publish`
 also creates a draft GitHub release, and `--dry-run` stops before notarizing.
-Pushing a `vX.Y.Z` tag does the same on GitHub Actions. See
-[CONTRIBUTING.md](CONTRIBUTING.md#making-a-release).
+See [CONTRIBUTING.md](CONTRIBUTING.md#making-a-release).
 
 ## Contributing
 

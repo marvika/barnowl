@@ -5,9 +5,10 @@ before 1.0, a minor version can change behaviour.
 
 ## Unreleased
 
-- Barn Owl updates itself. It checks once a day and asks before installing;
-  switch it off or check right away in Settings → General, or use the new
-  button at the bottom of the quick panel.
+- Barn Owl can update itself. On the second launch it asks whether to check
+  automatically (once a day), and it always asks before installing. Change
+  that or check right away in Settings → General, or use the new button at
+  the bottom of the quick panel.
 - The Homebrew cask is marked as updating itself, so `brew upgrade` leaves it
   alone.
 

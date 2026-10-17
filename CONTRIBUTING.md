@@ -54,29 +54,14 @@ Sparkle updates installed copies from `appcast.xml` on main.
 
 The Sparkle signing key lives only in the maintainer's login keychain (Sparkle's
 `generate_keys` made it; the public half is `SUPublicEDKey` in Info.plist).
-Keep a backup: without it, installed copies can't be updated. Export it with
-`generate_keys -x <file>` from
-`build/DerivedData/SourcePackages/artifacts/sparkle/Sparkle/bin/`, store the
-file somewhere safe, and delete it.
+**Back it up**, for example in a password manager: if it's lost, installed
+copies can never be updated again. Export it with
+`build/DerivedData/SourcePackages/artifacts/sparkle/Sparkle/bin/generate_keys -x sparkle-key.txt`,
+save the file's contents, and delete the file. On a new Mac, `generate_keys -f`
+imports it.
 
-### On GitHub Actions
-
-Pushing a `vX.Y.Z` tag runs `.github/workflows/release.yml`, which does step 2
-for you and pushes the new appcast and cask to a `release/vX.Y.Z` branch. You
-still publish the draft, merge that branch and run `Scripts/update-tap.sh`.
-It needs these repository secrets (Settings → Secrets and variables → Actions):
-
-| Secret | What to put in it |
-|---|---|
-| `DEVELOPER_ID_P12` | The Developer ID Application certificate and its private key, exported from Keychain Access as a .p12, then `base64 -i cert.p12 \| pbcopy` |
-| `DEVELOPER_ID_P12_PASSWORD` | The password you gave the .p12 |
-| `NOTARY_KEY_P8` | The contents of an App Store Connect API key (.p8) with the Developer role (App Store Connect → Users and Access → Integrations) |
-| `NOTARY_KEY_ID` | That key's ID |
-| `NOTARY_ISSUER` | The issuer ID shown above the keys |
-| `SPARKLE_PRIVATE_KEY` | The contents of the file `generate_keys -x` writes |
-
-The team ID (2S5J2CYWPZ) is set in the workflow. Until the secrets exist, a tag
-push fails at signing and nothing is published.
+Releases are built on the maintainer's Mac only; no signing certificate or
+key is stored on GitHub.
 
 ## Pull requests
 

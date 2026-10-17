@@ -17,12 +17,13 @@ a week.
 
 ## What Barn Owl does with your data
 
-- It works entirely on your Mac: no accounts or analytics. The only network
-  request is the daily update check (Settings → General), which downloads
-  `appcast.xml` from this repository and sends nothing about you.
+- It works entirely on your Mac: no accounts or analytics. Its only network
+  request is checking GitHub for new versions: it downloads `appcast.xml` from
+  this repository and sends nothing about you or your Mac. Automatic checks can
+  be switched off in Settings → General.
 - Updates are signed twice: with the maintainer's Developer ID and with an
-  EdDSA key that never leaves the maintainer's Mac. Sparkle installs an update
-  only when both match.
+  EdDSA key only the maintainer holds. Sparkle installs an update only when
+  both match.
 - Clipboard history skips copies marked private and known password managers,
   and never saves images to disk.
 - Settings live in `~/Library/Preferences/io.github.marvika.BarnOwl.plist`;

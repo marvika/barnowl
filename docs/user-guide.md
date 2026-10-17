@@ -345,14 +345,16 @@ For Raycast, Alfred, scripts and anything that can open a URL:
 
 ## Updates
 
-Barn Owl checks for a new version once a day. When there is one, it shows
-what's new and asks before installing; it restarts by itself afterwards. To
+The second time you open Barn Owl, it asks whether to check for updates
+automatically. If you say yes, it checks once a day. When there's a new
+version, it shows what's new and asks before installing; it restarts by
+itself afterwards. To
 check right away, use **Check for Updates…** in Settings → General, or the
 arrow button at the bottom of the quick panel.
 
 Switch off **Automatically check for updates** in Settings → General to only
 check when you ask. The check downloads the list of releases from GitHub and
-sends nothing about you.
+sends nothing about you or your Mac.
 
 If you installed Barn Owl with Homebrew, it still updates itself;
 `brew upgrade` leaves it alone.

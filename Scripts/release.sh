@@ -20,10 +20,9 @@
 #   - notarytool credentials saved in the keychain:
 #       xcrun notarytool store-credentials "barkeep-notary" \
 #         --apple-id you@example.com --team-id YOURTEAMID
-#     (or another profile name, passed in NOTARY_PROFILE). Or an App Store
-#     Connect API key: NOTARY_KEY (path to the .p8), NOTARY_KEY_ID, NOTARY_ISSUER.
-#   - the Sparkle signing key in your keychain (generate_keys, once). Or the
-#     exported key in SPARKLE_PRIVATE_KEY.
+#     (or another profile name, passed in NOTARY_PROFILE)
+#   - the Sparkle signing key in your login keychain, made once with Sparkle's
+#     generate_keys (see CONTRIBUTING.md). Keep a backup of it.
 set -euo pipefail
 cd "${0:A:h}/.."
 
@@ -97,12 +96,7 @@ if [[ $mode == --dry-run ]]; then
 else
   echo "› Sending it to Apple to notarize (usually a few minutes)"
   ditto -c -k --keepParent "$app" "$dist/upload.zip"
-  if [[ -n ${NOTARY_KEY_ID:-} ]]; then
-    xcrun notarytool submit "$dist/upload.zip" --key "$NOTARY_KEY" --key-id "$NOTARY_KEY_ID" \
-      --issuer "$NOTARY_ISSUER" --wait
-  else
-    xcrun notarytool submit "$dist/upload.zip" --keychain-profile "$profile" --wait
-  fi
+  xcrun notarytool submit "$dist/upload.zip" --keychain-profile "$profile" --wait
   rm "$dist/upload.zip"
 
   echo "› Stapling the ticket, so it opens offline too"
@@ -117,12 +111,18 @@ shasum -a 256 "$zip" "$dist/barnowl" | tee "$dist/SHA256SUMS"
 echo "✓ $zip is ready"
 
 echo "› Signing the zip for Sparkle"
-if [[ -n ${SPARKLE_PRIVATE_KEY:-} ]]; then
-  enclosure=$(print -rn -- "$SPARKLE_PRIVATE_KEY" | "$sparkle_bin/sign_update" --ed-key-file - "$zip")
-else
-  enclosure=$("$sparkle_bin/sign_update" "$zip")
+enclosure=$("$sparkle_bin/sign_update" "$zip") || true
+if [[ $enclosure != *edSignature=* ]]; then
+  echo "✗ sign_update found no Sparkle key in your keychain. Import your backup with"
+  echo "  $sparkle_bin/generate_keys -f <file>"
+  exit 1
 fi
-[[ $enclosure == *edSignature=* ]] || { echo "✗ sign_update gave no signature"; exit 1; }
+cat <<EOF
+! Back up the Sparkle signing key if you haven't: without it, installed copies
+  can never be updated again. Export it, keep it in your password manager and
+  delete the file:
+    $sparkle_bin/generate_keys -x sparkle-key.txt
+EOF
 release_url="https://github.com/marvika/barnowl/releases/tag/v$version"
 cat > "$dist/appcast-item.xml" <<EOF
         <item>

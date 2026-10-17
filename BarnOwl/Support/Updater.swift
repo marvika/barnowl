@@ -8,15 +8,18 @@ import Sparkle
 @Observable
 final class Updater: NSObject {
     @ObservationIgnored private var controller: SPUStandardUpdaterController?
-    @ObservationIgnored private var observation: NSKeyValueObservation?
+    @ObservationIgnored private var observations: [NSKeyValueObservation] = []
 
     /// False while Sparkle is already checking or showing an update.
     private(set) var canCheck = true
 
-    var checksAutomatically = true {
+    /// Off until the user says yes to Sparkle's question on the second launch,
+    /// or switches it on in Settings.
+    var checksAutomatically = false {
         didSet {
-            guard checksAutomatically != oldValue else { return }
-            controller?.updater.automaticallyChecksForUpdates = checksAutomatically
+            guard let updater = controller?.updater, updater.automaticallyChecksForUpdates != checksAutomatically
+            else { return }
+            updater.automaticallyChecksForUpdates = checksAutomatically
         }
     }
 
@@ -27,10 +30,15 @@ final class Updater: NSObject {
         let controller = SPUStandardUpdaterController(startingUpdater: true, updaterDelegate: self,
                                                       userDriverDelegate: self)
         self.controller = controller
-        checksAutomatically = controller.updater.automaticallyChecksForUpdates
-        observation = controller.updater.observe(\.canCheckForUpdates, options: [.initial, .new]) { [weak self] updater, _ in
-            MainActor.assumeIsolated { self?.canCheck = updater.canCheckForUpdates }
-        }
+        observations = [
+            controller.updater.observe(\.canCheckForUpdates, options: [.initial, .new]) { [weak self] updater, _ in
+                MainActor.assumeIsolated { self?.canCheck = updater.canCheckForUpdates }
+            },
+            // Sparkle's own question changes it too.
+            controller.updater.observe(\.automaticallyChecksForUpdates, options: [.initial, .new]) { [weak self] updater, _ in
+                MainActor.assumeIsolated { self?.checksAutomatically = updater.automaticallyChecksForUpdates }
+            },
+        ]
     }
 
     func checkForUpdates() {
@@ -43,6 +51,10 @@ extension Bundle {
 }
 
 extension Updater: SPUUpdaterDelegate {
+    // Nothing about the Mac goes with the check, even if someone ticks
+    // "Include anonymous system profile" in Sparkle's first prompt.
+    nonisolated func allowedSystemProfileKeys(for updater: SPUUpdater) -> [String]? { [] }
+
     #if DEBUG
     // A development build checks only when asked, so a release never offers
     // to replace the copy being worked on.

@@ -47,7 +47,7 @@
 	<string>https://raw.githubusercontent.com/marvika/barnowl/main/appcast.xml</string>
 	<key>SUPublicEDKey</key>
 	<string>QsOQWSfgtxoDuYm0FVpSbYo1UxkSRoEDWAznnuCcNXg=</string>
-	<key>SUEnableAutomaticChecks</key>
-	<true/>
+	<key>SUEnableSystemProfiling</key>
+	<false/>
 </dict>
 </plist>
