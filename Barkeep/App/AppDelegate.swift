@@ -36,6 +36,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         model.syncGroupIcons = { [weak self] in self?.groupIcons.sync() }
         model.groupIconWindow = { [weak self] id in self?.groupIcons.windowID(of: id) }
         groupIcons.sync()
+        scanner.ownWindowFrames = { [weak self] in
+            guard let self else { return [] }
+            let own: [NSStatusItem?] = [self.items.toggle, self.items.separator, self.items.alwaysHidden,
+                                        self.quickPanel?.cupItem] + self.groupIcons.allStatusItems
+            guard let primary = NSScreen.screens.first else { return [] }
+            return own.compactMap { StatusItems.layoutFrame(of: $0) }.map {
+                CGRect(x: $0.minX, y: primary.frame.maxY - $0.maxY, width: $0.width, height: $0.height)
+            }
+        }
         scanner.onScan = { [weak self] in
             Task { await self?.model.layout.reconcile() }
         }

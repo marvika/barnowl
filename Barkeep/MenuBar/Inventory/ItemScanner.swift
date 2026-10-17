@@ -20,6 +20,9 @@ final class ItemScanner {
     @ObservationIgnored private var publishedWindowIDs: Set<CGWindowID> = []
     /// Called after each full scan.
     @ObservationIgnored var onScan: (() -> Void)?
+    /// Frames of Barkeep's own windows (dividers, cup, group icons), so they're
+    /// never mistaken for another app's icon.
+    @ObservationIgnored var ownWindowFrames: () -> [CGRect] = { [] }
 
     init(statusItems: StatusItems) {
         self.statusItems = statusItems
@@ -98,7 +101,13 @@ final class ItemScanner {
             apps.flatMap(AccessibilityInventory.entries(for:))
         }.value
         // Read the windows after Accessibility, so the frames are the newest.
-        let windows = Self.statusWindows()
+        // Barkeep's own windows are left out: off screen, a divider can sit
+        // where Accessibility puts another app's icon.
+        let own = ownWindowFrames()
+        let windows = Self.statusWindows().filter { window in
+            !(window.name?.hasPrefix("Barkeep") ?? false)
+                && !own.contains { abs($0.minX - window.frame.minX) < 1 && abs($0.width - window.frame.width) < 1 }
+        }
         let matched = ItemMatcher.match(windows: windows, entries: entries, frame: \.frame)
         let scanned = matched.map { window, entry in
             MenuBarItem(windowID: window.windowID, frame: window.frame, pid: entry.pid,
@@ -124,8 +133,11 @@ final class ItemScanner {
     }
 
     private func classify(_ items: [MenuBarItem]) -> [MenuBarItem] {
-        let separatorMinX = StatusItems.frame(of: statusItems.separator)?.minX ?? -.infinity
-        let alwaysHiddenMinX = Preferences.alwaysHiddenEnabled ? StatusItems.frame(of: statusItems.alwaysHidden)?.minX : nil
+        // The dividers' real positions, even off screen: while collapsed the
+        // always-hidden divider is entirely past the left edge.
+        let separatorMinX = StatusItems.layoutFrame(of: statusItems.separator)?.minX ?? -.infinity
+        let alwaysHiddenMinX = Preferences.alwaysHiddenEnabled
+            ? StatusItems.layoutFrame(of: statusItems.alwaysHidden)?.minX : nil
         let notch = NotchGeometry.of(NSScreen.screens.first)
         return items.map { item in
             var item = item

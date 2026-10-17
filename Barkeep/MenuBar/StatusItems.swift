@@ -99,6 +99,13 @@ final class StatusItems {
         return CGRect(x: frame.minX, y: primary.frame.maxY - frame.maxY, width: frame.width, height: frame.height)
     }
 
+    /// The item's window frame even when it's off screen, as when a divider
+    /// has been pushed past the left edge. Only x is meaningful for sections.
+    static func layoutFrame(of item: NSStatusItem?) -> CGRect? {
+        guard let window = item?.button?.window, window.frame.width > 0 else { return nil }
+        return window.frame
+    }
+
     /// The x range of an item's window in screen coordinates, if it's on screen.
     static func frame(of item: NSStatusItem?) -> CGRect? {
         guard let window = item?.button?.window, window.screen != nil else { return nil }

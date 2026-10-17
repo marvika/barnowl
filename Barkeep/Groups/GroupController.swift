@@ -44,6 +44,7 @@ final class GroupController {
     }
 
     var allWindowIDs: Set<CGWindowID> { Set(statusItems.values.compactMap { StatusItems.windowID(of: $0) }) }
+    var allStatusItems: [NSStatusItem?] { Array(statusItems.values) }
 
     private func makeItem(for group: MenuBarGroup) -> NSStatusItem {
         let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)

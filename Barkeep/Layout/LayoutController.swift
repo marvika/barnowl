@@ -61,6 +61,36 @@ enum DisplayProfile: String, Sendable {
     }
 }
 
+/// Stops the keeper from correcting the same icon over and over. Each
+/// correction is a ⌘-drag that briefly takes the pointer, so a disagreement
+/// between what Barkeep reads and what it does must never become a loop.
+struct CorrectionLimiter: Sendable {
+    var limit = 2
+    var window: TimeInterval = 120
+    private var history: [String: [Date]] = [:]
+
+    init(limit: Int = 2, window: TimeInterval = 120) {
+        self.limit = limit
+        self.window = window
+    }
+
+    /// Whether another correction of `key` is allowed now; records it if so.
+    mutating func allow(_ key: String, now: Date = Date()) -> Bool {
+        let recent = (history[key] ?? []).filter { now.timeIntervalSince($0) < window }
+        guard recent.count < limit else {
+            history[key] = recent
+            return false
+        }
+        history[key] = recent + [now]
+        return true
+    }
+
+    /// The user moved it on purpose: start counting afresh.
+    mutating func reset(_ key: String) {
+        history[key] = nil
+    }
+}
+
 /// Where new icons go when an app adds one Barkeep hasn't seen before.
 enum NewIconPlacement: String, CaseIterable, Identifiable, Sendable {
     case hidden
@@ -138,6 +168,7 @@ final class LayoutController {
     @ObservationIgnored private var lastWindowIDs: [String: CGWindowID] = [:]
     @ObservationIgnored private var hasBaseline = false
     @ObservationIgnored private var isReconciling = false
+    @ObservationIgnored private var limiter = CorrectionLimiter()
     /// Which layout is in use: one for everything, or with display profiles
     /// on, one for the laptop screen alone and one for a desk with an
     /// external display.
@@ -192,7 +223,8 @@ final class LayoutController {
 
     /// Moves an icon into a row, before another icon if given (else at the
     /// row's end, nearest the arrow).
-    func place(_ key: String, in row: LayoutRow, before beforeKey: String? = nil) async {
+    func place(_ key: String, in row: LayoutRow, before beforeKey: String? = nil, isCorrection: Bool = false) async {
+        if !isCorrection { limiter.reset(key) }
         guard let item = scanner.items.first(where: { $0.key == key }) else { return }
         guard item.isMovable else {
             lastError = "\(item.name) can't be moved; macOS keeps it in place."
@@ -259,8 +291,12 @@ final class LayoutController {
         lastWindowIDs = Dictionary(snapshot.map { ($0.key, $0.windowID) }, uniquingKeysWith: { a, _ in a })
         hasBaseline = true
         for move in result.moves {
-            Log.menuBar.info("Keeping \(move.key) in \(move.row.storageValue)")
-            await place(move.key, in: move.row)
+            guard limiter.allow(move.key) else {
+                Log.menuBar.error("Gave up keeping \(move.key, privacy: .public) in \(move.row.storageValue, privacy: .public): it didn't stay there")
+                continue
+            }
+            Log.menuBar.info("Keeping \(move.key, privacy: .public) in \(move.row.storageValue, privacy: .public)")
+            await place(move.key, in: move.row, isCorrection: true)
         }
     }
 

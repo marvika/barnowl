@@ -73,3 +73,28 @@ struct AudioVideoIndicatorTests {
         #expect(!indicator.isMovable)
     }
 }
+
+struct CorrectionLimiterTests {
+    @Test func stopsAfterRepeatedCorrections() {
+        var limiter = CorrectionLimiter(limit: 2, window: 120)
+        let start = Date(timeIntervalSince1970: 0)
+        let first = limiter.allow("zscaler", now: start)
+        let second = limiter.allow("zscaler", now: start.addingTimeInterval(10))
+        let third = limiter.allow("zscaler", now: start.addingTimeInterval(20))
+        let other = limiter.allow("onedrive", now: start.addingTimeInterval(20))
+        #expect(first && second && !third && other)
+    }
+
+    @Test func allowsAgainLaterOrAfterAManualMove() {
+        var limiter = CorrectionLimiter(limit: 2, window: 120)
+        let start = Date(timeIntervalSince1970: 0)
+        _ = limiter.allow("a", now: start)
+        _ = limiter.allow("a", now: start)
+        let later = limiter.allow("a", now: start.addingTimeInterval(200))
+        _ = limiter.allow("b", now: start)
+        _ = limiter.allow("b", now: start)
+        limiter.reset("b")
+        let afterReset = limiter.allow("b", now: start.addingTimeInterval(1))
+        #expect(later && afterReset)
+    }
+}
