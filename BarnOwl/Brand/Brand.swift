@@ -526,7 +526,7 @@ private struct HatLayer: View {
     let accessory: OwlAccessory
 
     /// How far above the owl's frame the hat may reach, as a fraction of it.
-    private static let headroom: CGFloat = 0.3
+    private nonisolated static let headroom: CGFloat = 0.3
 
     var body: some View {
         GeometryReader { proxy in
