@@ -14,6 +14,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let images = ItemImageCache()
     private var bar: BarkeepBarController!
     private var search: SearchPanelController!
+    private var groupIcons: GroupController!
+    private var pendingURLs: [URL] = []
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         Preferences.registerDefaults()
@@ -22,8 +24,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         sections = SectionController(items: items, engine: HidingEngineFactory.make(items: items))
         Log.app.info("Using hiding engine: \(self.sections.engine.displayName)")
         scanner = ItemScanner(statusItems: items)
+        let groups = GroupStore()
         model = AppModel(sections: sections, keepAwake: keepAwake, scanner: scanner, images: images,
-                         opener: ItemOpener(sections: sections, scanner: scanner))
+                         mover: ItemMover(statusItems: items), groups: groups)
+        groupIcons = GroupController(model: model)
+        groups.onChange = { [weak self] in self?.groupIcons.sync() }
+        model.syncGroupIcons = { [weak self] in self?.groupIcons.sync() }
+        model.groupIconWindow = { [weak self] id in self?.groupIcons.windowID(of: id) }
+        groupIcons.sync()
         bar = BarkeepBarController(model: model) { [weak self] in self?.items.toggle.button?.window?.frame }
         search = SearchPanelController(model: model)
         model.showSearch = { [weak self] in self?.search.show() }
@@ -35,10 +43,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 guard let self else { return }
                 await self.images.capture(await self.scanner.freshItems())
                 self.sections.collapse()
+                await self.model.layout.applyFirstRunDefaults()
             }
         }
         model.showSetup = { [weak self] in self?.onboardingWindow.show() }
-        model.showSettings = { [weak self] in self?.settingsWindow.show() }
+        model.openSettingsWindow = { [weak self] in self?.settingsWindow.show() }
         menuBuilder = MenuBuilder(sections: sections, keepAwake: keepAwake, openSettings: { [weak self] in
             self?.settingsWindow.show()
         }, openSearch: { [weak self] in
@@ -75,6 +84,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             MainActor.assumeIsolated { self?.preferencesChanged() }
         }
 
+        if !pendingURLs.isEmpty {
+            let urls = pendingURLs
+            pendingURLs = []
+            DispatchQueue.main.async { self.application(NSApp, open: urls) }
+        }
+
         if Preferences.hasShownWelcome {
             // Everything is showing right after launch: list the items and take
             // their pictures before hiding, so the Barkeep Bar has them.
@@ -84,6 +99,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 await self.images.capture(items)
                 self.sections.collapse()
                 self.scanner.start()
+                await self.model.layout.applyFirstRunDefaults()
             }
         } else {
             scanner.start()
@@ -96,10 +112,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// barkeep://hide, barkeep://keep-awake?minutes=60 (0 or none = indefinitely),
     /// barkeep://keep-awake/stop. For Shortcuts, Raycast and scripts.
     func application(_ application: NSApplication, open urls: [URL]) {
+        // A link that launches Barkeep can arrive before launch has finished.
+        guard model != nil else {
+            pendingURLs += urls
+            return
+        }
         for url in urls where url.scheme == "barkeep" {
             let query = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems
             switch (url.host() ?? "", url.path()) {
-            case ("settings", _): settingsWindow.show()
+            case ("settings", _):
+                // barkeep://settings?pane=layout
+                let pane = query?.first { $0.name == "pane" }?.value.flatMap(SettingsPane.init(rawValue:))
+                model.showSettings(pane)
             case ("search", _): search.show()
             case ("bar", _): bar.toggle()
             case ("open", _):

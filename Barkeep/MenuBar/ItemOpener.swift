@@ -1,59 +1,83 @@
 import AppKit
 import ApplicationServices
 
-/// Opens another app's menu bar item from the Barkeep Bar or search.
+/// Opens another app's menu bar item from the Barkeep Bar, a group or search.
 ///
-/// A hidden item ignores presses (its menu would open off screen), so the
-/// item's section is revealed first, the item is pressed through
-/// Accessibility, and the section hides again once the item's menu closes.
+/// A hidden item ignores presses (its menu would open off screen). So the
+/// item is moved next to the icon that was clicked (the arrow or a group),
+/// pressed there so its menu opens in the right place, and moved back once
+/// the menu closes. If moving fails, the item's whole section is revealed
+/// instead.
 @MainActor
 final class ItemOpener {
     private let sections: SectionController
-    private let scanner: ItemScanner
+    private let mover: ItemMover
     private var openTask: Task<Void, Never>?
 
-    init(sections: SectionController, scanner: ItemScanner) {
+    init(sections: SectionController, mover: ItemMover) {
         self.sections = sections
-        self.scanner = scanner
+        self.mover = mover
     }
 
-    func open(_ item: MenuBarItem) {
+    /// `anchor` is the window to open the item left of (a group icon); if nil,
+    /// the item opens at the start of the visible section, near the arrow.
+    func open(_ item: MenuBarItem, near anchor: CGWindowID? = nil) {
         openTask?.cancel()
-        openTask = Task { await self.perform(item) }
+        openTask = Task { await self.perform(item, anchor: anchor) }
     }
 
-    private func perform(_ item: MenuBarItem) async {
-        let needsReveal = item.section != .visible
-        if needsReveal {
-            sections.holdOpen = true
-            sections.set(item.section == .alwaysHidden ? .expandedAll : .expanded)
-            await waitUntilOnScreen(item)
+    private func perform(_ item: MenuBarItem, anchor: CGWindowID?) async {
+        if item.section == .visible && !item.isBehindNotch {
+            await press(item)
+            return
         }
-        defer {
-            if needsReveal {
-                sections.holdOpen = false
-                sections.collapse()
-            }
+        let destination: MoveDestination? = anchor.map { .leftOf($0) }
+            ?? StatusItems.windowID(of: sections.items.separator).map { .rightOf($0) }
+        if item.isMovable, let destination, await openMovedOut(item, to: destination) {
+            return
         }
+        await openRevealed(item)
+    }
 
+    private func openMovedOut(_ item: MenuBarItem, to destination: MoveDestination) async -> Bool {
+        // Where it goes back to: left of whatever was right of it.
+        let frames = ItemMover.frames()
+        let start = frames[item.windowID] ?? item.frame
+        let neighbor = frames.filter { $0.key != item.windowID && $0.value.minX >= start.maxX - 1 }
+            .min { $0.value.minX < $1.value.minX }?.key
+        guard await mover.move(item.windowID, to: destination) else { return false }
+        await press(item)
+        await waitForMenuToClose(pid: item.pid)
+        if let neighbor {
+            await mover.move(item.windowID, to: .leftOf(neighbor))
+        }
+        return true
+    }
+
+    private func openRevealed(_ item: MenuBarItem) async {
+        sections.holdOpen = true
+        sections.set(item.section == .alwaysHidden ? .expandedAll : .expanded)
+        await waitUntilOnScreen(item)
+        await press(item)
+        await waitForMenuToClose(pid: item.pid)
+        sections.holdOpen = false
+        sections.collapse()
+    }
+
+    /// Presses through Accessibility; some apps (often Electron ones) accept
+    /// the press but show nothing, and a real click works for those.
+    private func press(_ item: MenuBarItem) async {
         let pressed = AXUIElementPerformAction(item.element.raw, kAXPressAction as CFString) == .success
-        // Some apps (often Electron ones) accept the press but show nothing;
-        // a real click works for those.
-        let opened = pressed ? await menuAppears(for: item.pid) : false
-        if !opened {
-            Log.menuBar.info("Press didn't open \(item.appName); clicking instead")
-            let frame = ItemScanner.currentFrame(of: item.element) ?? item.frame
-            Self.click(at: CGPoint(x: frame.midX, y: frame.midY))
-            _ = await menuAppears(for: item.pid)
-        }
-        if needsReveal {
-            await waitForMenuToClose(pid: item.pid)
-        }
+        if pressed, await menuAppears(for: item.pid) { return }
+        Log.menuBar.info("Press didn't open \(item.appName); clicking instead")
+        let frame = ItemMover.frames()[item.windowID] ?? item.frame
+        Self.click(at: CGPoint(x: frame.midX, y: frame.midY))
+        _ = await menuAppears(for: item.pid)
     }
 
     private func waitUntilOnScreen(_ item: MenuBarItem) async {
         for _ in 0..<25 {
-            if let frame = ItemScanner.currentFrame(of: item.element), frame.minX >= 0 { return }
+            if let frame = ItemMover.frames()[item.windowID], frame.minX >= 0 { return }
             try? await Task.sleep(for: .milliseconds(40))
         }
     }
@@ -66,20 +90,18 @@ final class ItemOpener {
         return false
     }
 
-    /// Keeps the section revealed while the item's menu or popover is open,
-    /// so it doesn't jump away from under the menu.
+    /// Keeps the item in place while its menu or popover is open.
     private func waitForMenuToClose(pid: pid_t) async {
-        let deadline = Date().addingTimeInterval(120)
+        let deadline = Date().addingTimeInterval(300)
         while Date() < deadline, !Task.isCancelled, Self.hasOpenMenu(pid: pid) {
             try? await Task.sleep(for: .milliseconds(250))
         }
-        try? await Task.sleep(for: .milliseconds(300))
+        try? await Task.sleep(for: .milliseconds(200))
     }
 
-    /// Whether the app (or Control Center, which draws many system menus) has a
-    /// menu or popover window up: anything above normal windows that isn't a
-    /// menu bar item.
-    private static func hasOpenMenu(pid: pid_t) -> Bool {
+    /// Whether the app has a menu or popover up: a window above normal ones
+    /// that isn't a menu bar item.
+    static func hasOpenMenu(pid: pid_t) -> Bool {
         guard let list = CGWindowListCopyWindowInfo([.optionOnScreenOnly], kCGNullWindowID) as? [[String: Any]]
         else { return false }
         let statusLevel = Int(CGWindowLevelForKey(.statusWindow))

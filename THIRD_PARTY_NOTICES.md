@@ -38,7 +38,9 @@ https://github.com/sindresorhus/KeyboardShortcuts (MIT, Sindre Sorhus).
 ## Frost
 
 The macOS 26 status item position seeds in `StatusItems.swift` use the values
-Frost found: https://github.com/frostbar/frost
+Frost found, and `ItemMover.swift` follows Frost's documented ⌘-drag technique
+(mouse-down on the app's own icon, routed to the target by event field 0x33,
+mouse-up once the item has lifted): https://github.com/frostbar/frost
 
 ```
 MIT License

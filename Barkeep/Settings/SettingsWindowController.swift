@@ -15,6 +15,7 @@ final class SettingsWindowController {
             let window = NSWindow(contentViewController: NSHostingController(rootView: SettingsView(model: model)))
             window.title = "Barkeep Settings"
             window.styleMask = [.titled, .closable, .miniaturizable, .fullSizeContentView]
+            window.setFrameAutosaveName("BarkeepSettings")
             window.toolbarStyle = .unified
             window.isReleasedWhenClosed = false
             window.center()

@@ -5,15 +5,13 @@ import SwiftUI
 /// First-run setup: five short steps, each with one thing to do.
 struct OnboardingView: View {
     enum Step: Int, CaseIterable {
-        case welcome, arrange, display, shortcuts, preferences, done
+        case welcome, display, arrange, shortcuts, preferences, done
     }
 
     let model: AppModel
     let finish: () -> Void
 
     @State private var step: Step = .welcome
-    @State private var demoCollapsed = true
-    @State private var isArranging = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -37,14 +35,8 @@ struct OnboardingView: View {
 
             footer
         }
-        .frame(width: 620, height: 540)
+        .frame(width: 680, height: 600)
         .animation(.smooth(duration: 0.35), value: step)
-        .onChange(of: step) { _, newStep in
-            if newStep != .arrange, isArranging {
-                isArranging = false
-                model.endArranging(collapse: false)
-            }
-        }
     }
 
     // MARK: Steps
@@ -68,35 +60,13 @@ struct OnboardingView: View {
     }
 
     private var arrange: some View {
-        VStack(alignment: .leading, spacing: 16) {
+        VStack(alignment: .leading, spacing: 12) {
             header("Choose what stays visible",
-                   "Barkeep put an arrow next to Control Center. Icons to the left of its | divider are hidden until you click the arrow.")
-            MenuBarDiagram(collapsed: demoCollapsed)
-                .onTapGesture { demoCollapsed.toggle() }
-                .task {
-                    // Gentle loop so the idea is clear without reading.
-                    while !Task.isCancelled {
-                        try? await Task.sleep(for: .seconds(1.8))
-                        demoCollapsed.toggle()
-                    }
-                }
-            VStack(alignment: .leading, spacing: 10) {
-                instruction(1, "Click **Show My Icons** below.")
-                instruction(2, "Hold **⌘** and drag the icons you use to the **right** of the | divider.")
-                instruction(3, "Leave the rest on the left. They hide when you click the arrow.")
+                   "Drag icons between the rows. Your menu bar changes as you go. Groups and more are in Settings → Layout.")
+            ScrollView {
+                LayoutEditorView(model: model, compact: true)
             }
-            HStack {
-                Button(isArranging ? "Done Arranging" : "Show My Icons") {
-                    isArranging.toggle()
-                    if isArranging { model.beginArranging() } else { model.endArranging(collapse: true) }
-                }
-                .buttonStyle(.borderedProminent)
-                .controlSize(.large)
-                if isArranging {
-                    Label("Icons stay visible until you're done.", systemImage: "hand.draw")
-                        .font(.callout).foregroundStyle(.secondary)
-                }
-            }
+            .scrollIndicators(.automatic)
         }
     }
 
@@ -189,15 +159,6 @@ struct OnboardingView: View {
         }
     }
 
-    private func instruction(_ number: Int, _ text: LocalizedStringKey) -> some View {
-        HStack(alignment: .firstTextBaseline, spacing: 10) {
-            Text("\(number)")
-                .font(.caption.bold()).foregroundStyle(.white)
-                .frame(width: 20, height: 20)
-                .background(Color.accentColor, in: .circle)
-            Text(text)
-        }
-    }
 
 }
 

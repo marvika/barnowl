@@ -22,10 +22,21 @@ struct MenuBarItem: Identifiable, Hashable, Sendable {
     /// What Accessibility calls the item ("Wi‑Fi, connected", "OneDrive — Contoso"…), if anything.
     let title: String?
     let element: AXElement
+    /// Survives relaunches (window IDs don't): the app plus the status item's
+    /// name, used for groups. See `ItemKey`.
+    var key: String = ""
+    var windowName: String?
     var section: MenuBarSection = .visible
     var isBehindNotch = false
 
     var id: CGWindowID { windowID }
+
+    /// The clock and Control Center can't be moved, by hand or otherwise.
+    var isMovable: Bool {
+        guard bundleIdentifier == "com.apple.controlcenter" else { return true }
+        if let windowName, windowName == "Clock" || windowName.hasPrefix("BentoBox") { return false }
+        return !["Clock", "Control Center"].contains(title ?? "")
+    }
 
     /// Items macOS draws itself (clock, Control Center, Wi‑Fi…).
     var isSystem: Bool {
@@ -76,6 +87,9 @@ struct MenuBarItem: Identifiable, Hashable, Sendable {
 struct StatusWindow: Equatable, Sendable {
     let windowID: CGWindowID
     let frame: CGRect
+    /// The status item's autosave name ("Item-0", "WiFi", "Clock"…). Readable
+    /// for other apps' windows only with Screen Recording.
+    var name: String?
 }
 
 /// An item as Accessibility reports it, before it's matched to a window.
@@ -182,6 +196,23 @@ enum HiddenIconsDisplay: String, CaseIterable, Identifiable, Sendable {
         case .menuBar: false
         case .barkeepBar: true
         case .automatic: visibleWidth + hiddenWidth > availableWidth
+        }
+    }
+}
+
+enum ItemKey {
+    /// "com.example.app/Item-0", with "#2", "#3"… for repeats. Falls back to
+    /// the Accessibility title when the window name isn't readable (no Screen
+    /// Recording permission).
+    static func assign(_ items: [MenuBarItem]) -> [MenuBarItem] {
+        var seen: [String: Int] = [:]
+        return items.map { item in
+            var item = item
+            let base = "\(item.bundleIdentifier ?? item.appName)/\(item.windowName ?? item.title ?? "item")"
+            let count = (seen[base] ?? 0) + 1
+            seen[base] = count
+            item.key = count == 1 ? base : "\(base)#\(count)"
+            return item
         }
     }
 }

@@ -8,8 +8,8 @@ struct BarkeepBarView: View {
     let close: () -> Void
 
     private var scanner: ItemScanner { model.scanner }
-    private var hidden: [MenuBarItem] { scanner.items.filter { $0.section == .hidden } }
-    private var alwaysHidden: [MenuBarItem] { scanner.items.filter { $0.section == .alwaysHidden } }
+    private var hidden: [MenuBarItem] { model.layout.items(in: .hidden) }
+    private var alwaysHidden: [MenuBarItem] { model.layout.items(in: .alwaysHidden) }
     private var behindNotch: [MenuBarItem] { scanner.items.filter(\.isBehindNotch) }
 
     var body: some View {
@@ -56,6 +56,7 @@ struct BarkeepBarView: View {
                 FlowLayout(spacing: 2) {
                     ForEach(items) { item in
                         ItemTile(item: item, image: model.images.image(for: item)) { open(item) }
+                            .contextMenu { ItemContextMenu(model: model, item: item) }
                     }
                 }
             }
@@ -81,7 +82,7 @@ struct BarkeepBarView: View {
             }
             FooterButton(title: "Arrange", symbol: "hand.draw") {
                 close()
-                model.beginArranging()
+                model.showSettings(.layout)
             }
             Spacer()
             FooterButton(title: nil, symbol: "gearshape") {
@@ -94,7 +95,7 @@ struct BarkeepBarView: View {
     }
 }
 
-private struct ItemTile: View {
+struct ItemTile: View {
     let item: MenuBarItem
     let image: NSImage?
     let action: () -> Void

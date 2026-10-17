@@ -3,51 +3,55 @@ import SwiftUI
 
 /// Settings laid out like System Settings: a sidebar of panes, each a
 /// grouped form.
-struct SettingsView: View {
-    enum Pane: String, CaseIterable, Identifiable {
-        case general, menuBar, keepAwake, toggles, shortcuts, about
-        var id: Self { self }
+enum SettingsPane: String, CaseIterable, Identifiable {
+    case layout, general, menuBar, keepAwake, toggles, shortcuts, about
+    var id: Self { self }
 
-        var title: String {
-            switch self {
-            case .general: "General"
-            case .menuBar: "Menu Bar"
-            case .keepAwake: "Keep Awake"
-            case .toggles: "Toggles"
-            case .shortcuts: "Shortcuts"
-            case .about: "About"
-            }
-        }
-
-        var symbol: String {
-            switch self {
-            case .general: "gearshape.fill"
-            case .menuBar: "menubar.rectangle"
-            case .keepAwake: "cup.and.heat.waves.fill"
-            case .toggles: "switch.2"
-            case .shortcuts: "keyboard.fill"
-            case .about: "info"
-            }
-        }
-
-        var color: Color {
-            switch self {
-            case .general: .gray
-            case .menuBar: .blue
-            case .keepAwake: .orange
-            case .toggles: .green
-            case .shortcuts: .purple
-            case .about: .secondary
-            }
+    var title: String {
+        switch self {
+        case .layout: "Layout"
+        case .general: "General"
+        case .menuBar: "Menu Bar"
+        case .keepAwake: "Keep Awake"
+        case .toggles: "Toggles"
+        case .shortcuts: "Shortcuts"
+        case .about: "About"
         }
     }
 
-    let model: AppModel
-    @State private var pane: Pane? = .general
+    var symbol: String {
+        switch self {
+        case .layout: "square.grid.3x1.below.line.grid.1x2"
+        case .general: "gearshape.fill"
+        case .menuBar: "menubar.rectangle"
+        case .keepAwake: "cup.and.heat.waves.fill"
+        case .toggles: "switch.2"
+        case .shortcuts: "keyboard.fill"
+        case .about: "info"
+        }
+    }
+
+    var color: Color {
+        switch self {
+        case .layout: .indigo
+        case .general: .gray
+        case .menuBar: .blue
+        case .keepAwake: .orange
+        case .toggles: .green
+        case .shortcuts: .purple
+        case .about: .secondary
+        }
+    }
+}
+
+/// Settings laid out like System Settings: a sidebar of panes, each a
+/// grouped form.
+struct SettingsView: View {
+    @Bindable var model: AppModel
 
     var body: some View {
         NavigationSplitView {
-            List(Pane.allCases, selection: $pane) { pane in
+            List(SettingsPane.allCases, selection: $model.settingsPane) { pane in
                 Label {
                     Text(pane.title)
                 } icon: {
@@ -59,7 +63,8 @@ struct SettingsView: View {
             .toolbar(removing: .sidebarToggle)
         } detail: {
             Group {
-                switch pane ?? .general {
+                switch model.settingsPane ?? .general {
+                case .layout: LayoutPane(model: model)
                 case .general: GeneralPane(model: model)
                 case .menuBar: MenuBarPane(model: model)
                 case .keepAwake: KeepAwakePane(keepAwake: model.keepAwake)
@@ -69,9 +74,27 @@ struct SettingsView: View {
                 }
             }
             .formStyle(.grouped)
-            .navigationTitle((pane ?? .general).title)
+            .navigationTitle((model.settingsPane ?? .general).title)
         }
-        .frame(width: 720, height: 520)
+        .frame(width: 780, height: 600)
+    }
+}
+
+// MARK: - Layout
+
+private struct LayoutPane: View {
+    let model: AppModel
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 12) {
+                Text("Drag icons between rows. Your menu bar changes right away. Right-click an icon for more options.")
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                LayoutEditorView(model: model)
+            }
+            .padding(20)
+        }
     }
 }
 
@@ -124,7 +147,6 @@ private struct MenuBarPane: View {
     @AppStorage(PrefKey.autoRehideDelay) private var autoRehideDelay = 10.0
     @AppStorage(PrefKey.alwaysHiddenEnabled) private var alwaysHiddenEnabled = false
     @AppStorage(PrefKey.hiddenIconsDisplay) private var display = HiddenIconsDisplay.automatic
-    @State private var isArranging = false
 
     var body: some View {
         Form {
@@ -132,16 +154,11 @@ private struct MenuBarPane: View {
                 MenuBarDiagram(collapsed: model.sectionState == .collapsed, showsAlwaysHidden: alwaysHiddenEnabled)
                     .listRowInsets(EdgeInsets(top: 12, leading: 12, bottom: 12, trailing: 12))
                 LabeledContent {
-                    Button(isArranging ? "Done" : "Arrange Icons…") {
-                        isArranging.toggle()
-                        if isArranging { model.beginArranging() } else { model.endArranging(collapse: true) }
-                    }
-                    .buttonStyle(.borderedProminent)
+                    Button("Open Layout") { model.settingsPane = .layout }
+                        .buttonStyle(.borderedProminent)
                 } label: {
-                    BadgeLabel(title: "Arrange icons",
-                               subtitle: isArranging
-                                   ? "Hold ⌘ and drag icons across the | divider. Click Done when finished."
-                                   : "Shows every icon so you can ⌘-drag them where you want.",
+                    BadgeLabel(title: "Arrange icons and groups",
+                               subtitle: "Drag icons between the menu bar, hidden and your groups.",
                                symbol: "hand.draw.fill", color: .blue)
                 }
             }
@@ -182,9 +199,6 @@ private struct MenuBarPane: View {
             } footer: {
                 Text("Hiding method: \(model.engineName)")
             }
-        }
-        .onDisappear {
-            if isArranging { model.endArranging(collapse: true) }
         }
     }
 

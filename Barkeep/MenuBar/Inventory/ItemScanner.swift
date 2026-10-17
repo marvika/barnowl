@@ -66,7 +66,7 @@ final class ItemScanner {
             var item = item
             if let frame = windows[item.windowID] { item.frame = frame }
             return item
-        })
+        }).sorted { $0.frame.minX < $1.frame.minX }
     }
 
     /// The item's current frame according to Accessibility.
@@ -88,9 +88,20 @@ final class ItemScanner {
         let scanned = matched.map { window, entry in
             MenuBarItem(windowID: window.windowID, frame: window.frame, pid: entry.pid,
                         bundleIdentifier: entry.bundleIdentifier, appName: entry.appName, title: entry.title,
-                        element: entry.element)
+                        element: entry.element, windowName: window.name)
         }
-        items = classify(scanned).sorted { $0.frame.minX < $1.frame.minX }
+        // Keys are numbered right to left, the order macOS adds items in, so
+        // they don't shift when an item moves between sections.
+        // While the bar slides (a collapse, a move) Accessibility and the window
+        // list can disagree and few items match. Keep the last list and look again.
+        if items.count >= 4, scanned.count < items.count / 2 {
+            Log.menuBar.info("Scan matched only \(scanned.count) of \(self.items.count) items; retrying")
+            rescanRequested = true
+            try? await Task.sleep(for: .milliseconds(500))
+            return
+        }
+        let keyed = ItemKey.assign(scanned.sorted { $0.frame.minX > $1.frame.minX })
+        items = classify(keyed).sorted { $0.frame.minX < $1.frame.minX }
         lastScan = Date()
         Log.menuBar.info("Scanned \(self.items.count) menu bar items from \(windows.count) windows")
     }
@@ -109,7 +120,9 @@ final class ItemScanner {
     }
 
     /// Status-level windows on the menu bar (layer 25), in top-left coordinates.
-    nonisolated static func statusWindows() -> [StatusWindow] {
+    /// Barkeep's collapsed divider is far wider than any item; it's left out
+    /// unless `includeWide`.
+    nonisolated static func statusWindows(includeWide: Bool = false) -> [StatusWindow] {
         guard let list = CGWindowListCopyWindowInfo([.optionAll], kCGNullWindowID) as? [[String: Any]] else { return [] }
         let statusLevel = Int(CGWindowLevelForKey(.statusWindow))
         return list.compactMap { info in
@@ -117,8 +130,8 @@ final class ItemScanner {
                   let id = info[kCGWindowNumber as String] as? CGWindowID,
                   let bounds = info[kCGWindowBounds as String] as? NSDictionary,
                   let frame = CGRect(dictionaryRepresentation: bounds),
-                  frame.width > 0, frame.width < 600 else { return nil }
-            return StatusWindow(windowID: id, frame: frame)
+                  frame.width > 0, includeWide || frame.width < 600 else { return nil }
+            return StatusWindow(windowID: id, frame: frame, name: info[kCGWindowName as String] as? String)
         }
     }
 }

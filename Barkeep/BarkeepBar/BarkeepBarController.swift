@@ -8,7 +8,6 @@ final class BarkeepBarController {
     private let anchor: () -> NSRect?
     private var panel: FloatingPanel?
     private let outsideClicks = OutsideClickMonitor()
-    private var resizeObserver: NSObjectProtocol?
 
     var isOpen: Bool { panel?.isVisible ?? false }
 
@@ -45,24 +44,12 @@ final class BarkeepBarController {
         let panel = FloatingPanel(rootView: view)
         panel.onCancel = { [weak self] in self?.close() }
         // Keep the panel's right edge under the arrow as its content grows.
-        resizeObserver = NotificationCenter.default.addObserver(forName: NSWindow.didResizeNotification,
-                                                                object: panel, queue: .main) { [weak self] _ in
-            MainActor.assumeIsolated {
-                guard let self, let panel = self.panel else { return }
-                self.position(panel)
-            }
-        }
+        panel.onResize = { [weak self] panel in self?.position(panel) }
         return panel
     }
 
-    private func position(_ panel: NSPanel) {
-        guard let anchor = anchor(), let screen = NSScreen.screens.first(where: { $0.frame.intersects(anchor) })
-                ?? NSScreen.main else { return }
-        let size = panel.frame.size
-        // The view adds 8 pt of transparent padding for the shadow.
-        var x = anchor.maxX - size.width + 8
-        x = min(max(x, screen.frame.minX + 4), screen.frame.maxX - size.width - 4)
-        let y = screen.visibleFrame.maxY - size.height + 4
-        panel.setFrameOrigin(NSPoint(x: x, y: y))
+    private func position(_ panel: FloatingPanel) {
+        guard let anchor = anchor() else { return }
+        panel.place(under: anchor, alignRight: true)
     }
 }

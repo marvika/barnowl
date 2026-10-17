@@ -10,9 +10,17 @@ final class AppModel {
     let scanner: ItemScanner
     let images: ItemImageCache
     @ObservationIgnored let opener: ItemOpener
+    @ObservationIgnored let mover: ItemMover
+    let groups: GroupStore
+    let layout: LayoutController
     @ObservationIgnored var showSetup: () -> Void = {}
-    @ObservationIgnored var showSettings: () -> Void = {}
+    @ObservationIgnored var openSettingsWindow: () -> Void = {}
     @ObservationIgnored var showSearch: () -> Void = {}
+    @ObservationIgnored var syncGroupIcons: () -> Void = {}
+    @ObservationIgnored var groupIconWindow: (UUID) -> CGWindowID? = { _ in nil }
+
+    /// The Settings pane showing; set before opening the window to jump to one.
+    var settingsPane: SettingsPane? = .general
 
     /// Mirrors SectionController.state so views can react to it.
     var sectionState: SectionState = .expanded
@@ -20,12 +28,43 @@ final class AppModel {
     private(set) var screenRecordingAllowed = ItemImageCache.hasPermission
 
     init(sections: SectionController, keepAwake: KeepAwakeController, scanner: ItemScanner, images: ItemImageCache,
-         opener: ItemOpener) {
+         mover: ItemMover, groups: GroupStore) {
         self.sections = sections
         self.keepAwake = keepAwake
         self.scanner = scanner
         self.images = images
-        self.opener = opener
+        self.mover = mover
+        self.groups = groups
+        opener = ItemOpener(sections: sections, mover: mover)
+        layout = LayoutController(scanner: scanner, mover: mover, statusItems: sections.items, sections: sections,
+                                  groups: groups)
+    }
+
+    func showSettings(_ pane: SettingsPane? = nil) {
+        if let pane { settingsPane = pane }
+        openSettingsWindow()
+    }
+
+    /// Adds the group and puts its icon in the menu bar, next to the arrow.
+    func createGroup(name: String, symbol: String) async {
+        let group = groups.create(name: name, symbol: symbol)
+        syncGroupIcons()
+        // A new status item appears at the far left, usually in a hidden
+        // section; bring it next to the arrow.
+        try? await Task.sleep(for: .milliseconds(400))
+        if let window = groupIconWindow(group.id), let divider = StatusItems.windowID(of: sections.items.separator) {
+            await mover.move(window, to: .rightOf(divider))
+        }
+    }
+
+    /// Removes the group; its icons go back to the hidden section.
+    func deleteGroup(_ id: UUID) async {
+        let members = groups.groups.first { $0.id == id }?.memberKeys ?? []
+        groups.delete(id)
+        syncGroupIcons()
+        for key in members {
+            await layout.place(key, in: .hidden)
+        }
     }
 
     var engineName: String { sections.engine.displayName }

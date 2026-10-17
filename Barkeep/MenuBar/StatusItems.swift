@@ -73,6 +73,32 @@ final class StatusItems {
         button.toolTip = "⌘-drag icons to the left of this divider to hide them."
     }
 
+    /// The item's window ID, as CGWindowList and event routing know it.
+    ///
+    /// On macOS 26 status item windows belong to Control Center, and
+    /// `NSWindow.windowNumber` isn't that ID. So the window is looked up in the
+    /// window list: by its autosave name (readable with Screen Recording),
+    /// else by frame.
+    static func windowID(of item: NSStatusItem?) -> CGWindowID? {
+        guard let item, let window = item.button?.window, let primary = NSScreen.screens.first else { return nil }
+        let windows = ItemScanner.statusWindows(includeWide: true)
+        if let name = item.autosaveName, let match = windows.first(where: { $0.name == name }) {
+            return match.windowID
+        }
+        let frame = window.frame
+        let cgFrame = CGRect(x: frame.minX, y: primary.frame.maxY - frame.maxY, width: frame.width, height: frame.height)
+        return windows
+            .filter { abs($0.frame.width - cgFrame.width) <= 1 && abs($0.frame.minY - cgFrame.minY) <= 2 }
+            .min { abs($0.frame.minX - cgFrame.minX) < abs($1.frame.minX - cgFrame.minX) }
+            .flatMap { abs($0.frame.minX - cgFrame.minX) <= 2 ? $0.windowID : nil }
+    }
+
+    /// The item's frame in top-left screen coordinates (CGWindowList's).
+    static func cgFrame(of item: NSStatusItem?) -> CGRect? {
+        guard let frame = frame(of: item), let primary = NSScreen.screens.first else { return nil }
+        return CGRect(x: frame.minX, y: primary.frame.maxY - frame.maxY, width: frame.width, height: frame.height)
+    }
+
     /// The x range of an item's window in screen coordinates, if it's on screen.
     static func frame(of item: NSStatusItem?) -> CGRect? {
         guard let window = item?.button?.window, window.screen != nil else { return nil }

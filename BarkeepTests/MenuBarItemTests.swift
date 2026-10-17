@@ -128,3 +128,70 @@ struct ItemSearchTests {
         #expect(ItemSearch.filter(items, query: "cla").map(\.appName) == ["Claude", "Docker"])
     }
 }
+
+struct MoveDestinationTests {
+    private let frames: [CGWindowID: CGRect] = [
+        1: CGRect(x: 100, y: 0, width: 30, height: 33),
+        2: CGRect(x: 130, y: 0, width: 30, height: 33),
+        3: CGRect(x: 160, y: 0, width: 30, height: 33),
+    ]
+
+    @Test func leftOfIsSatisfiedOnlyWhenAdjacent() {
+        #expect(MoveDestination.leftOf(2).isSatisfied(itemID: 1, frames: frames))
+        #expect(!MoveDestination.leftOf(3).isSatisfied(itemID: 1, frames: frames))  // 2 is in between
+        #expect(!MoveDestination.leftOf(1).isSatisfied(itemID: 3, frames: frames))  // wrong side
+    }
+
+    @Test func rightOfIsSatisfiedOnlyWhenAdjacent() {
+        #expect(MoveDestination.rightOf(2).isSatisfied(itemID: 3, frames: frames))
+        #expect(!MoveDestination.rightOf(1).isSatisfied(itemID: 3, frames: frames))
+    }
+
+    @Test func dropPointsLandInsideTheTargetEdge() {
+        let target = CGRect(x: -449, y: 0, width: 1944, height: 33)
+        #expect(MoveDestination.leftOf(9).dropPoint(targetFrame: target) == CGPoint(x: -448, y: 16.5))
+        #expect(MoveDestination.rightOf(9).dropPoint(targetFrame: target) == CGPoint(x: 1494, y: 16.5))
+    }
+}
+
+@MainActor
+struct ItemKeyTests {
+    private func item(_ bundle: String, window: String?, title: String? = nil, x: CGFloat) -> MenuBarItem {
+        MenuBarItem(windowID: CGWindowID(x + 5000), frame: CGRect(x: x, y: 0, width: 30, height: 24), pid: 1,
+                    bundleIdentifier: bundle, appName: bundle, title: title,
+                    element: AXElement(raw: AXUIElementCreateSystemWide()), windowName: window)
+    }
+
+    @Test func keysUseBundleAndWindowNameAndNumberRepeats() {
+        let keyed = ItemKey.assign([item("a", window: "Item-0", x: 1), item("a", window: "Item-0", x: 2),
+                                    item("b", window: nil, title: "Status", x: 3)])
+        #expect(keyed.map(\.key) == ["a/Item-0", "a/Item-0#2", "b/Status"])
+    }
+
+    @Test func clockAndControlCenterCantMove() {
+        #expect(!item("com.apple.controlcenter", window: "Clock", x: 1).isMovable)
+        #expect(!item("com.apple.controlcenter", window: "BentoBox-0", x: 1).isMovable)
+        #expect(item("com.apple.controlcenter", window: "WiFi", x: 1).isMovable)
+        #expect(item("com.example", window: "Item-0", x: 1).isMovable)
+    }
+}
+
+@MainActor
+struct GroupStoreTests {
+    @Test func addingMovesAnItemBetweenGroups() {
+        let defaults = UserDefaults(suiteName: "BarkeepTests-\(UUID().uuidString)")!
+        let store = GroupStore(defaults: defaults)
+        let work = store.create(name: "Work", symbol: "briefcase.fill")
+        let dev = store.create(name: "Dev", symbol: "hammer.fill")
+        store.add("zscaler", to: work.id)
+        store.add("docker", to: work.id)
+        store.add("claude", to: work.id, before: "docker")
+        #expect(store.groups[0].memberKeys == ["zscaler", "claude", "docker"])
+        store.add("docker", to: dev.id)
+        #expect(store.group(containing: "docker")?.id == dev.id)
+        #expect(store.groups[0].memberKeys == ["zscaler", "claude"])
+        store.removeFromGroups("zscaler")
+        #expect(store.allMemberKeys == ["claude", "docker"])
+        #expect(GroupStore(defaults: defaults).groups.count == 2)  // saved
+    }
+}

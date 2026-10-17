@@ -5,6 +5,10 @@ import SwiftUI
 /// focus, for the Barkeep Bar and search.
 final class FloatingPanel: NSPanel {
     var onCancel: (() -> Void)?
+    /// Called whenever the content changes size, so the owner can keep the
+    /// panel anchored (SwiftUI grows it from the bottom-left corner otherwise).
+    var onResize: ((FloatingPanel) -> Void)?
+    private var resizeObserver: NSObjectProtocol?
 
     init<Content: View>(rootView: Content) {
         super.init(contentRect: .zero, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: true)
@@ -20,6 +24,24 @@ final class FloatingPanel: NSPanel {
         controller.view.wantsLayer = true
         controller.view.layer?.backgroundColor = .clear
         contentViewController = controller
+        resizeObserver = NotificationCenter.default.addObserver(forName: NSWindow.didResizeNotification, object: self,
+                                                                queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                self.onResize?(self)
+            }
+        }
+    }
+
+    /// Puts the panel's top edge just under the menu bar, centred on `x` (or
+    /// right-aligned to it), kept on screen.
+    func place(under anchor: NSRect, alignRight: Bool = false) {
+        guard let screen = NSScreen.screens.first(where: { $0.frame.intersects(anchor) }) ?? NSScreen.main else { return }
+        let size = frame.size
+        // The SwiftUI content adds 8 pt of transparent padding for the shadow.
+        var x = alignRight ? anchor.maxX - size.width + 8 : anchor.midX - size.width / 2
+        x = min(max(x, screen.frame.minX + 4), screen.frame.maxX - size.width - 4)
+        setFrameOrigin(NSPoint(x: x, y: screen.visibleFrame.maxY - size.height + 4))
     }
 
     override var canBecomeKey: Bool { true }
