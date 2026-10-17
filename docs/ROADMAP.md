@@ -6,18 +6,18 @@
 - macOS 26 length engine and macOS 27 native-visibility engine (27 untested)
 - Keep awake: timed, indefinite, while an app runs; display sleep option
 - Quick toggles: dark mode, desktop icons, hidden files
-- Guided setup, sidebar Settings, launch at login, `barkeep://` URL scheme
+- Guided setup, sidebar Settings, launch at login, `barnowl://` URL scheme
 
 ## v0.2: See and reach every icon (done)
 
 - Item inventory: Accessibility items matched to windows (Control Center owns
   every item window on macOS 26)
-- Barkeep Bar: hidden and behind-the-notch icons in a strip under the menu
+- Perch: hidden and behind-the-notch icons in a strip under the menu
   bar, with real pictures (Screen Recording) and click-through
-- Notch detection, plus an Automatic / In the menu bar / In the Barkeep Bar
+- Notch detection, plus an Automatic / In the menu bar / In the Perch
   setting
 - Search palette (⌃⌥⌘M)
-- `barkeep://open?app=…`, `barkeep://bar` and `barkeep://search`
+- `barnowl://open?app=…`, `barnowl://bar` and `barnowl://search`
 - Setup step and Settings rows for where icons appear and for permissions
 
 ## v0.3: Arrange, groups and keep awake (done)
@@ -53,11 +53,11 @@ Still to verify: display profiles with a real external display.
 - Menu bar tint and shapes (optional, off by default) and icon spacing
 - Custom icons for other apps' items (one-icon groups that open directly)
 - Clipboard history (password-manager safe) and a drag-and-drop shelf
-- Shortcuts actions, a `barkeep` command and more `barkeep://` links
+- Shortcuts actions, a `barnowl` command and more `barnowl://` links
 - App icon and `Scripts/install.sh` (Release build in /Applications)
 
 ## Later
 
 - Notarization and automatic updates (need a Developer ID certificate)
-- Test on macOS 27 and place Barkeep's own icons there
+- Test on macOS 27 and place Barn Owl's own icons there
 - Verify display profiles and closed-lid mode on real hardware

@@ -1,5 +1,5 @@
-// Draws Barkeep's app icon at every size macOS needs.
-// Usage: swift Scripts/make-icon.swift Barkeep/Resources/Assets.xcassets/AppIcon.appiconset
+// Draws Barn Owl's app icon at every size macOS needs.
+// Usage: swift Scripts/make-icon.swift BarnOwl/Resources/Assets.xcassets/AppIcon.appiconset
 import AppKit
 
 let folder = URL(fileURLWithPath: CommandLine.arguments[1])

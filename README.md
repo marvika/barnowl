@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/images/hero.png" alt="Barkeep: a tidy menu bar with the Barkeep Bar and the keep-awake panel open" width="900">
+  <img src="docs/images/hero.png" alt="Barn Owl: a tidy menu bar with the Perch and the keep-awake panel open" width="900">
 </p>
 
 <p align="center">
@@ -8,7 +8,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/marvika/macos-menubar/releases/latest">Download</a> ·
+  <a href="https://github.com/marvika/barnowl/releases/latest">Download</a> ·
   <a href="docs/user-guide.md">User guide</a> ·
   <a href="docs/how-it-works.md">How it works</a> ·
   <a href="docs/ROADMAP.md">Roadmap</a>
@@ -16,7 +16,7 @@
 
 ---
 
-Barkeep does two jobs that usually take two apps:
+Barn Owl does two jobs that usually take two apps:
 
 - **It tidies your menu bar.** It hides the icons you rarely use, keeps the ones
   you do in sight, and makes sure nothing gets lost behind the notch.
@@ -28,28 +28,28 @@ toggles, clipboard history and a drop tray for files.
 
 ## A tidy menu bar
 
-<img src="docs/images/menu-bar.png" alt="A tidy menu bar: battery, Wi-Fi, a Work group, the keep-awake cup, Barkeep's arrow, Control Center and the clock" width="560">
+<img src="docs/images/menu-bar.png" alt="A tidy menu bar: battery, Wi-Fi, a Work group, the keep-awake cup, Barn Owl's arrow, Control Center and the clock" width="560">
 
-Barkeep adds an arrow to your menu bar. Everything you don't need right now
+Barn Owl adds an arrow to your menu bar. Everything you don't need right now
 waits behind it. Click the arrow, press **⌃⌥⌘B**, hover or scroll, and your
-hidden icons appear in the **Barkeep Bar**, a strip under the menu bar. Click
+hidden icons appear in the **Perch**, a strip under the menu bar. Click
 any icon there and its menu opens as usual. On a notched MacBook this is also
 where icons that would otherwise sit behind the notch end up.
 
-<img src="docs/images/barkeep-bar.png" alt="The Barkeep Bar showing hidden and always-hidden icons" width="420">
+<img src="docs/images/barnowl-bar.png" alt="The Perch showing hidden and always-hidden icons" width="420">
 
 ### Arrange by dragging
 
 Settings → Layout shows every icon with its real picture. Drag icons between
-**Menu bar**, **Hidden**, **Always hidden** and your groups, and Barkeep moves
+**Menu bar**, **Hidden**, **Always hidden** and your groups, and Barn Owl moves
 the real icons for you. There's no ⌘-dragging tiny icons, and nothing to lose
 behind the notch. Right-click any icon for **Always Show in Menu Bar**,
 **Hide**, **Replace Icon…** and more.
 
-<img src="docs/images/settings-layout.png" alt="The Layout editor in Barkeep Settings" width="640">
+<img src="docs/images/settings-layout.png" alt="The Layout editor in Barn Owl Settings" width="640">
 
 Icons stay where you put them. When an app restarts and macOS drops its icon
-somewhere else, Barkeep puts it back. New apps' icons go to Hidden, or to the
+somewhere else, Barn Owl puts it back. New apps' icons go to Hidden, or to the
 menu bar if you prefer.
 
 ### Groups and custom icons
@@ -75,7 +75,7 @@ example, a briefcase can hold your VPN, mail and chat apps. You can also
 
 <img src="docs/images/quick-panel.png" alt="The quick panel: keep awake for 2 h 15 min more, add-time buttons, and toggles" width="380" align="right">
 
-Click the cup for the quick panel. Barkeep can keep your Mac awake:
+Click the cup for the quick panel. Barn Owl can keep your Mac awake:
 
 - **For a while:** 15 minutes, 1 hour, 2 hours, 4 hours, or until you stop it.
   The time left counts down next to the cup, and you can add time with one
@@ -122,13 +122,13 @@ need them.
 
 Requires macOS 26 Tahoe, on Apple silicon or Intel.
 
-1. Download **Barkeep-x.y.z.zip** from the
-   [latest release](https://github.com/marvika/macos-menubar/releases/latest)
+1. Download **BarnOwl-x.y.z.zip** from the
+   [latest release](https://github.com/marvika/barnowl/releases/latest)
    and open it.
-2. Drag **Barkeep** into your Applications folder and open it.
-3. Barkeep isn't notarized by Apple yet, so the first time macOS says it can't
+2. Drag **Barn Owl** into your Applications folder and open it.
+3. Barn Owl isn't notarized by Apple yet, so the first time macOS says it can't
    verify the app. Click **Done**, then open **System Settings → Privacy &
-   Security**, scroll down and click **Open Anyway** next to the Barkeep
+   Security**, scroll down and click **Open Anyway** next to the Barn Owl
    message. You only do this once.
 4. The setup guide takes it from there.
 
@@ -155,22 +155,22 @@ Prefer building it yourself? See [Building from source](#building-from-source).
 
 - **Shortcuts:** Keep Mac Awake, Stop Keeping Mac Awake, Set Presenter Mode,
   Show or Hide Menu Bar Icons, Open Menu Bar Icon, Show Clipboard History.
-- **Terminal:** the `barkeep` command (on the release page, or installed by
+- **Terminal:** the `barnowl` command (on the release page, or installed by
   `Scripts/install.sh`):
 
   ```
-  barkeep awake 90        barkeep awake +30       barkeep present on
-  barkeep open vpn        barkeep place mail hidden
-  barkeep icon vpn VPN    barkeep watch "cloud drive"
+  barnowl awake 90        barnowl awake +30       barnowl present on
+  barnowl open vpn        barnowl place mail hidden
+  barnowl icon vpn VPN    barnowl watch "cloud drive"
   ```
 
-- **Links,** for Raycast, Alfred and scripts: `barkeep://keep-awake?minutes=60`,
-  `barkeep://open?app=Mail`, `barkeep://settings?pane=layout` and more. See the
+- **Links,** for Raycast, Alfred and scripts: `barnowl://keep-awake?minutes=60`,
+  `barnowl://open?app=Mail`, `barnowl://settings?pane=layout` and more. See the
   [user guide](docs/user-guide.md#automation).
 
 ## Privacy and permissions
 
-Barkeep works entirely on your Mac. It has no accounts, no analytics and no
+Barn Owl works entirely on your Mac. It has no accounts, no analytics and no
 network requests.
 
 - **Accessibility** lets it list menu bar icons, move them and open them.
@@ -189,15 +189,15 @@ brew install xcodegen
 Scripts/install.sh
 ```
 
-This builds a Release copy, installs it in /Applications, puts the `barkeep`
-command on your PATH and starts Barkeep. Run it again to update. macOS trusts
+This builds a Release copy, installs it in /Applications, puts the `barnowl`
+command on your PATH and starts Barn Owl. Run it again to update. macOS trusts
 apps built on the same Mac, so there's no "Open Anyway" step.
 
-For development, run `xcodegen generate`, open `Barkeep.xcodeproj` and run the
+For development, run `xcodegen generate`, open `BarnOwl.xcodeproj` and run the
 tests:
 
 ```bash
-xcodebuild -project Barkeep.xcodeproj -scheme Barkeep test
+xcodebuild -project BarnOwl.xcodeproj -scheme Barn Owl test
 ```
 
 Builds are ad-hoc signed by default, and macOS forgets an ad-hoc build's
@@ -207,11 +207,11 @@ ID.
 
 The screenshots come from a demo copy with made-up icons and data:
 `Scripts/demo.sh` starts it, and `Scripts/demo.sh stop` brings your own
-Barkeep back.
+Barn Owl back.
 
 ## Credits
 
-Barkeep learned from [Hidden Bar](https://github.com/dwarvesf/hidden) and
+Barn Owl learned from [Hidden Bar](https://github.com/dwarvesf/hidden) and
 [Frost](https://github.com/frostbar/frost), both MIT; see
 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md). It also learned from reading
 [Ice](https://github.com/jordanbaird/Ice) and

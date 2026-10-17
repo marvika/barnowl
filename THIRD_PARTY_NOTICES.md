@@ -2,7 +2,7 @@
 
 ## Hidden Bar
 
-The macOS 27 hiding engine (`Barkeep/MenuBar/Engine/NativeVisibility/` and
+The macOS 27 hiding engine (`BarnOwl/MenuBar/Engine/NativeVisibility/` and
 `NativeVisibilityEngine.swift`) follows the approach and structure of Hidden
 Bar's native visibility engine: https://github.com/dwarvesf/hidden
 

@@ -1,4 +1,4 @@
-# Barkeep user guide
+# Barn Owl user guide
 
 - [Getting started](#getting-started)
 - [Hiding icons](#hiding-icons)
@@ -17,25 +17,25 @@
 
 ## Getting started
 
-When Barkeep opens for the first time, a short setup guide walks you through
+When Barn Owl opens for the first time, a short setup guide walks you through
 it. You can run it again any time from Settings → General → Setup guide.
 
-Barkeep asks for two permissions in **System Settings → Privacy & Security**:
+Barn Owl asks for two permissions in **System Settings → Privacy & Security**:
 
 | Permission | What it's for | Without it |
 |---|---|---|
-| Accessibility | Listing, moving and opening menu bar icons | Hiding still works; the Barkeep Bar, search, arranging and groups don't |
+| Accessibility | Listing, moving and opening menu bar icons | Hiding still works; the Perch, search, arranging and groups don't |
 | Screen Recording | Real pictures of hidden icons | You see app icons instead of the real icons |
 
-macOS applies Screen Recording only after Barkeep restarts. The setup guide
-and Settings offer a **Relaunch Barkeep** button for that.
+macOS applies Screen Recording only after Barn Owl restarts. The setup guide
+and Settings offer a **Relaunch Barn Owl** button for that.
 
 Turn on **Open at login** in Settings → General to keep your menu bar tidy
 from the start.
 
 ## Hiding icons
 
-Barkeep adds an **arrow** to your menu bar, next to Control Center, and a
+Barn Owl adds an **arrow** to your menu bar, next to Control Center, and a
 `|` divider left of it. Icons left of the divider are hidden.
 
 - **Click the arrow** or press **⌃⌥⌘B** to see your hidden icons. Click again
@@ -48,18 +48,18 @@ Barkeep adds an **arrow** to your menu bar, next to Control Center, and a
 
 Choose in Settings → Menu Bar:
 
-- **In the Barkeep Bar:** a strip under the menu bar. Click an icon and
-  Barkeep brings it next to the arrow and opens its menu, then puts it back.
+- **In the Perch:** a strip under the menu bar. Click an icon and
+  Barn Owl brings it next to the arrow and opens its menu, then puts it back.
 - **In the menu bar:** hidden icons slide back into the menu bar itself.
-- **Automatic** (the default): the menu bar when there's room, the Barkeep
-  Bar when there isn't. On a notched MacBook that's usually the Barkeep Bar,
+- **Automatic** (the default): the menu bar when there's room, the Barn Owl
+  Bar when there isn't. On a notched MacBook that's usually the Perch,
   because only a few icons fit beside the notch. Icons that end up behind
-  the notch always show in the Barkeep Bar.
+  the notch always show in the Perch.
 
 ### Other options (Settings → Menu Bar)
 
 - **Hide icons again automatically** after a few seconds (on by default).
-  Barkeep waits while your pointer is in the menu bar.
+  Barn Owl waits while your pointer is in the menu bar.
 - **Always-hidden section:** a second `⋮` divider. Icons left of it stay
   hidden until you option-click the arrow, search for them, or open them from
   a group.
@@ -69,11 +69,11 @@ Choose in Settings → Menu Bar:
 
 ## Arranging icons
 
-Open **Settings → Layout**, or click **Arrange** in the Barkeep Bar.
+Open **Settings → Layout**, or click **Arrange** in the Perch.
 
 Every icon appears with its real picture in rows: **Menu bar**, **Hidden**,
 **Always hidden**, and one row per group. Drag an icon to another row, or onto
-another icon to put it right before that one. Barkeep moves the real icon
+another icon to put it right before that one. Barn Owl moves the real icon
 straight away.
 
 Right-click an icon for:
@@ -86,16 +86,16 @@ Right-click an icon for:
 The clock and Control Center have a lock: macOS doesn't let anyone move them.
 
 You can still ⌘-drag icons in the menu bar itself, as with any Mac, and
-Barkeep remembers that too.
+Barn Owl remembers that too.
 
 **Refresh Pictures** in Layout fills in icons that show an app icon instead
 of their real picture. Icons behind the notch or off screen can't be
-photographed, so Barkeep briefly brings each one into view.
+photographed, so Barn Owl briefly brings each one into view.
 
 ### Icons stay where you put them
 
-Barkeep remembers which row each icon belongs to. When an app restarts and
-macOS puts its icon somewhere else, Barkeep moves it back. If it can't keep
+Barn Owl remembers which row each icon belongs to. When an app restarts and
+macOS puts its icon somewhere else, Barn Owl moves it back. If it can't keep
 an icon in place after two tries, it stops trying, so your pointer is never
 kept busy.
 
@@ -108,17 +108,17 @@ right-click it to edit. The icons themselves wait in the always-hidden
 section.
 
 **Custom icons** replace one app's icon with a symbol, an emoji or a bit of
-text. Right-click the icon in Layout or the Barkeep Bar and choose **Replace
+text. Right-click the icon in Layout or the Perch and choose **Replace
 Icon…**. Clicking your icon opens the app's menu directly. To go back,
 delete the custom icon's group in Layout (Edit → Delete Group).
 
 ## Show when it changes
 
 Right-click an icon and choose **Show When It Changes**. When the icon
-changes, Barkeep shows it next to the arrow for 30 seconds (adjustable in
+changes, Barn Owl shows it next to the arrow for 30 seconds (adjustable in
 Settings → Menu Bar), then hides it again.
 
-macOS can't photograph hidden icons, so Barkeep watches what it can:
+macOS can't photograph hidden icons, so Barn Owl watches what it can:
 
 - every few seconds: the icon's **status text** (many apps include their
   state there), its **width**, and whether the app **re-added** the icon;
@@ -136,19 +136,19 @@ awake while you present. The clock and Control Center stay, and so does
 macOS's own camera and screen-recording indicator.
 
 - It **starts by itself** when you share or record your screen, and stops
-  when you're done. Barkeep reads this from macOS's own screen-recording
+  when you're done. Barn Owl reads this from macOS's own screen-recording
   indicator. Turn it off in Settings → Menu Bar → Presenter mode.
 - Start or stop it yourself with the **Presenting** tile in the quick panel,
-  a shortcut, `barkeep present on`, or the Shortcuts action.
+  a shortcut, `barnowl present on`, or the Shortcuts action.
 - Optionally it also **hides desktop icons**. That restarts Finder, so the
   screen flickers once.
 
-While presenting, the arrow shows an eye-slash. Clicking it opens the Barkeep
+While presenting, the arrow shows an eye-slash. Clicking it opens the Barn Owl
 Bar, so your hidden icons only appear if you choose to show them.
 
 ## A separate layout at your desk
 
-Turn on **Separate layout at your desk** in Settings → Layout. Barkeep then
+Turn on **Separate layout at your desk** in Settings → Layout. Barn Owl then
 keeps two layouts: one for the laptop screen alone, and one for when an
 external display is connected. It switches when you connect or disconnect a
 display. Arrange your icons while docked to set up the desk layout.
@@ -192,7 +192,7 @@ Each rule can let the display sleep or keep it on.
 - **Notify me when a session ends.**
 - **Closed-lid mode:** keeps the Mac running with the lid closed, even
   without an external display. It asks for your administrator password each
-  time you switch it, and Barkeep turns it off again when it quits. A closed
+  time you switch it, and Barn Owl turns it off again when it quits. A closed
   Mac that keeps running gets warm, so don't put it in a bag like that.
 
 ## Quick panel and toggles
@@ -238,8 +238,8 @@ copied, newest first. Type to search, use the arrow keys, and press Return to
 paste into the app you were using. Right-click an entry to copy, pin or
 delete it. Pinned entries stay at the top and are never cleared.
 
-Barkeep never records copies from password managers. They mark their copies
-as private, and Barkeep also skips 1Password, Bitwarden, Passwords, Keychain
+Barn Owl never records copies from password managers. They mark their copies
+as private, and Barn Owl also skips 1Password, Bitwarden, Passwords, Keychain
 Access and others by name. Text history is kept across restarts (you can turn
 that off). Images stay in memory only. Turn history off entirely in Settings →
 Clipboard.
@@ -267,26 +267,26 @@ Settings → Appearance:
 
 ### Shortcuts
 
-Barkeep adds these actions to the Shortcuts app: **Keep Mac Awake** (minutes),
+Barn Owl adds these actions to the Shortcuts app: **Keep Mac Awake** (minutes),
 **Stop Keeping Mac Awake**, **Set Presenter Mode**, **Show or Hide Menu Bar
 Icons**, **Open Menu Bar Icon** (by app name) and **Show Clipboard History**.
-Barkeep needs to be running.
+Barn Owl needs to be running.
 
 ### Terminal
 
-`barkeep` is installed by `Scripts/install.sh`, or download it from the release
+`barnowl` is installed by `Scripts/install.sh`, or download it from the release
 page and move it to `/opt/homebrew/bin`.
 
 ```
-barkeep show | hide | toggle | all       hidden icons
-barkeep bar | search | clipboard         panels
-barkeep awake [minutes|+minutes|stop]    keep awake (no minutes = until stopped)
-barkeep present [on|off]                 presenter mode (no argument = toggle)
-barkeep open <app>                       open an app's menu bar icon
-barkeep place <app> visible|hidden|alwaysHidden
-barkeep watch <app> [off]                show the icon when it changes
-barkeep icon <app> <text>|reset          replace an app's icon with text or an emoji
-barkeep settings [pane]                  open Settings
+barnowl show | hide | toggle | all       hidden icons
+barnowl bar | search | clipboard         panels
+barnowl awake [minutes|+minutes|stop]    keep awake (no minutes = until stopped)
+barnowl present [on|off]                 presenter mode (no argument = toggle)
+barnowl open <app>                       open an app's menu bar icon
+barnowl place <app> visible|hidden|alwaysHidden
+barnowl watch <app> [off]                show the icon when it changes
+barnowl icon <app> <text>|reset          replace an app's icon with text or an emoji
+barnowl settings [pane]                  open Settings
 ```
 
 ### Links
@@ -295,44 +295,44 @@ For Raycast, Alfred, scripts and anything that can open a URL:
 
 | Link | Does |
 |---|---|
-| `barkeep://toggle`, `barkeep://hide`, `barkeep://show-all` | Hidden icons |
-| `barkeep://bar`, `barkeep://search`, `barkeep://clipboard` | Panels |
-| `barkeep://keep-awake?minutes=60` (0 = indefinitely) | Keep awake |
-| `barkeep://keep-awake/extend?minutes=30` | Add time |
-| `barkeep://keep-awake/stop` | Stop |
-| `barkeep://presenter`, `?on=1`, `?on=0` | Presenter mode |
-| `barkeep://open?app=Mail` | Open an app's icon |
-| `barkeep://place?app=Mail&row=hidden` | Move an icon |
-| `barkeep://watch?app=Mail` (`&on=0` to stop) | Show when it changes |
-| `barkeep://icon?app=Mail&label=✉️` (`&reset=1` to undo) | Custom icon |
-| `barkeep://settings?pane=layout` | Settings |
-| `barkeep://setup` | The setup guide |
+| `barnowl://toggle`, `barnowl://hide`, `barnowl://show-all` | Hidden icons |
+| `barnowl://bar`, `barnowl://search`, `barnowl://clipboard` | Panels |
+| `barnowl://keep-awake?minutes=60` (0 = indefinitely) | Keep awake |
+| `barnowl://keep-awake/extend?minutes=30` | Add time |
+| `barnowl://keep-awake/stop` | Stop |
+| `barnowl://presenter`, `?on=1`, `?on=0` | Presenter mode |
+| `barnowl://open?app=Mail` | Open an app's icon |
+| `barnowl://place?app=Mail&row=hidden` | Move an icon |
+| `barnowl://watch?app=Mail` (`&on=0` to stop) | Show when it changes |
+| `barnowl://icon?app=Mail&label=✉️` (`&reset=1` to undo) | Custom icon |
+| `barnowl://settings?pane=layout` | Settings |
+| `barnowl://setup` | The setup guide |
 
 ## Troubleshooting
 
-**The Barkeep Bar or search says "Allow Accessibility".** Turn on Barkeep in
+**The Perch or search says "Allow Accessibility".** Turn on Barn Owl in
 System Settings → Privacy & Security → Accessibility. If it's already on,
-switch it off and on again. That's sometimes needed after updating Barkeep.
+switch it off and on again. That's sometimes needed after updating Barn Owl.
 
 **Hidden icons show app icons instead of their real pictures.** Allow
-Screen Recording and relaunch Barkeep, then use Layout → **Refresh Pictures**.
+Screen Recording and relaunch Barn Owl, then use Layout → **Refresh Pictures**.
 
-**My pointer moved by itself for a moment.** When Barkeep moves an icon, it
+**My pointer moved by itself for a moment.** When Barn Owl moves an icon, it
 uses the same ⌘-drag you would. It hides the pointer during the move and puts
 it back afterwards. Moves happen when you arrange icons, open a hidden icon,
-or when Barkeep puts an icon back where it belongs. If it happens over and
-over, please open an issue. Barkeep gives up on an icon after two tries, so
+or when Barn Owl puts an icon back where it belongs. If it happens over and
+over, please open an issue. Barn Owl gives up on an icon after two tries, so
 it shouldn't happen.
 
 **An icon won't stay where I put it.** Some apps re-create their icon when
-they change state. Put it where you want in Layout; Barkeep remembers it by
+they change state. Put it where you want in Layout; Barn Owl remembers it by
 app and name.
 
-**macOS says it can't verify Barkeep.** See [Download](../README.md#download).
-That happens once, because Barkeep isn't notarized yet.
+**macOS says it can't verify Barn Owl.** See [Download](../README.md#download).
+That happens once, because Barn Owl isn't notarized yet.
 
-**Uninstalling.** Quit Barkeep (quick panel → power button) and move it to the
+**Uninstalling.** Quit Barn Owl (quick panel → power button) and move it to the
 Trash. Its settings are in
-`~/Library/Preferences/io.github.marvika.Barkeep.plist`, and its pictures and
-clipboard history are in `~/Library/Application Support/Barkeep`. Remove
-Barkeep from Accessibility and Screen Recording in Privacy & Security.
+`~/Library/Preferences/io.github.marvika.BarnOwl.plist`, and its pictures and
+clipboard history are in `~/Library/Application Support/Barn Owl`. Remove
+Barn Owl from Accessibility and Screen Recording in Privacy & Security.

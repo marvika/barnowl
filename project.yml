@@ -1,4 +1,4 @@
-name: Barkeep
+name: BarnOwl
 options:
   bundleIdPrefix: io.github.marvika
   deploymentTarget:
@@ -16,43 +16,45 @@ settings:
     SWIFT_VERSION: "6.0"
     MACOSX_DEPLOYMENT_TARGET: "26.0"
 targets:
-  Barkeep:
+  BarnOwl:
     type: application
     platform: macOS
     sources:
-      - path: Barkeep
+      - path: BarnOwl
     dependencies:
       - package: KeyboardShortcuts
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: io.github.marvika.Barkeep
-        INFOPLIST_FILE: Barkeep/Resources/Info.plist
-        CODE_SIGN_ENTITLEMENTS: Barkeep/Resources/Barkeep.entitlements
+        PRODUCT_NAME: Barn Owl
+        PRODUCT_MODULE_NAME: BarnOwl
+        PRODUCT_BUNDLE_IDENTIFIER: io.github.marvika.BarnOwl
+        INFOPLIST_FILE: BarnOwl/Resources/Info.plist
+        CODE_SIGN_ENTITLEMENTS: BarnOwl/Resources/BarnOwl.entitlements
         ENABLE_HARDENED_RUNTIME: YES
-        SWIFT_OBJC_BRIDGING_HEADER: Barkeep/Support/Barkeep-Bridging-Header.h
+        SWIFT_OBJC_BRIDGING_HEADER: BarnOwl/Support/BarnOwl-Bridging-Header.h
         MARKETING_VERSION: 0.6.0
         CURRENT_PROJECT_VERSION: 6
         GENERATE_INFOPLIST_FILE: NO
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
-  BarkeepTests:
+  BarnOwlTests:
     type: bundle.unit-test
     platform: macOS
     sources:
-      - path: BarkeepTests
+      - path: BarnOwlTests
     dependencies:
-      - target: Barkeep
+      - target: BarnOwl
     settings:
       base:
         GENERATE_INFOPLIST_FILE: YES
-        PRODUCT_BUNDLE_IDENTIFIER: io.github.marvika.BarkeepTests
+        PRODUCT_BUNDLE_IDENTIFIER: io.github.marvika.BarnOwlTests
         BUNDLE_LOADER: $(TEST_HOST)
-        TEST_HOST: $(BUILT_PRODUCTS_DIR)/Barkeep.app/Contents/MacOS/Barkeep
+        TEST_HOST: $(BUILT_PRODUCTS_DIR)/Barn Owl.app/Contents/MacOS/Barn Owl
 schemes:
-  Barkeep:
+  BarnOwl:
     build:
       targets:
-        Barkeep: all
-        BarkeepTests: [test]
+        BarnOwl: all
+        BarnOwlTests: [test]
     test:
       targets:
-        - BarkeepTests
+        - BarnOwlTests

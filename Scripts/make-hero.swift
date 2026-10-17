@@ -11,7 +11,7 @@ func pixels(_ image: NSImage) -> NSSize {
 }
 
 let menuBar = load("menu-bar-countdown.png")
-let bar = load("barkeep-bar.png")
+let bar = load("barnowl-bar.png")
 let quick = load("quick-panel.png")
 
 let width: CGFloat = 2400
@@ -49,7 +49,7 @@ bar.draw(in: NSRect(x: width - quickSize.width - 120 - barSize.width - 40, y: to
                     width: barSize.width, height: barSize.height))
 
 // Name and tagline on the left.
-let title = NSAttributedString(string: "Barkeep", attributes: [
+let title = NSAttributedString(string: "Barn Owl", attributes: [
     .font: NSFont.systemFont(ofSize: 150, weight: .bold), .foregroundColor: NSColor.white])
 let tagline = NSAttributedString(string: "A tidier menu bar,\nand a Mac that stays awake.", attributes: [
     .font: NSFont.systemFont(ofSize: 64, weight: .medium), .foregroundColor: NSColor.white.withAlphaComponent(0.88)])

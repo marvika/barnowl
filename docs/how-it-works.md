@@ -1,6 +1,6 @@
-# How Barkeep works
+# How Barn Owl works
 
-Barkeep is a Swift app (AppKit plus SwiftUI) for macOS 26. It isn't sandboxed
+Barn Owl is a Swift app (AppKit plus SwiftUI) for macOS 26. It isn't sandboxed
 and can't be on the App Store: reading other apps' menu bar items needs
 Accessibility, and the macOS 27 engine uses a private API.
 
@@ -8,32 +8,32 @@ Accessibility, and the macOS 27 engine uses a private API.
 
 | Folder | What's there |
 |---|---|
-| `Barkeep/App` | App delegate, the shared `AppModel`, `barkeep://` link handling |
-| `Barkeep/MenuBar` | Status items, sections, hiding engines, item scanning, moving and opening icons |
-| `Barkeep/Layout` | The layout editor and `LayoutController`, which remembers and restores icon positions |
-| `Barkeep/Groups` | Groups and custom icons |
-| `Barkeep/Context` | Show when it changes, presenter mode |
-| `Barkeep/KeepAwake` | Sessions, rules, closed-lid mode |
-| `Barkeep/Clipboard` | Clipboard history, shelf and drop tray |
-| `Barkeep/Search`, `QuickPanel`, `BarkeepBar`, `Settings`, `Onboarding`, `Appearance` | The panels and windows |
-| `Barkeep/Automation` | Shortcuts actions |
-| `BarkeepTests` | Unit tests for the logic that doesn't need a real menu bar |
-| `Scripts` | `install.sh`, `demo.sh`, the `barkeep` command, icon and hero image generators |
+| `BarnOwl/App` | App delegate, the shared `AppModel`, `barnowl://` link handling |
+| `BarnOwl/MenuBar` | Status items, sections, hiding engines, item scanning, moving and opening icons |
+| `BarnOwl/Layout` | The layout editor and `LayoutController`, which remembers and restores icon positions |
+| `BarnOwl/Groups` | Groups and custom icons |
+| `BarnOwl/Context` | Show when it changes, presenter mode |
+| `BarnOwl/KeepAwake` | Sessions, rules, closed-lid mode |
+| `BarnOwl/Clipboard` | Clipboard history, shelf and drop tray |
+| `BarnOwl/Search`, `QuickPanel`, `Barn OwlBar`, `Settings`, `Onboarding`, `Appearance` | The panels and windows |
+| `BarnOwl/Automation` | Shortcuts actions |
+| `BarnOwlTests` | Unit tests for the logic that doesn't need a real menu bar |
+| `Scripts` | `install.sh`, `demo.sh`, the `barnowl` command, icon and hero image generators |
 
 The Xcode project is generated from `project.yml` with XcodeGen.
 
 ## Hiding
 
-Barkeep owns three status items: the **arrow**, a `|` **divider**, and an
+Barn Owl owns three status items: the **arrow**, a `|` **divider**, and an
 optional `⋮` **always-hidden divider**.
 
 - **macOS 26** (`LengthEngine`): to hide, the divider's width grows to about
   the screen's width, which pushes everything left of it past the left edge.
-  This needs no permissions. On first launch Barkeep seeds
+  This needs no permissions. On first launch Barn Owl seeds
   `NSStatusItem Preferred Position` so the arrow sits next to Control Center,
   never behind the notch.
 - **macOS 27** (`NativeVisibilityEngine`, untested): macOS drops over-wide
-  status items, so Barkeep reads which apps sit left of the divider and asks
+  status items, so Barn Owl reads which apps sit left of the divider and asks
   macOS to show only the others, through `MenuBarClientCore`'s
   assessment-mode restriction (found by Hidden Bar). Hiding is per app there,
   and system items always stay.
@@ -46,7 +46,7 @@ new engine.
 On macOS 26 every menu bar item's window belongs to Control Center, so the
 window list can't say which app an icon belongs to. `ItemScanner` reads each
 app's `AXExtrasMenuBar` items through Accessibility, and matches them to the
-status windows by horizontal position, within 4 pt. Barkeep's own windows are
+status windows by horizontal position, within 4 pt. Barn Owl's own windows are
 left out of the matching. Each icon gets a **key** (bundle ID plus the status
 item's autosave name, such as `com.example.app/Item-0`), which survives
 relaunches. Layouts and groups are stored by key.
@@ -61,24 +61,24 @@ error -3811, and the old `CGWindowListCreateImage` calls return nothing. Icons
 behind the notch count as off screen too. So `ItemImageCache` takes one
 ScreenCaptureKit picture of the menu bar strip whenever icons are showing, at
 launch and when you reveal them. That picture includes only the status
-windows, so its background is transparent. Barkeep crops it into one picture
-per icon and saves them to `~/Library/Application Support/Barkeep/Icons`.
+windows, so its background is transparent. Barn Owl crops it into one picture
+per icon and saves them to `~/Library/Application Support/Barn Owl/Icons`.
 **Refresh Pictures** briefly moves icons that have no picture into view.
 
 ## Moving icons
 
 `ItemMover` moves any icon with a synthetic ⌘-drag, the way Frost does:
 
-1. A ⌘ mouse-down is posted **on Barkeep's own arrow**, with event field
+1. A ⌘ mouse-down is posted **on Barn Owl's own arrow**, with event field
    `0x33` set to the target icon's window ID. macOS routes the event by that
    field and lifts the target icon, even an off-screen one.
-2. Barkeep waits until the icon has lifted (20–60 ms).
+2. Barn Owl waits until the icon has lifted (20–60 ms).
 3. It posts the mouse-up next to the destination, then checks the result and
    retries up to three times.
 
 Another app's icon is never clicked. The pointer is hidden during the move
 and put back afterwards. "Left of the arrow" is unreliable, because the
-lifted icon's slot is reserved where the mouse-down lands. So Barkeep's
+lifted icon's slot is reserved where the mouse-down lands. So Barn Owl's
 destinations are relative to the dividers, or right of a group or custom
 icon.
 
@@ -88,7 +88,7 @@ A hidden icon ignores presses, because its menu would open off screen.
 `ItemOpener` moves it next to the icon you clicked, presses it through
 Accessibility, and moves it back once its menu closes. Apps busy opening
 their menu often answer the press with "cannot complete" even though it
-worked, so Barkeep checks for a menu window before falling back to a real
+worked, so Barn Owl checks for a menu window before falling back to a real
 click.
 
 ## Keeping icons in place
@@ -96,7 +96,7 @@ click.
 `LayoutKeeper` (pure, tested) compares each scan with the saved layout:
 
 - a key with a **new window** in the wrong row means the app re-added its
-  icon, so Barkeep moves it back;
+  icon, so Barn Owl moves it back;
 - the **same window** in a new row means you moved it, so the new row is
   saved;
 - a **new key** goes where "New icons go" says.
@@ -117,8 +117,8 @@ later.
 ## Presenter mode
 
 While the screen is shared or recorded, Control Center's own menu bar item
-describes itself as "Control Center, Screen Recording is in use". Barkeep
-reads that through Accessibility. Barkeep's own picture taking lights up the
+describes itself as "Control Center, Screen Recording is in use". Barn Owl
+reads that through Accessibility. Barn Owl's own picture taking lights up the
 same indicator, so it ignores the 10 seconds after its own captures and needs
 two readings in a row. Presenting moves the visible icons into the hidden
 section without changing the saved layout, and restores them in order
@@ -146,7 +146,7 @@ tray slides out under the notch.
 
 ## Demo mode
 
-`Scripts/demo.sh` runs a copy of Barkeep with its own bundle ID and settings,
-and with `BarkeepDemo` set. Demo mode shows made-up icons, clipboard entries
+`Scripts/demo.sh` runs a copy of Barn Owl with its own bundle ID and settings,
+and with `BarnOwlDemo` set. Demo mode shows made-up icons, clipboard entries
 and shelf files, and never reads, moves or saves anything real. The
 screenshots in this repository come from it.
