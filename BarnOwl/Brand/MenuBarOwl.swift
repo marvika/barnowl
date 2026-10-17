@@ -91,7 +91,8 @@ struct AppIconArtwork: View {
 
 /// `"Barn Owl" --render-icons <folder>` writes the app icon set and exits.
 /// `--render-owls <file.png>` writes a sheet of the owl's looks, for checking
-/// the drawing without clicking through the app.
+/// the drawing without clicking through the app. `--render-owl-strip` and
+/// `--render-owl` draw the pictures in the README (Scripts/make-hero.sh).
 /// Scripts/make-icon.sh uses it, so the icon is drawn by the same code as
 /// the owl in the app.
 @MainActor
@@ -100,6 +101,16 @@ enum IconRenderer {
         let arguments = CommandLine.arguments
         if let index = arguments.firstIndex(of: "--render-owls"), arguments.count > index + 1 {
             write(OwlSheet(), to: URL(fileURLWithPath: arguments[index + 1]), scale: 2)
+            exit(0)
+        }
+        if let index = arguments.firstIndex(of: "--render-owl-strip"), arguments.count > index + 1 {
+            write(OwlStrip(), to: URL(fileURLWithPath: arguments[index + 1]), scale: 2)
+            exit(0)
+        }
+        if let index = arguments.firstIndex(of: "--render-owl"), arguments.count > index + 1 {
+            let owl = OwlView(look: CGVector(dx: 0.25, dy: 0.1), blinks: false, palette: .golden)
+                .frame(width: 400, height: 400)
+            write(owl, to: URL(fileURLWithPath: arguments[index + 1]), scale: 2)
             exit(0)
         }
         guard let index = arguments.firstIndex(of: "--render-icons"), arguments.count > index + 1 else { return }
@@ -199,5 +210,36 @@ private struct OwlSheet: View {
         }
         .padding(14)
         .background(.white)
+    }
+}
+
+/// A row of the owl's moods on a dusk sky, for the README.
+private struct OwlStrip: View {
+    private let moods: [(String, OwlView)] = [
+        ("Wide awake", OwlView(blinks: false, surprised: true, wingLift: 0.9)),
+        ("Hoo!", OwlView(look: CGVector(dx: 0.2, dy: 0.1), blinks: false, tilt: -10)),
+        ("Presenting", OwlView(blinks: false, accessory: .sunglasses)),
+        ("Petted", OwlView(blinks: false, hearts: true)),
+        ("Done!", OwlView(blinks: false, happy: true, accessory: .partyHat)),
+        ("Mac may sleep", OwlView(eyesOpen: false, blinks: false, accessory: .nightcap)),
+    ]
+
+    var body: some View {
+        HStack(spacing: 18) {
+            ForEach(moods.indices, id: \.self) { index in
+                VStack(spacing: 10) {
+                    moods[index].1.frame(width: 120, height: 120)
+                    Text(moods[index].0)
+                        .font(.system(size: 15, weight: .semibold, design: .rounded))
+                        .foregroundStyle(.white.opacity(0.9))
+                }
+                .frame(width: 136)
+            }
+        }
+        .padding(.horizontal, 28)
+        .padding(.top, 44)
+        .padding(.bottom, 22)
+        .background(DuskSky())
+        .clipShape(.rect(cornerRadius: 24, style: .continuous))
     }
 }

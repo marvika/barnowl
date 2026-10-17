@@ -233,7 +233,7 @@ struct OwlView: View {
                     OwlFaceLayer(colours: colours, eyes: eyeState, lids: lids, look: look, surprised: surprised,
                                  yawn: yawn, sunglasses: accessory == .sunglasses)
                         .modifier(HeadTurn(angle: turn, reach: side * 0.22))
-                        .offset(x: max(-1, min(1, look.dx)) * side * 0.03, y: max(-1, min(1, look.dy)) * side * 0.015)
+                        .offset(x: max(-1, min(1, look.dx)) * side * 0.018, y: max(-1, min(1, look.dy)) * side * 0.012)
                     HatLayer(accessory: accessory)
                 }
                 .rotationEffect(.degrees(lookTilt), anchor: UnitPoint(x: 0.5, y: 0.62))

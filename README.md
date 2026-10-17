@@ -24,11 +24,25 @@ Barn Owl does two jobs that usually take two apps:
   automatically by rules.
 
 Around those it adds a few everyday tools you'll reach for: search, quick
-toggles, clipboard history and a drop tray for files.
+toggles, clipboard history and a nest for your files.
+
+## Meet the owl
+
+<img src="docs/images/owl-moods.png" alt="The owl wide awake, hooting, in shades, petted, in a party hat, and asleep in a nightcap" width="900">
+
+The owl lives in your menu bar. Its eyes are open while it keeps your Mac
+awake and shut when your Mac may sleep. Inside the app it watches your
+pointer, hoots and hops when you click it, wears shades while you present,
+catches files in the Nest and dozes off in a nightcap. Press and hold to pet
+it; click it a few too many times and it gets dizzy. Leave it alone long
+enough and it nods off.
+
+Pick its colours in Settings → Appearance: **Golden Barn**, **Ghost Owl**,
+**Ember** or **Moonlit Lilac**. With Reduce Motion on, it keeps still.
 
 ## A tidy menu bar
 
-<img src="docs/images/menu-bar.png" alt="A tidy menu bar: battery, Wi-Fi, a Work group, the keep-awake cup, Barn Owl's arrow, Control Center and the clock" width="560">
+<img src="docs/images/menu-bar.png" alt="A tidy menu bar: the owl, Barn Owl's arrow, Control Center and the clock" width="560">
 
 Barn Owl adds an arrow to your menu bar. Everything you don't need right now
 waits behind it. Click the arrow, press **⌃⌥⌘B**, hover or scroll, and your
@@ -36,7 +50,7 @@ hidden icons appear on the **Perch**, a strip under the menu bar. Click
 any icon there and its menu opens as usual. On a notched MacBook this is also
 where icons that would otherwise sit behind the notch end up.
 
-<img src="docs/images/barnowl-bar.png" alt="The Perch showing hidden and always-hidden icons" width="420">
+<img src="docs/images/perch.png" alt="The Perch showing hidden and always-hidden icons" width="420">
 
 ### Arrange by dragging
 
@@ -75,10 +89,10 @@ example, a briefcase can hold your VPN, mail and chat apps. You can also
 
 <img src="docs/images/quick-panel.png" alt="The quick panel: keep awake for 2 h 15 min more, add-time buttons, and toggles" width="380" align="right">
 
-Click the cup for the quick panel. Barn Owl can keep your Mac awake:
+Click the owl for the quick panel. Barn Owl can keep your Mac awake:
 
 - **For a while:** 15 minutes, 1 hour, 2 hours, 4 hours, or until you stop it.
-  The time left counts down next to the cup, and you can add time with one
+  The time left counts down next to the owl, and you can add time with one
   click.
 - **Until a time:** for example, until 17:30.
 - **While an app runs:** say, while your build or a video export runs.
@@ -90,7 +104,7 @@ Click the cup for the quick panel. Barn Owl can keep your Mac awake:
 It stops below a battery level you choose. **Keep me available** stops Teams
 and Slack from marking you Away. There's also an optional **closed-lid mode**.
 
-<img src="docs/images/menu-bar-countdown.png" alt="The cup in the menu bar showing 2:15 left" width="560">
+<img src="docs/images/menu-bar-countdown.png" alt="The owl in the menu bar, eyes open, with 2:15 left" width="560">
 
 The quick panel also has one-click toggles: presenter mode, dark mode,
 microphone mute, hide desktop icons, show hidden files and sleep display.
@@ -104,7 +118,7 @@ and press Return to open it. You can also type a command:
 
 `awake 2h` · `awake +30` · `dark` · `present` · `mute` · `arrange` · `clipboard`
 
-## Clipboard history and a drop tray
+## Clipboard history and the Nest
 
 <img src="docs/images/clipboard.png" alt="Clipboard history with a pinned entry, a link and a file" width="420" align="right">
 
@@ -112,11 +126,11 @@ and press Return to open it. You can also type a command:
 to paste into the app you were using. Pin what you use often. Copies from
 password managers are never recorded.
 
-Start dragging files in any app and a **drop tray** slides out under the
-notch. Drop files there to hold them, then drag them out later, wherever you
-need them.
+Start dragging files in any app and the **Nest** slides out under the
+notch, with the owl watching your pointer. Drop files there to hold them,
+then drag them out later, wherever you need them.
 
-<img src="docs/images/drop-tray.png" alt="The drop tray holding three files" width="380">
+<img src="docs/images/drop-tray.png" alt="The Nest holding three files while the owl watches a file being dragged" width="380">
 
 ## Download
 
@@ -126,16 +140,14 @@ Requires macOS 26 Tahoe, on Apple silicon or Intel.
    [latest release](https://github.com/marvika/barnowl/releases/latest)
    and open it.
 2. Drag **Barn Owl** into your Applications folder and open it.
-3. Barn Owl isn't notarized by Apple yet, so the first time macOS says it can't
-   verify the app. Click **Done**, then open **System Settings → Privacy &
-   Security**, scroll down and click **Open Anyway** next to the Barn Owl
-   message. You only do this once.
-4. The setup guide takes it from there.
+3. The setup guide takes it from there.
+
+Barn Owl is signed and notarized by Apple, so it opens like any other app.
 
 <p>
   <img src="docs/images/setup-welcome.png" alt="Setup: welcome" width="270">
   <img src="docs/images/setup-display.png" alt="Setup: where hidden icons appear, and permissions" width="270">
-  <img src="docs/images/setup-layout.png" alt="Setup: choose what stays visible" width="270">
+  <img src="docs/images/setup-done.png" alt="Setup: the owl celebrating in a party hat" width="270">
 </p>
 
 Prefer building it yourself? See [Building from source](#building-from-source).
@@ -148,7 +160,7 @@ Prefer building it yourself? See [Building from source](#building-from-source).
 | Search the menu bar, run a command | ⌃⌥⌘M |
 | Clipboard history | ⌃⌥⌘V |
 | Show every icon | Option-click the arrow |
-| Keep awake on or off | Option-click the cup |
+| Keep awake on or off | Option-click the owl |
 | Keep awake, presenter mode | Set your own in Settings → Shortcuts |
 
 ## Automation
@@ -197,7 +209,7 @@ For development, run `xcodegen generate`, open `BarnOwl.xcodeproj` and run the
 tests:
 
 ```bash
-xcodebuild -project BarnOwl.xcodeproj -scheme Barn Owl test
+xcodebuild -project BarnOwl.xcodeproj -scheme BarnOwl test
 ```
 
 Builds are ad-hoc signed by default, and macOS forgets an ad-hoc build's
@@ -207,7 +219,12 @@ ID.
 
 The screenshots come from a demo copy with made-up icons and data:
 `Scripts/demo.sh` starts it, and `Scripts/demo.sh stop` brings your own
-Barn Owl back.
+Barn Owl back. The owl pictures and the hero image are drawn by the app
+itself: `Scripts/make-icon.sh` and `Scripts/make-hero.sh`.
+
+To make a release, `Scripts/release.sh` builds Barn Owl with your Developer
+ID, has Apple notarize it and staples the ticket. `--publish` also creates a
+draft GitHub release. The script lists what it needs at the top.
 
 ## Credits
 

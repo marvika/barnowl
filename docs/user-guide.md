@@ -10,8 +10,9 @@
 - [Keep awake](#keep-awake)
 - [Quick panel and toggles](#quick-panel-and-toggles)
 - [Search and commands](#search-and-commands)
-- [Clipboard history and the drop tray](#clipboard-history-and-the-drop-tray)
+- [Clipboard history and the Nest](#clipboard-history-and-the-nest)
 - [Appearance](#appearance)
+- [The owl](#the-owl)
 - [Automation](#automation)
 - [Troubleshooting](#troubleshooting)
 
@@ -155,16 +156,16 @@ display. Arrange your icons while docked to set up the desk layout.
 
 ## Keep awake
 
-Click the **cup** in the menu bar (or right-click the arrow) for the quick
-panel.
+Click the **owl** in the menu bar (or right-click the arrow) for the quick
+panel. Its eyes are open while your Mac is kept awake.
 
 - **Set:** keep awake for 15 minutes, 1, 2 or 4 hours, or indefinitely (∞).
 - **Add:** during a timed session, add 15 or 30 minutes, 1 or 2 hours.
 - **⋯** for **until a time**, **while an app is running**, or **until
   downloads finish**.
-- **Option-click the cup** to start or stop without opening the panel.
+- **Option-click the owl** to start or stop without opening the panel.
 
-During a timed session the cup shows the **time left**, for example "42m" or
+During a timed session the owl shows the **time left**, for example "42m" or
 "1:05". You can turn that off in Settings → Keep Awake.
 
 ### Rules
@@ -231,7 +232,7 @@ You can also type a command:
 | `arrange` | Settings → Layout |
 | `settings`, `rules`, `shortcuts`… | That Settings pane |
 
-## Clipboard history and the drop tray
+## Clipboard history and the Nest
 
 Press **⌃⌥⌘V** for **clipboard history**: text, links, images and files you
 copied, newest first. Type to search, use the arrow keys, and press Return to
@@ -244,17 +245,22 @@ Access and others by name. Text history is kept across restarts (you can turn
 that off). Images stay in memory only. Turn history off entirely in Settings →
 Clipboard.
 
-The **drop tray** appears under the notch as soon as you start dragging files
-in any app. Drop them there to hold them. While it holds files, a small tab
-stays under the notch. Hover over it or click it to see them, then drag them
-out wherever you need them. The tray only remembers where the files are; it
+The **Nest** appears under the notch as soon as you start dragging files in
+any app, and the owl watches your pointer until you let go. Drop them there to
+hold them. While it holds files, a small tab stays under the notch. Hover over it or click it to see them, then drag them
+out wherever you need them. The Nest only remembers where the files are; it
 never moves or copies them. The **Shelf** tab in clipboard history shows the
-same files. Turn off the tray or its tab in Settings → Clipboard.
+same files. Turn off the Nest or its tab in Settings → Clipboard.
 
 ## Appearance
 
 Settings → Appearance:
 
+<img src="images/settings-appearance.png" alt="Settings → Appearance with the four owls to choose from" width="560">
+
+- **Owl:** pick the owl's colours: Golden Barn, Ghost Owl, Ember or Moonlit
+  Lilac. They apply to the owl in setup, panels and About; in the menu bar
+  the owl takes the menu bar's colour.
 - **Tint the menu bar** (off by default) with a colour or gradient, full width,
   as a rounded pill, or split around the notch, with an optional border and
   shadow.
@@ -262,6 +268,24 @@ Settings → Appearance:
   Apps pick up the new spacing when they next start. **Apply to System Icons**
   restarts the system's own icons; log out and back in to apply it
   everywhere. **Reset to Default** goes back to macOS's spacing.
+
+## The owl
+
+The owl in the menu bar has its eyes open while your Mac is kept awake and
+shut when it may sleep. Inside Barn Owl it has a life of its own:
+
+- It watches your pointer, blinks, and tilts its head now and then.
+- **Click it** for a hoot and a hop. Click three times quickly and it turns
+  its head all the way round; keep clicking and it gets dizzy.
+- **Press and hold** to pet it.
+- Start keeping awake and it stretches, wide awake; stop and it yawns and
+  dozes off.
+- It wears shades while you present, a nightcap on an empty Perch, a party hat
+  at the end of setup, and something festive in December.
+- Leave it alone for a while and it nods off. Move the mouse to startle it.
+
+Pick its colours in Settings → Appearance. With **Reduce Motion** on (System
+Settings → Accessibility → Display), the owl keeps still.
 
 ## Automation
 
@@ -327,9 +351,6 @@ it shouldn't happen.
 **An icon won't stay where I put it.** Some apps re-create their icon when
 they change state. Put it where you want in Layout; Barn Owl remembers it by
 app and name.
-
-**macOS says it can't verify Barn Owl.** See [Download](../README.md#download).
-That happens once, because Barn Owl isn't notarized yet.
 
 **Uninstalling.** Quit Barn Owl (quick panel → power button) and move it to the
 Trash. Its settings are in

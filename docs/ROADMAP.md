@@ -31,7 +31,7 @@
   external display, microphone, downloads, apps, schedule), battery stop,
   keep me available, notifications, closed-lid mode
 - Quick panel with toggle tiles (dark mode, microphone, desktop, hidden
-  files, sleep display) from a cup icon
+  files, sleep display) from the owl icon
 
 Still to verify: closed-lid mode (needs an admin password), click fallback for
 Electron apps such as Docker Desktop, everything on macOS 27.
