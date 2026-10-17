@@ -3,7 +3,7 @@
 All notable changes to Barn Owl. Versions follow [semantic versioning](https://semver.org);
 before 1.0, a minor version can change behaviour.
 
-## Unreleased
+## 0.9.0
 
 - **Hide Desktop** now covers the desktop with a picture of your wallpaper
   instead of restarting Finder, so icons come back exactly where they were
