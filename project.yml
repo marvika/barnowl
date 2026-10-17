@@ -1,0 +1,57 @@
+name: Barkeep
+options:
+  bundleIdPrefix: io.github.marvika
+  deploymentTarget:
+    macOS: "26.0"
+  createIntermediateGroups: true
+configFiles:
+  Debug: Config/Base.xcconfig
+  Release: Config/Base.xcconfig
+packages:
+  KeyboardShortcuts:
+    url: https://github.com/sindresorhus/KeyboardShortcuts
+    from: 2.3.0
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    MACOSX_DEPLOYMENT_TARGET: "26.0"
+targets:
+  Barkeep:
+    type: application
+    platform: macOS
+    sources:
+      - path: Barkeep
+    dependencies:
+      - package: KeyboardShortcuts
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: io.github.marvika.Barkeep
+        INFOPLIST_FILE: Barkeep/Resources/Info.plist
+        CODE_SIGN_ENTITLEMENTS: Barkeep/Resources/Barkeep.entitlements
+        ENABLE_HARDENED_RUNTIME: YES
+        SWIFT_OBJC_BRIDGING_HEADER: Barkeep/Support/Barkeep-Bridging-Header.h
+        MARKETING_VERSION: 0.1.0
+        CURRENT_PROJECT_VERSION: 1
+        GENERATE_INFOPLIST_FILE: NO
+  BarkeepTests:
+    type: bundle.unit-test
+    platform: macOS
+    sources:
+      - path: BarkeepTests
+    dependencies:
+      - target: Barkeep
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+        PRODUCT_BUNDLE_IDENTIFIER: io.github.marvika.BarkeepTests
+        BUNDLE_LOADER: $(TEST_HOST)
+        TEST_HOST: $(BUILT_PRODUCTS_DIR)/Barkeep.app/Contents/MacOS/Barkeep
+schemes:
+  Barkeep:
+    build:
+      targets:
+        Barkeep: all
+        BarkeepTests: [test]
+    test:
+      targets:
+        - BarkeepTests

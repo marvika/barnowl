@@ -1,0 +1,11 @@
+// Shared build settings. Signing falls back to ad-hoc ("Sign to Run Locally").
+//
+// Ad-hoc builds lose their Accessibility permission on every rebuild, because
+// macOS ties the grant to the code signature. To keep it, copy
+// Config/Local.xcconfig.example to Config/Local.xcconfig (git-ignored) and put
+// your own team ID in it.
+CODE_SIGN_STYLE = Manual
+CODE_SIGN_IDENTITY = -
+DEVELOPMENT_TEAM =
+
+#include? "Local.xcconfig"

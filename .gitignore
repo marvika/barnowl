@@ -1,0 +1,10 @@
+.DS_Store
+build/
+DerivedData/
+*.xcodeproj/
+xcuserdata/
+.swiftpm/
+Config/Local.xcconfig
+
+# Local Claude Code config and skills (e.g. the REA skill)
+.claude/

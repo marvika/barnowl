@@ -1,0 +1,4 @@
+// Copy to Config/Local.xcconfig and fill in your team ID
+// (security find-identity -v -p codesigning shows your certificates).
+CODE_SIGN_IDENTITY = Apple Development
+DEVELOPMENT_TEAM = YOURTEAMID
