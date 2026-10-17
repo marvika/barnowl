@@ -3,7 +3,7 @@
 All notable changes to Barn Owl. Versions follow [semantic versioning](https://semver.org);
 before 1.0, a minor version can change behaviour.
 
-## Unreleased
+## 0.7.1
 
 - Files leave the Nest once you drag them out and drop them somewhere. An
   option in Settings → Clipboard keeps them instead.
