@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The update feed installed copies of Barn Owl read (SUFeedURL in Info.plist).
+     Scripts/release.sh adds an item for each release; commit it only after the
+     GitHub release is published, so the download link works. -->
+<rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle">
+    <channel>
+        <title>Barn Owl</title>
+        <link>https://github.com/marvika/barnowl</link>
+        <description>New versions of Barn Owl.</description>
+        <language>en</language>
+        <!-- Releases, newest first -->
+    </channel>
+</rss>

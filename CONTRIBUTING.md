@@ -35,6 +35,49 @@ to `Config/Local.xcconfig` and set your team ID. That file is git-ignored.
 [docs/how-it-works.md](docs/how-it-works.md) explains how hiding, moving and
 opening icons work.
 
+## Making a release
+
+Releases are signed with the maintainer's Developer ID and notarized, and
+Sparkle updates installed copies from `appcast.xml` on main.
+
+1. Bump `MARKETING_VERSION` and `CURRENT_PROJECT_VERSION` in `project.yml`
+   (Sparkle compares the build number), and rename **Unreleased** in
+   `CHANGELOG.md` to the version. That section is what the update window shows.
+2. Run `Scripts/release.sh --publish`. It builds, notarizes, staples, signs the
+   zip for Sparkle, adds it to `appcast.xml`, points `Casks/barn-owl.rb` at it
+   and creates a draft GitHub release. `Scripts/release.sh --dry-run` stops
+   before notarizing and changes nothing.
+3. Publish the draft, then commit `appcast.xml` and the cask and push them to
+   main. Not before: the appcast would point at a download that isn't public.
+4. Run `Scripts/update-tap.sh` to copy the cask to
+   [marvika/homebrew-tap](https://github.com/marvika/homebrew-tap).
+
+The Sparkle signing key lives only in the maintainer's login keychain (Sparkle's
+`generate_keys` made it; the public half is `SUPublicEDKey` in Info.plist).
+Keep a backup: without it, installed copies can't be updated. Export it with
+`generate_keys -x <file>` from
+`build/DerivedData/SourcePackages/artifacts/sparkle/Sparkle/bin/`, store the
+file somewhere safe, and delete it.
+
+### On GitHub Actions
+
+Pushing a `vX.Y.Z` tag runs `.github/workflows/release.yml`, which does step 2
+for you and pushes the new appcast and cask to a `release/vX.Y.Z` branch. You
+still publish the draft, merge that branch and run `Scripts/update-tap.sh`.
+It needs these repository secrets (Settings → Secrets and variables → Actions):
+
+| Secret | What to put in it |
+|---|---|
+| `DEVELOPER_ID_P12` | The Developer ID Application certificate and its private key, exported from Keychain Access as a .p12, then `base64 -i cert.p12 \| pbcopy` |
+| `DEVELOPER_ID_P12_PASSWORD` | The password you gave the .p12 |
+| `NOTARY_KEY_P8` | The contents of an App Store Connect API key (.p8) with the Developer role (App Store Connect → Users and Access → Integrations) |
+| `NOTARY_KEY_ID` | That key's ID |
+| `NOTARY_ISSUER` | The issuer ID shown above the keys |
+| `SPARKLE_PRIVATE_KEY` | The contents of the file `generate_keys -x` writes |
+
+The team ID (2S5J2CYWPZ) is set in the workflow. Until the secrets exist, a tag
+push fails at signing and nothing is published.
+
 ## Pull requests
 
 - Keep each pull request to one change, and describe what it fixes or adds

@@ -11,6 +11,9 @@ packages:
   KeyboardShortcuts:
     url: https://github.com/sindresorhus/KeyboardShortcuts
     from: 2.3.0
+  Sparkle:
+    url: https://github.com/sparkle-project/Sparkle
+    from: 2.9.0
 settings:
   base:
     SWIFT_VERSION: "6.0"
@@ -26,6 +29,7 @@ targets:
         buildPhase: resources
     dependencies:
       - package: KeyboardShortcuts
+      - package: Sparkle
     settings:
       base:
         PRODUCT_NAME: Barn Owl

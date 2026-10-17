@@ -12,6 +12,8 @@ cask "barn-owl" do
     strategy :github_latest
   end
 
+  # Barn Owl updates itself with Sparkle, so `brew upgrade` leaves it alone.
+  auto_updates true
   depends_on macos: :tahoe
 
   app "Barn Owl.app"

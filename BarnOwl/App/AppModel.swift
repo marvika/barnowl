@@ -17,6 +17,7 @@ final class AppModel {
     let presenter: PresenterMode
     let appearance = MenuBarAppearance()
     let clipboard = ClipboardHistory()
+    let updater = Updater()
     @ObservationIgnored var showSetup: () -> Void = {}
     @ObservationIgnored var openSettingsWindow: () -> Void = {}
     @ObservationIgnored var showSearch: () -> Void = {}

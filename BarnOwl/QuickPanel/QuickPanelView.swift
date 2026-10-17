@@ -41,6 +41,11 @@ struct QuickPanelView: View {
                 model.showSettings()
             }
             Spacer()
+            QuickFooterButton(symbol: "arrow.down.circle", help: "Check for Updates…") {
+                close()
+                model.updater.checkForUpdates()
+            }
+            .disabled(!model.updater.canCheck)
             QuickFooterButton(symbol: "power", help: "Quit Barn Owl") { NSApp.terminate(nil) }
         }
     }

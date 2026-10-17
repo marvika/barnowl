@@ -359,6 +359,22 @@ private struct GeneralPane: View {
                 .onChange(of: launchAtLogin) { _, enabled in LaunchAtLogin.set(enabled) { launchAtLogin = $0 } }
             }
             Section {
+                @Bindable var updater = model.updater
+                Toggle(isOn: $updater.checksAutomatically) {
+                    BadgeLabel(title: "Automatically check for updates",
+                               subtitle: "Looks once a day and asks before installing.",
+                               symbol: "arrow.down.circle.fill", color: .green)
+                }
+                .accessibilityLabel("Automatically check for updates")
+                LabeledContent {
+                    Button("Check for Updates…") { model.updater.checkForUpdates() }
+                        .disabled(!model.updater.canCheck)
+                } label: {
+                    BadgeLabel(title: "Version \(Bundle.main.shortVersion)", subtitle: "Updates come from GitHub releases.",
+                               symbol: "shippingbox.fill", color: .brown)
+                }
+            }
+            Section {
                 LabeledContent {
                     Button("Run Setup Again…") { model.showSetup() }
                 } label: {
@@ -926,10 +942,6 @@ private struct ShortcutsPane: View {
 // MARK: - About
 
 private struct AboutPane: View {
-    private var version: String {
-        Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "?"
-    }
-
     var body: some View {
         VStack(spacing: 12) {
             ZStack {
@@ -940,7 +952,7 @@ private struct AboutPane: View {
             }
             .frame(width: 320, height: 170)
             Text("Barn Owl").font(.title.bold())
-            Text("Version \(version)").foregroundStyle(.secondary)
+            Text("Version \(Bundle.main.shortVersion)").foregroundStyle(.secondary)
             Text("Wise about your menu bar. Wide awake when you need it.\nOpen source under the MIT License.")
                 .multilineTextAlignment(.center)
             HStack {
