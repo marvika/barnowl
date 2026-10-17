@@ -25,6 +25,23 @@ struct SearchView: View {
 
     /// Commands first, then icons: hidden ones first (they're the ones you
     /// can't see), nearest the arrow first.
+    @State private var owlCue: OwlCue?
+    @State private var foundFor = ""
+
+    /// Little tricks: "hoot" and "dance", and a hop when exactly one thing matches.
+    private func cueOwl() {
+        let text = query.trimmingCharacters(in: .whitespaces).lowercased()
+        switch text {
+        case "hoot", "hoo": owlCue = OwlCue(.hoot)
+        case "dance": owlCue = OwlCue(.dance)
+        default:
+            if !text.isEmpty, results.count == 1, foundFor != text {
+                foundFor = text
+                owlCue = OwlCue(.found)
+            }
+        }
+    }
+
     private var results: [Result] {
         let commands = CommandParser.commands(for: query).prefix(5).map(Result.command)
         let ordered = model.scanner.items.reversed().sorted { ($0.section == .visible ? 1 : 0) < ($1.section == .visible ? 1 : 0) }
@@ -42,7 +59,14 @@ struct SearchView: View {
                     .onSubmit(openSelection)
                     .onKeyPress(.downArrow) { move(1); return .handled }
                     .onKeyPress(.upArrow) { move(-1); return .handled }
-                    .onChange(of: query) { selection = 0 }
+                    .onChange(of: query) {
+                        selection = 0
+                        cueOwl()
+                    }
+                // Watches whichever result is selected.
+                WatchingOwl(lookAt: CGVector(dx: -0.5, dy: min(1, 0.3 + CGFloat(selection) * 0.25)),
+                            playful: false, snores: false, cue: owlCue)
+                    .frame(width: 28, height: 28)
             }
             .padding(14)
 

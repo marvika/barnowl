@@ -42,6 +42,14 @@ struct PerchView: View {
         .frame(minWidth: 280, maxWidth: 520, alignment: .leading)
         .fixedSize(horizontal: false, vertical: true)
         .glassEffect(.regular, in: .rect(cornerRadius: 16))
+        .overlay(alignment: .topTrailing) {
+            // Perched on the edge, watching the icon you point at.
+            if model.accessibilityTrusted, !(hidden.isEmpty && alwaysHidden.isEmpty && behindNotch.isEmpty) {
+                WatchingOwl(snores: false)
+                    .frame(width: 30, height: 30)
+                    .offset(x: -16, y: -19)
+            }
+        }
         .shadow(color: .black.opacity(0.28), radius: 14, y: 6)
         .padding(FloatingPanel.shadowInset)
     }

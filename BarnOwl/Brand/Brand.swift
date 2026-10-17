@@ -92,9 +92,61 @@ struct DuskSky: View {
                             .position(x: star.x * proxy.size.width, y: star.y * proxy.size.height)
                     }
                 }
+                // Tonight's moon, as it really is.
+                Moon(phase: Moon.phase(on: .now))
+                    .frame(width: max(14, min(26, proxy.size.width * 0.04)))
+                    .position(x: proxy.size.width * 0.88, y: proxy.size.height * 0.16)
             }
         }
         .ignoresSafeArea()
+        .accessibilityHidden(true)
+    }
+}
+
+/// The moon in a given phase: 0 new, 0.25 first quarter, 0.5 full, 0.75 last
+/// quarter. Worked out from the date alone, no internet needed.
+struct Moon: View {
+    let phase: Double
+
+    /// The phase on a date, from a known new moon (6 January 2000, 18:14 UTC)
+    /// and the length of a lunar month.
+    static func phase(on date: Date) -> Double {
+        let knownNewMoon = Date(timeIntervalSince1970: 947_182_440)
+        let synodicMonth = 29.530588853 * 86_400
+        let cycles = date.timeIntervalSince(knownNewMoon) / synodicMonth
+        return cycles - floor(cycles)
+    }
+
+    var body: some View {
+        Canvas { context, size in
+            let r = min(size.width, size.height) / 2
+            let centre = CGPoint(x: size.width / 2, y: size.height / 2)
+            // The dark part, faintly.
+            context.fill(Path(ellipseIn: CGRect(x: centre.x - r, y: centre.y - r, width: r * 2, height: r * 2)),
+                         with: .color(.white.opacity(0.08)))
+            // The lit part: half a disc on the sunny side, closed by the
+            // terminator, a half ellipse whose width follows the phase.
+            let waxing = phase < 0.5
+            let k = cos(phase * 2 * .pi)
+            var lit = Path()
+            let steps = 48
+            for step in 0...steps {
+                let angle = -Double.pi / 2 + Double.pi * Double(step) / Double(steps)
+                let x = centre.x + (waxing ? 1 : -1) * r * cos(angle)
+                let y = centre.y + r * sin(angle)
+                step == 0 ? lit.move(to: CGPoint(x: x, y: y)) : lit.addLine(to: CGPoint(x: x, y: y))
+            }
+            for step in 0...steps {
+                let angle = Double.pi / 2 - Double.pi * Double(step) / Double(steps)
+                let x = centre.x + (waxing ? 1 : -1) * k * r * cos(angle)
+                let y = centre.y + r * sin(angle)
+                lit.addLine(to: CGPoint(x: x, y: y))
+            }
+            lit.closeSubpath()
+            context.addFilter(.shadow(color: Brand.amber.opacity(0.6), radius: r * 0.6))
+            context.fill(lit, with: .color(Color(hex: 0xFFE2A8)))
+        }
+        .aspectRatio(1, contentMode: .fit)
         .accessibilityHidden(true)
     }
 }
@@ -179,14 +231,52 @@ enum OwlGeometry {
     }
 }
 
-/// What the owl is wearing.
-enum OwlAccessory: Equatable {
-    case none, sunglasses, partyHat, nightcap, santaHat
+/// What the owl is wearing: something on its head, something on its eyes,
+/// and something it holds.
+struct OwlOutfit: Equatable {
+    enum Hat { case none, party, nightcap, santa, witch, headset }
+    enum Eyewear { case none, shades, glasses }
+    enum Prop { case none, coffee, twoCoffees, thermos, blanket }
 
-    /// A seasonal surprise when nothing else is worn.
-    static var seasonal: OwlAccessory {
-        Calendar.current.component(.month, from: .now) == 12 ? .santaHat : .none
+    var hat = Hat.none
+    var eyewear = Eyewear.none
+    var prop = Prop.none
+
+    static let none = OwlOutfit()
+    static let sunglasses = OwlOutfit(eyewear: .shades)
+    static let glasses = OwlOutfit(eyewear: .glasses)
+    static let partyHat = OwlOutfit(hat: .party)
+    static let nightcap = OwlOutfit(hat: .nightcap)
+    static let santaHat = OwlOutfit(hat: .santa)
+    static let witchHat = OwlOutfit(hat: .witch)
+    static let headset = OwlOutfit(hat: .headset)
+    static let coffee = OwlOutfit(prop: .coffee)
+    static let twoCoffees = OwlOutfit(prop: .twoCoffees)
+    static let thermos = OwlOutfit(prop: .thermos)
+    static let blanket = OwlOutfit(prop: .blanket)
+
+    /// Both outfits together; the right-hand one wins where they clash.
+    static func + (lhs: OwlOutfit, rhs: OwlOutfit) -> OwlOutfit {
+        OwlOutfit(hat: rhs.hat == .none ? lhs.hat : rhs.hat,
+                  eyewear: rhs.eyewear == .none ? lhs.eyewear : rhs.eyewear,
+                  prop: rhs.prop == .none ? lhs.prop : rhs.prop)
     }
+
+    /// A surprise for the day: a witch hat at Halloween, a Santa hat in
+    /// December, a party hat at New Year and on Barn Owl's birthday.
+    static var seasonal: OwlOutfit {
+        let day = Calendar.current.dateComponents([.month, .day], from: .now)
+        switch (day.month ?? 0, day.day ?? 0) {
+        case (10, 31): return .witchHat
+        case (12, _): return .santaHat
+        case (1, 1...3): return .partyHat
+        case (OwlOutfit.birthday.month, OwlOutfit.birthday.day): return .partyHat
+        default: return .none
+        }
+    }
+
+    /// Barn Owl 0.7.0, the first owl, came out on 17 October 2026.
+    static let birthday = (month: 10, day: 17)
 }
 
 /// The owl: a golden pebble with a heart-shaped face. Everything that moves
@@ -209,9 +299,21 @@ struct OwlView: View {
     var turn: Double = 0
     /// Head tilt in degrees.
     var tilt: Double = 0
-    /// 0 to 1, how wide it yawns.
+    /// 0 to 1, how wide it yawns (or opens its beak for a snack).
     var yawn: CGFloat = 0
-    var accessory: OwlAccessory = .none
+    var accessory: OwlOutfit = .none
+    /// Wings over the eyes: "I didn't see that!"
+    var coverEyes = false
+    /// A wing over the beak: "Shh!"
+    var shush = false
+    /// Eyes that glow in the dark.
+    var glowEyes = false
+    /// Bags under the eyes.
+    var tired = false
+    /// A colour shown on the chest for a moment.
+    var bellyTint: Color?
+    /// Ducks the head down, 0 to 1, for nods and peekaboo.
+    var faceDip: CGFloat = 0
     /// nil uses the colours chosen in Settings.
     var palette: OwlPalette?
 
@@ -224,18 +326,26 @@ struct OwlView: View {
             let side = min(proxy.size.width, proxy.size.height)
             let lookTilt = Double(max(-1, min(1, look.dx))) * 8
             ZStack {
-                OwlBodyLayer(colours: colours, curl: accessory == .none || accessory == .sunglasses)
+                OwlBodyLayer(colours: colours, curl: accessory.hat == .none)
+                Ellipse()
+                    .fill(bellyTint ?? .clear)
+                    .frame(width: side * 0.36, height: side * 0.3)
+                    .position(x: side * 0.5, y: side * 0.75)
+                    .opacity(bellyTint == nil ? 0 : 0.92)
                 ForEach([-1.0, 1.0], id: \.self) { side in
                     WingLayer(colours: colours, side: side)
                         .rotationEffect(.degrees(Double(wingLift) * 95 * -side), anchor: OwlGeometry.shoulder(side: side))
                 }
+                if accessory.prop != .none { PropLayer(prop: accessory.prop, colours: colours) }
                 Group {
                     OwlFaceLayer(colours: colours, eyes: eyeState, lids: lids, look: look, surprised: surprised,
-                                 yawn: yawn, sunglasses: accessory == .sunglasses)
+                                 yawn: yawn, eyewear: accessory.eyewear, coverEyes: coverEyes, shush: shush,
+                                 glowEyes: glowEyes, tired: tired)
                         .modifier(HeadTurn(angle: turn, reach: side * 0.22))
                         .offset(x: max(-1, min(1, look.dx)) * side * 0.018, y: max(-1, min(1, look.dy)) * side * 0.012)
-                    HatLayer(accessory: accessory)
+                    HatLayer(hat: accessory.hat)
                 }
+                .offset(y: faceDip * side * 0.06)
                 .rotationEffect(.degrees(lookTilt), anchor: UnitPoint(x: 0.5, y: 0.62))
                 .rotationEffect(.degrees(tilt), anchor: UnitPoint(x: 0.5, y: 0.62))
             }
@@ -246,6 +356,7 @@ struct OwlView: View {
         .animation(.spring(duration: 0.25), value: look)
         .animation(.easeInOut(duration: 0.12), value: blink)
         .animation(.spring(duration: 0.3), value: eyesOpen)
+        .animation(.easeInOut(duration: 0.4), value: bellyTint)
         .task(id: blinks && eyesOpen) {
             guard blinks && eyesOpen else { return }
             // A blink every few seconds, at slightly random times, and now
@@ -378,7 +489,11 @@ private struct OwlFaceLayer: View {
     let look: CGVector
     let surprised: Bool
     let yawn: CGFloat
-    let sunglasses: Bool
+    let eyewear: OwlOutfit.Eyewear
+    let coverEyes: Bool
+    let shush: Bool
+    let glowEyes: Bool
+    let tired: Bool
 
     var body: some View {
         if eyes == .dizzy {
@@ -421,10 +536,16 @@ private struct OwlFaceLayer: View {
                 switch eyes {
                 case .open:
                     let d = width * 0.1 * (surprised ? 1.2 : 1)
+                    if glowEyes {
+                        // Eyes that glow in the dark.
+                        context.fill(oval(centre, d * 2.1, d * 2.1),
+                                     with: .radialGradient(Gradient(colors: [Brand.amber.opacity(0.85), Brand.amber.opacity(0)]),
+                                                           center: centre, startRadius: d * 0.3, endRadius: d * 1.05))
+                    }
                     let shift = CGPoint(x: max(-1, min(1, look.dx)) * width * 0.012,
                                         y: max(-1, min(1, look.dy)) * width * 0.01)
                     let iris = CGPoint(x: centre.x + shift.x, y: centre.y + shift.y)
-                    context.fill(oval(iris, d, d * 1.08), with: .color(ink))
+                    context.fill(oval(iris, d, d * 1.08), with: .color(glowEyes ? Color(hex: 0x3A2410) : ink))
                     context.fill(oval(CGPoint(x: iris.x - d * 0.2, y: iris.y - d * 0.22), d * 0.34, d * 0.34), with: .color(.white))
                     if detailed {
                         context.fill(oval(CGPoint(x: iris.x + d * 0.2, y: iris.y + d * 0.2), d * 0.14, d * 0.14),
@@ -467,7 +588,44 @@ private struct OwlFaceLayer: View {
                     context.stroke(spiral, with: .color(ink), style: StrokeStyle(lineWidth: max(1, width * 0.015), lineCap: .round))
                 }
             }
-            if sunglasses {
+            if tired {
+                // Bags under the eyes.
+                for centre in [left, right] {
+                    var bag = Path()
+                    bag.move(to: CGPoint(x: centre.x - width * 0.05, y: centre.y + width * 0.068))
+                    bag.addQuadCurve(to: CGPoint(x: centre.x + width * 0.05, y: centre.y + width * 0.068),
+                                     control: CGPoint(x: centre.x, y: centre.y + width * 0.1))
+                    context.stroke(bag, with: .color(colours.rim.opacity(0.45)),
+                                   style: StrokeStyle(lineWidth: max(0.8, width * 0.012), lineCap: .round))
+                }
+            }
+            if eyewear == .glasses {
+                // Round reading glasses, for the big screen.
+                let frame = Color(hex: 0x2A2140)
+                for centre in [left, right] {
+                    context.stroke(oval(centre, width * 0.15, width * 0.15), with: .color(frame),
+                                   lineWidth: max(1, width * 0.016))
+                }
+                var bridge = Path()
+                bridge.move(to: CGPoint(x: left.x + width * 0.075, y: left.y - width * 0.01))
+                bridge.addQuadCurve(to: CGPoint(x: right.x - width * 0.075, y: right.y - width * 0.01),
+                                    control: CGPoint(x: (left.x + right.x) / 2, y: left.y - width * 0.035))
+                context.stroke(bridge, with: .color(frame), lineWidth: max(1, width * 0.014))
+            }
+            if coverEyes {
+                // Wing tips over both eyes.
+                for (index, centre) in [left, right].enumerated() {
+                    let lean: CGFloat = index == 0 ? -0.35 : 0.35
+                    let tip = Path(ellipseIn: CGRect(x: -width * 0.1, y: -width * 0.075, width: width * 0.2, height: width * 0.15))
+                        .applying(CGAffineTransform(rotationAngle: lean).concatenating(
+                            CGAffineTransform(translationX: centre.x, y: centre.y + width * 0.005)))
+                    context.fill(tip, with: .linearGradient(Gradient(colors: [colours.wingTop, colours.wingBottom]),
+                                                            startPoint: CGPoint(x: centre.x, y: centre.y - width * 0.07),
+                                                            endPoint: CGPoint(x: centre.x, y: centre.y + width * 0.07)))
+                    context.stroke(tip, with: .color(colours.outline.opacity(0.6)), lineWidth: max(0.5, width * 0.01))
+                }
+            }
+            if eyewear == .shades {
                 // Cool shades for presenting.
                 for centre in [left, right] {
                     let lens = Path(roundedRect: CGRect(x: centre.x - width * 0.08, y: centre.y - width * 0.055,
@@ -498,6 +656,15 @@ private struct OwlFaceLayer: View {
             context.fill(Path(OwlGeometry.beak(in: rect).copy(using: [CGAffineTransform(translationX: 0, y: -size.height * 0.02 * yawn)])!),
                          with: .linearGradient(Gradient(colors: [colours.beak, colours.beak.mix(with: colours.rim, by: 0.3)]),
                                                startPoint: p(0.5, 0.445), endPoint: p(0.5, 0.515)))
+            if shush {
+                // A wing over the beak.
+                let wing = Path(ellipseIn: CGRect(x: -width * 0.09, y: -width * 0.055, width: width * 0.18, height: width * 0.11))
+                    .applying(CGAffineTransform(rotationAngle: -0.5).concatenating(
+                        CGAffineTransform(translationX: width * 0.52, y: size.height * 0.49)))
+                context.fill(wing, with: .linearGradient(Gradient(colors: [colours.wingTop, colours.wingBottom]),
+                                                         startPoint: p(0.5, 0.44), endPoint: p(0.5, 0.55)))
+                context.stroke(wing, with: .color(colours.outline.opacity(0.6)), lineWidth: max(0.5, width * 0.01))
+            }
         }
     }
 
@@ -523,7 +690,7 @@ private struct OwlFaceLayer: View {
 /// Hats, drawn on top of the head. The canvas reaches above the owl, so a
 /// tall hat isn't cut off.
 private struct HatLayer: View {
-    let accessory: OwlAccessory
+    let hat: OwlOutfit.Hat
 
     /// How far above the owl's frame the hat may reach, as a fraction of it.
     private nonisolated static let headroom: CGFloat = 0.3
@@ -540,8 +707,8 @@ private struct HatLayer: View {
                                  with: .color(colour))
                 }
                 let outline = Color.black.opacity(0.35)
-                switch accessory {
-                case .partyHat:
+                switch hat {
+                case .party:
                     var cone = Path()
                     cone.move(to: p(0.35, 0.165))
                     cone.addLine(to: p(0.57, -0.13))
@@ -560,8 +727,8 @@ private struct HatLayer: View {
                         stripes.stroke(band, with: .color(Color(hex: colour)), lineWidth: side * 0.035)
                     }
                     pompom(0.57, -0.13, Color(hex: 0xFFE27A))
-                case .nightcap, .santaHat:
-                    let santa = accessory == .santaHat
+                case .nightcap, .santa:
+                    let santa = hat == .santa
                     let main = santa ? Color(hex: 0xE23B3B) : Color(hex: 0x6E68EA)
                     let trim = santa ? Color.white : Color(hex: 0xF7EBD4)
                     var cap = Path()
@@ -587,12 +754,119 @@ private struct HatLayer: View {
                     context.stroke(brim, with: .color(outline), lineWidth: side * 0.015)
                     context.fill(brim, with: .color(trim))
                     pompom(0.86, 0.22, trim)
-                case .none, .sunglasses:
+                case .witch:
+                    let felt = Color(hex: 0x2B2140)
+                    var cone = Path()
+                    cone.move(to: p(0.34, 0.13))
+                    cone.addCurve(to: p(0.64, -0.2), control1: p(0.42, 0.0), control2: p(0.5, -0.12))
+                    cone.addQuadCurve(to: p(0.57, -0.05), control: p(0.6, -0.1))
+                    cone.addQuadCurve(to: p(0.66, 0.13), control: p(0.6, 0.04))
+                    cone.closeSubpath()
+                    let brim = Path(ellipseIn: CGRect(x: p(0.17, 0).x, y: p(0, 0.095).y, width: side * 0.66, height: side * 0.085))
+                    for shape in [brim, cone] {
+                        context.stroke(shape, with: .color(outline), lineWidth: side * 0.02)
+                        context.fill(shape, with: .linearGradient(Gradient(colors: [Color(hex: 0x4A3A6E), felt]),
+                                                                  startPoint: p(0.6, -0.2), endPoint: p(0.5, 0.15)))
+                    }
+                    var band = context
+                    band.clip(to: cone)
+                    band.fill(Path(CGRect(x: 0, y: p(0, 0.06).y, width: side, height: side * 0.045)), with: .color(Brand.amber))
+                    context.stroke(Path(CGRect(x: p(0.47, 0).x, y: p(0, 0.062).y, width: side * 0.06, height: side * 0.04)),
+                                   with: .color(Color(hex: 0xFFE27A)), lineWidth: side * 0.012)
+                case .headset:
+                    let dark = Color(hex: 0x2A2A35)
+                    var band = Path()
+                    band.move(to: p(0.17, 0.4))
+                    band.addQuadCurve(to: p(0.83, 0.4), control: p(0.5, -0.14))
+                    context.stroke(band, with: .color(dark), style: StrokeStyle(lineWidth: side * 0.04, lineCap: .round))
+                    for x in [0.135, 0.795] as [CGFloat] {
+                        let cup = Path(roundedRect: CGRect(x: p(x, 0).x, y: p(0, 0.33).y, width: side * 0.07, height: side * 0.15),
+                                       cornerRadius: side * 0.03)
+                        context.fill(cup, with: .color(dark))
+                        context.fill(Path(roundedRect: CGRect(x: p(x + 0.015, 0).x, y: p(0, 0.35).y, width: side * 0.04,
+                                                              height: side * 0.11), cornerRadius: side * 0.02),
+                                     with: .color(Brand.lavender))
+                    }
+                    var boom = Path()
+                    boom.move(to: p(0.19, 0.47))
+                    boom.addQuadCurve(to: p(0.39, 0.58), control: p(0.22, 0.6))
+                    context.stroke(boom, with: .color(dark), style: StrokeStyle(lineWidth: side * 0.018, lineCap: .round))
+                    pompom(0.4, 0.58, dark)
+                case .none:
                     break
                 }
             }
             .frame(width: side, height: side * (1 + Self.headroom))
             .offset(y: -side * Self.headroom)
+        }
+        .allowsHitTesting(false)
+    }
+}
+
+/// What the owl holds: coffee, a thermos, or a blanket over its knees.
+private struct PropLayer: View {
+    let prop: OwlOutfit.Prop
+    let colours: OwlPalette.Colours
+
+    var body: some View {
+        Canvas { context, size in
+            let w = size.width
+            func p(_ x: CGFloat, _ y: CGFloat) -> CGPoint { CGPoint(x: x * w, y: y * size.height) }
+            let outline = colours.outline.opacity(0.7)
+            func mug(at x: CGFloat, flip: Bool) {
+                let body = Path(roundedRect: CGRect(x: p(x, 0).x, y: p(0, 0.7).y, width: w * 0.15, height: w * 0.15),
+                                cornerRadius: w * 0.03)
+                var handle = Path()
+                let hx = flip ? p(x, 0).x : p(x + 0.15, 0).x
+                handle.addArc(center: CGPoint(x: hx, y: p(0, 0.775).y), radius: w * 0.04,
+                              startAngle: .degrees(flip ? 90 : -90), endAngle: .degrees(flip ? 270 : 90), clockwise: false)
+                context.stroke(handle, with: .color(outline), lineWidth: w * 0.03)
+                context.stroke(handle, with: .color(Color(hex: 0xFFF7E8)), lineWidth: w * 0.017)
+                context.stroke(body, with: .color(outline), lineWidth: max(0.8, w * 0.014))
+                context.fill(body, with: .color(Color(hex: 0xFFF7E8)))
+                context.fill(Path(CGRect(x: p(x, 0).x, y: p(0, 0.755).y, width: w * 0.15, height: w * 0.03)), with: .color(Brand.amber))
+                context.fill(Path(ellipseIn: CGRect(x: p(x + 0.015, 0).x, y: p(0, 0.695).y, width: w * 0.12, height: w * 0.03)),
+                             with: .color(Color(hex: 0x6B3E1F)))
+                // Steam.
+                for dx in [0.045, 0.095] as [CGFloat] {
+                    var steam = Path()
+                    steam.move(to: p(x + dx, 0.685))
+                    steam.addCurve(to: p(x + dx, 0.6), control1: p(x + dx - 0.03, 0.66), control2: p(x + dx + 0.03, 0.63))
+                    context.stroke(steam, with: .color(.white.opacity(0.7)),
+                                   style: StrokeStyle(lineWidth: max(0.8, w * 0.012), lineCap: .round))
+                }
+            }
+            switch prop {
+            case .coffee:
+                mug(at: 0.62, flip: false)
+            case .twoCoffees:
+                mug(at: 0.62, flip: false)
+                mug(at: 0.23, flip: true)
+            case .thermos:
+                let flask = Path(roundedRect: CGRect(x: p(0.63, 0).x, y: p(0, 0.62).y, width: w * 0.14, height: w * 0.26),
+                                 cornerRadius: w * 0.04)
+                context.stroke(flask, with: .color(outline), lineWidth: max(0.8, w * 0.014))
+                context.fill(flask, with: .linearGradient(Gradient(colors: [Brand.indigo, Brand.indigoDeep]),
+                                                          startPoint: p(0.63, 0.62), endPoint: p(0.77, 0.88)))
+                context.fill(Path(CGRect(x: p(0.63, 0).x, y: p(0, 0.72).y, width: w * 0.14, height: w * 0.035)),
+                             with: .color(Brand.lavender))
+                context.fill(Path(roundedRect: CGRect(x: p(0.645, 0).x, y: p(0, 0.585).y, width: w * 0.11, height: w * 0.05),
+                                  cornerRadius: w * 0.015), with: .color(Color(hex: 0x9A92B0)))
+            case .blanket:
+                let quilt = Path(roundedRect: CGRect(x: p(0.12, 0).x, y: p(0, 0.66).y, width: w * 0.76, height: w * 0.31),
+                                 cornerRadius: w * 0.08)
+                context.stroke(quilt, with: .color(outline), lineWidth: max(0.8, w * 0.014))
+                context.fill(quilt, with: .color(Brand.lavender))
+                var stripes = context
+                stripes.clip(to: quilt)
+                for x in stride(from: 0.16, to: 0.9, by: 0.12) {
+                    stripes.fill(Path(CGRect(x: p(x, 0).x, y: 0, width: w * 0.05, height: size.height)),
+                                 with: .color(Color(hex: 0x6E68EA).opacity(0.6)))
+                }
+                stripes.fill(Path(CGRect(x: 0, y: p(0, 0.66).y, width: w, height: w * 0.06)), with: .color(Brand.cream))
+            case .none:
+                break
+            }
         }
         .allowsHitTesting(false)
     }

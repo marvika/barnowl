@@ -24,6 +24,8 @@ struct ClipboardView: View {
     var body: some View {
         VStack(spacing: 0) {
             HStack {
+                WatchingOwl(snores: false, cue: clipboard.owlCue)
+                    .frame(width: 24, height: 24)
                 Picker("", selection: $tab) {
                     ForEach(Tab.allCases, id: \.self) { Text($0.rawValue).tag($0) }
                 }
@@ -43,6 +45,16 @@ struct ClipboardView: View {
         }
         .frame(width: 460)
         .glassEffect(.regular, in: .rect(cornerRadius: 18))
+        .task {
+            // Just copied a password or a colour? The owl reacts once you look.
+            try? await Task.sleep(for: .milliseconds(500))
+            if Date().timeIntervalSince(clipboard.lastSecretSkipped) < 30 {
+                clipboard.owlCue = OwlCue(.didntSee)
+            } else if let newest = clipboard.entries.first, Date().timeIntervalSince(newest.date) < 30,
+                      let text = newest.text, let colour = colourFromHex(text) {
+                clipboard.owlCue = OwlCue(.colour(colour))
+            }
+        }
         .shadow(color: .black.opacity(0.28), radius: 14, y: 6)
         .padding(FloatingPanel.shadowInset)
         .onAppear { focused = true }

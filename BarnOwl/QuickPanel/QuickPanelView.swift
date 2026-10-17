@@ -65,7 +65,7 @@ private struct KeepAwakeCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 10) {
-                AwakeOwlBadge(keepAwake: keepAwake, presenting: model.presenter.isPresenting)
+                AwakeOwlBadge(model: model)
                     .zIndex(1) // so the owl's speech bubble shows over the title
                 VStack(alignment: .leading, spacing: 1) {
                     Text("Keep Awake").font(.headline)
@@ -235,25 +235,34 @@ struct TogglesGrid: View {
             }
             if showDarkMode {
                 ToggleTile(title: "Dark Mode", symbol: "circle.lefthalf.filled", isOn: QuickToggles.isDarkMode) {
+                    OwlCues.shared.quickPanel(QuickToggles.isDarkMode ? .lightsOn : .lightsOut)
                     run(QuickToggles.toggleDarkMode)
                 }
             }
             if showMicrophone {
                 ToggleTile(title: QuickToggles.isMicrophoneMuted ? "Mic Muted" : "Microphone",
                            symbol: QuickToggles.isMicrophoneMuted ? "mic.slash.fill" : "mic.fill",
-                           isOn: QuickToggles.isMicrophoneMuted) { run(QuickToggles.toggleMicrophone) }
+                           isOn: QuickToggles.isMicrophoneMuted) {
+                    OwlCues.shared.quickPanel(QuickToggles.isMicrophoneMuted ? .listening : .shush)
+                    run(QuickToggles.toggleMicrophone)
+                }
             }
             if showDesktop {
                 ToggleTile(title: "Hide Desktop", symbol: "menubar.dock.rectangle",
-                           isOn: QuickToggles.desktopIconsHidden) { run(QuickToggles.toggleDesktopIcons) }
+                           isOn: QuickToggles.desktopIconsHidden) {
+                    OwlCues.shared.quickPanel(QuickToggles.desktopIconsHidden ? .backAgain : .peekaboo)
+                    run(QuickToggles.toggleDesktopIcons)
+                }
             }
             if showHiddenFiles {
                 ToggleTile(title: "Hidden Files", symbol: "eye.fill", isOn: QuickToggles.hiddenFilesShown) {
+                    OwlCues.shared.quickPanel(QuickToggles.hiddenFilesShown ? .unseen : .secrets)
                     run(QuickToggles.toggleHiddenFiles)
                 }
             }
             if showSleepDisplay {
                 ToggleTile(title: "Sleep Display", symbol: "moon.fill", isOn: false) {
+                    OwlCues.shared.quickPanel(.nightNight)
                     QuickToggles.sleepDisplay()
                 }
             }
@@ -322,13 +331,14 @@ private struct QuickFooterButton: View {
 /// The owl with its eyes open while keeping awake, inside a ring that runs
 /// down as a timed session does.
 struct AwakeOwlBadge: View {
-    let keepAwake: KeepAwakeController
-    /// While presenting, the owl wears shades.
-    var presenting = false
+    let model: AppModel
     var size: CGFloat = 40
+    @State private var power = SystemConditions.power()
+
+    private var keepAwake: KeepAwakeController { model.keepAwake }
 
     var body: some View {
-        TimelineView(.periodic(from: .now, by: 1)) { _ in
+        TimelineView(.periodic(from: .now, by: 1)) { context in
             ZStack {
                 Circle()
                     .fill(keepAwake.isActive ? Brand.indigo.opacity(0.55) : Color.primary.opacity(0.08))
@@ -340,13 +350,53 @@ struct AwakeOwlBadge: View {
                         .padding(1.5)
                         .animation(.linear(duration: 1), value: fraction)
                 }
-                WatchingOwl(eyesOpen: keepAwake.isActive, playful: false, snores: false,
-                            accessory: presenting ? .sunglasses : nil)
+                let outfit = outfit(at: context.date)
+                WatchingOwl(eyesOpen: keepAwake.isActive, snores: false,
+                            tired: outfit.prop == .thermos || batteryLow, accessory: outfit,
+                            cue: OwlCues.shared.quickPanel)
                     .padding(size * 0.14)
             }
         }
         .frame(width: size, height: size)
         .animation(.spring(duration: 0.35), value: keepAwake.isActive)
         .accessibilityLabel(keepAwake.isActive ? "Keeping your Mac awake" : "Keep awake is off")
+        .task {
+            // Power changes slowly; a look every few seconds is plenty.
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(5))
+                let now = SystemConditions.power()
+                if now.onAC && !power.onAC { OwlCues.shared.quickPanel(.charged) }
+                power = now
+                if batteryLow { OwlMoment.runningLow.meet() }
+            }
+        }
+    }
+
+    private var batteryLow: Bool {
+        !power.onAC && (power.batteryPercent ?? 100) < 20
+    }
+
+    /// What the owl wears says what's going on: shades while presenting, a
+    /// headset during a call, coffee the longer it stays up, a blanket in
+    /// closed-lid mode, glasses at the desk.
+    private func outfit(at date: Date) -> OwlOutfit {
+        var outfit = OwlOutfit.seasonal
+        if model.layout.profile == .desk { outfit = outfit + .glasses }
+        if Preferences.closedLidMode { outfit = outfit + .blanket }
+        if keepAwake.session != nil, let start = keepAwake.sessionStart {
+            let hours = date.timeIntervalSince(start) / 3600
+            if hours >= 10 {
+                outfit = outfit + .thermos
+            } else if hours >= 5 {
+                outfit = outfit + .twoCoffees
+            } else if hours >= 2 {
+                outfit = outfit + .coffee
+            }
+        }
+        if keepAwake.isActive, keepAwake.activeRule?.conditions.contains(.microphoneInUse) == true {
+            outfit = outfit + .headset
+        }
+        if model.presenter.isPresenting { outfit = outfit + .sunglasses }
+        return outfit
     }
 }

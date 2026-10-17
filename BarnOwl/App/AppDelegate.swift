@@ -69,6 +69,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         model.openSettingsWindow = { [weak self] in self?.settingsWindow.show() }
         quickPanel = QuickPanelController(model: model)
         quickPanel.syncOwlIcon()
+        model.watcher.onSurface = { [weak self] frame in self?.quickPanel.glance(toward: frame) }
         keepAwake.start()
         model.watcher.start()
         gestures = RevealGestures(statusItems: items, isCollapsed: { [weak self] in

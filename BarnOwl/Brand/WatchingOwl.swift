@@ -8,8 +8,12 @@ import SwiftUI
 /// - press and hold: it loves being petted;
 /// - eyes opening (keep awake starts): a big wide-awake stretch; eyes
 ///   closing: a yawn, then it nods off and snores;
+/// - cues from the rest of the app (`OwlCue`): toggles, the Nest, search,
+///   the clipboard;
 /// - left alone for a while it gets drowsy, and startles when you're back;
-///   now and then it dances or stretches.
+///   now and then it dances or stretches, more so after midnight.
+///
+/// Settings → Appearance → Owl personality, and Reduce Motion, tone it down.
 struct WatchingOwl: View {
     enum Entrance {
         case none
@@ -28,6 +32,8 @@ struct WatchingOwl: View {
     var reach: CGFloat = 220
     /// Follows the pointer with its eyes and head.
     var watches = true
+    /// Looks this way instead of at the pointer.
+    var lookAt: CGVector?
     /// Reacts to clicks, gets drowsy and does things by itself.
     var playful = true
     /// Shows drifting z's while the eyes are shut.
@@ -35,12 +41,19 @@ struct WatchingOwl: View {
     /// Says things in a speech bubble. Off where the text around it already
     /// says it.
     var talks = true
-    var accessory: OwlAccessory?
+    /// Bags under the eyes.
+    var tired = false
+    /// Opens its beak, hoping for a snack.
+    var hungry = false
+    var accessory: OwlOutfit?
     /// nil uses the colours chosen in Settings.
     var palette: OwlPalette?
     var entrance: Entrance = .none
+    /// Plays a reaction whenever a new cue arrives.
+    var cue: OwlCue?
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @AppStorage(PrefKey.owlPersonality) private var personality = OwlPersonality.lively
     @State private var anchor = ScreenAnchor()
     @State private var tilt: Double = 0
     @State private var turn: Double = 0
@@ -50,6 +63,7 @@ struct WatchingOwl: View {
     @State private var wingLift: CGFloat = 0
     @State private var yawn: CGFloat = 0
     @State private var lids: CGFloat = 0
+    @State private var faceDip: CGFloat = 0
     @State private var bubble: String?
     @State private var bubbleID = 0
     @State private var cheering = false
@@ -58,24 +72,34 @@ struct WatchingOwl: View {
     @State private var roused = false
     @State private var dozing = false
     @State private var stunned = false
+    @State private var coverEyes = false
+    @State private var shush = false
+    @State private var glow = false
+    @State private var bellyTint: Color?
     @State private var clicks: [Date] = []
     @State private var bursts: [Burst] = []
-    @State private var pressing = false
+    @State private var side: CGFloat = 0
 
     /// Eyes open as far as the owl itself is concerned: it stays awake a
     /// moment longer to yawn first.
     private var awake: Bool { eyesOpen || roused || dozing }
+    /// Whether it may move at all.
+    private var moves: Bool { !reduceMotion && personality != .still }
+    /// Whether it may do things nobody asked for.
+    private var idles: Bool { moves && personality == .lively }
+    private var outfit: OwlOutfit { accessory ?? (side >= 40 ? .seasonal : .none) }
 
     var body: some View {
         GeometryReader { proxy in
             let side = min(proxy.size.width, proxy.size.height)
-            TimelineView(.animation(minimumInterval: 1 / 30, paused: reduceMotion && !watches)) { context in
-                let look = watches && awake && lids < 0.5 ? direction() : .zero
-                let breath = reduceMotion ? 0 : sin(context.date.timeIntervalSinceReferenceDate * (awake ? 1.9 : 1.1))
+            TimelineView(.animation(minimumInterval: 1 / 30, paused: !moves && !watches)) { context in
+                let look = currentLook
+                let breath = moves ? sin(context.date.timeIntervalSinceReferenceDate * (awake ? 1.9 : 1.1)) : 0
                 let depth: CGFloat = awake ? 0.012 : 0.024
                 OwlView(eyesOpen: awake, look: look, surprised: surprised || roused || stunned, happy: happy || cheering,
                         hearts: loving, dizzy: dizzy, lids: lids, wingLift: wingLift, turn: turn, tilt: tilt, yawn: yawn,
-                        accessory: accessory ?? (side >= 40 ? .seasonal : .none), palette: palette)
+                        accessory: outfit, coverEyes: coverEyes, shush: shush, glowEyes: glow, tired: tired,
+                        bellyTint: bellyTint, faceDip: faceDip, palette: palette)
                     .scaleEffect(x: 1 + depth * 0.7 * breath, y: 1 - depth * breath, anchor: .bottom)
             }
             .rotationEffect(.degrees(sway), anchor: .bottom)
@@ -83,7 +107,7 @@ struct WatchingOwl: View {
             .offset(y: hop)
             .frame(width: side, height: side)
             .overlay {
-                if snores && !awake && !reduceMotion && side >= 30 { Snore() }
+                if snores && !awake && moves && side >= 30 { Snore() }
             }
             .overlay {
                 if dizzy { OrbitingStars(side: side) }
@@ -103,18 +127,35 @@ struct WatchingOwl: View {
                 }
             }
             .position(x: proxy.size.width / 2, y: proxy.size.height / 2)
+            .onAppear { self.side = side }
+            .onChange(of: side) { _, new in self.side = new }
         }
         .aspectRatio(1, contentMode: .fit)
         .background(ScreenAnchorView(anchor: anchor))
         // Only a playful owl takes clicks; otherwise they pass through to
         // whatever it sits in, such as a button.
-        .modifier(OwlGestures(enabled: playful, tap: poke, hold: pet))
+        .modifier(OwlGestures(enabled: playful && moves, tap: poke, hold: pet))
         .onChange(of: surprised) { _, now in if now { notice() } }
         .onChange(of: eyesOpen) { _, now in now ? wakeUp() : doze() }
         .onChange(of: happy) { _, now in if now { catchIt() } }
-        .task(id: playful && awake && !reduceMotion) { await liveALittle() }
-        .task { await perform(entrance) }
+        .onChange(of: hungry) { _, now in
+            guard moves else { return }
+            withAnimation(.spring(duration: 0.3, bounce: 0.4)) { yawn = now ? 0.6 : 0 }
+        }
+        .onChange(of: cue) { _, new in if let new { react(to: new.kind) } }
+        .onChange(of: outfit, initial: true) { _, new in meetOutfit(new) }
+        .task(id: idles && awake) { await liveALittle() }
+        .task {
+            await perform(entrance)
+            await greetTheDay()
+        }
         .accessibilityHidden(true)
+    }
+
+    private var currentLook: CGVector {
+        guard awake, lids < 0.5 else { return .zero }
+        if let lookAt { return lookAt }
+        return watches ? direction() : .zero
     }
 
     private func direction() -> CGVector {
@@ -146,14 +187,20 @@ struct WatchingOwl: View {
         } else if clicks.count == 3 {
             say("Whoa!", for: 1.4)
             turnRound()
+            OwlMoment.turnaround.meet()
         } else if clicks.count < 3 {
-            say(["Hoo!", "Hoo hoo!", "Hoot!", "Hi there!", "Who? Me?"].randomElement()!, for: 1.1)
-            cheer(for: 0.9)
-            bounce(height: 9)
-            flap(times: 2)
+            hoot()
         } else {
             bounce(height: 5)
         }
+    }
+
+    private func hoot() {
+        say(["Hoo!", "Hoo hoo!", "Hoot!", "Hi there!", "Who? Me?"].randomElement()!, for: 1.1)
+        cheer(for: 0.9)
+        bounce(height: 9)
+        flap(times: 2)
+        OwlMoment.hoot.meet()
     }
 
     private func pet() {
@@ -162,6 +209,7 @@ struct WatchingOwl: View {
         say("♥", for: 1.4)
         burst(.hearts)
         wiggle()
+        OwlMoment.petted.meet()
         Task {
             try? await Task.sleep(for: .seconds(1.8))
             loving = false
@@ -170,12 +218,17 @@ struct WatchingOwl: View {
 
     /// Keep awake started: eyes pop, a big stretch, sparkles.
     private func wakeUp() {
-        guard !reduceMotion else { return }
+        guard moves else { return }
         dozing = false
         stunned = true
         // Presenting keeps the Mac awake too, but then it's the shades that matter.
-        say(accessory == .sunglasses ? "Incognito!" : "Wide awake!", for: 1.4)
-        burst(.sparkles)
+        if outfit.eyewear == .shades {
+            say("Incognito!", for: 1.4)
+        } else {
+            say("Wide awake!", for: 1.4)
+            burst(.sparkles)
+            OwlMoment.wideAwake.meet()
+        }
         Task {
             withAnimation(.spring(duration: 0.35, bounce: 0.4)) { wingLift = 1.3; squash = 1.08 }
             try? await Task.sleep(for: .milliseconds(450))
@@ -187,18 +240,23 @@ struct WatchingOwl: View {
 
     /// Keep awake stopped: a big yawn, a stretch, then off to sleep.
     private func doze() {
-        guard !reduceMotion else { return }
+        guard moves else { return }
         dozing = true
+        OwlMoment.yawn.meet()
         Task {
-            withAnimation(.easeOut(duration: 0.5)) { yawn = 1; lids = 0.55; wingLift = 0.5; squash = 1.05 }
-            try? await Task.sleep(for: .milliseconds(900))
-            withAnimation(.easeIn(duration: 0.4)) { yawn = 0; wingLift = 0; squash = 1 }
-            try? await Task.sleep(for: .milliseconds(350))
+            await yawnAndStretch()
             withAnimation(.easeInOut(duration: 0.5)) { lids = 0.9 }
             try? await Task.sleep(for: .milliseconds(500))
             lids = 0
             dozing = false
         }
+    }
+
+    private func yawnAndStretch() async {
+        withAnimation(.easeOut(duration: 0.5)) { yawn = 1; lids = 0.55; wingLift = 0.5; squash = 1.05 }
+        try? await Task.sleep(for: .milliseconds(900))
+        withAnimation(.easeIn(duration: 0.4)) { yawn = 0; wingLift = 0; squash = 1 }
+        try? await Task.sleep(for: .milliseconds(350))
     }
 
     /// Something to look at: wide eyes, a lean, "Ooh!".
@@ -215,9 +273,161 @@ struct WatchingOwl: View {
         flap(times: 2)
     }
 
+    private func react(to kind: OwlCue.Kind) {
+        guard moves else { return }
+        switch kind {
+        case .hoot:
+            hoot()
+        case .dance:
+            say("♪", for: 1.4)
+            Task { await dance() }
+        case .found:
+            say("Found it!", for: 1.2)
+            catchIt()
+            OwlMoment.found.meet()
+        case .lightsOut:
+            say("Lights out!", for: 1.5)
+            OwlMoment.lightsOut.meet()
+            hold(.glow, for: 2.6)
+        case .lightsOn:
+            say("Bright!", for: 1.2)
+            cheer(for: 1)
+        case .shush:
+            say("Shh!", for: 1.5)
+            OwlMoment.shush.meet()
+            hold(.shush, for: 2)
+        case .listening:
+            say("I'm all ears!", for: 1.3)
+            bounce(height: 6)
+        case .peekaboo:
+            OwlMoment.peekaboo.meet()
+            Task {
+                withAnimation(.easeIn(duration: 0.25)) { faceDip = 1; hop = side * 0.12 }
+                try? await Task.sleep(for: .milliseconds(700))
+                say("Peekaboo!", for: 1.2)
+                withAnimation(.spring(duration: 0.4, bounce: 0.5)) { faceDip = 0; hop = 0 }
+            }
+        case .backAgain:
+            say("There you are!", for: 1.2)
+            bounce(height: 6)
+        case .secrets:
+            say("Ooh, secrets!", for: 1.4)
+            OwlMoment.secrets.meet()
+            hold(.stunned, for: 1.4)
+            bounce(height: 6)
+        case .unseen:
+            say("I saw nothing.", for: 1.4)
+            hold(.coverEyes, for: 1.6)
+        case .nightNight:
+            say("Night night", for: 1.2)
+            Task { await yawnAndStretch() }
+        case .caught:
+            catchIt()
+        case .bye:
+            say("Bye!", for: 1.1)
+            OwlMoment.bye.meet()
+            Task {
+                for _ in 0..<3 {
+                    withAnimation(.easeOut(duration: 0.12)) { wingLift = 0.7 }
+                    try? await Task.sleep(for: .milliseconds(140))
+                    withAnimation(.easeIn(duration: 0.12)) { wingLift = 0.35 }
+                    try? await Task.sleep(for: .milliseconds(140))
+                }
+                withAnimation(.easeIn(duration: 0.15)) { wingLift = 0 }
+            }
+        case .sweep:
+            say("All clear!", for: 1.2)
+            OwlMoment.sweep.meet()
+            Task {
+                for angle in [-12.0, 12, -12, 0] {
+                    withAnimation(.easeInOut(duration: 0.15)) { tilt = angle; wingLift = angle == 0 ? 0 : 0.8 }
+                    try? await Task.sleep(for: .milliseconds(150))
+                }
+            }
+        case .nom:
+            say("Nom!", for: 1.2)
+            OwlMoment.nom.meet()
+            Task {
+                for _ in 0..<2 {
+                    withAnimation(.easeOut(duration: 0.1)) { yawn = 0.7 }
+                    try? await Task.sleep(for: .milliseconds(120))
+                    withAnimation(.easeIn(duration: 0.1)) { yawn = 0 }
+                    try? await Task.sleep(for: .milliseconds(120))
+                }
+                cheer(for: 0.8)
+            }
+            bounce(height: 6)
+        case .didntSee:
+            say("I didn't see that!", for: 1.8)
+            OwlMoment.didntSee.meet()
+            hold(.coverEyes, for: 2)
+        case .colour(let colour):
+            say("Pretty!", for: 1.4)
+            OwlMoment.pretty.meet()
+            withAnimation(.easeInOut(duration: 0.4)) { bellyTint = colour }
+            Task {
+                try? await Task.sleep(for: .seconds(3))
+                withAnimation(.easeInOut(duration: 0.6)) { bellyTint = nil }
+            }
+        case .charged:
+            say("⚡", for: 1.2)
+            OwlMoment.chargedUp.meet()
+            burst(.sparkles)
+            bounce(height: 9)
+        case .thrown:
+            say("Whee!", for: 1.2)
+            OwlMoment.thrown.meet()
+            flap(times: 3)
+            cheer(for: 1)
+        }
+    }
+
+    private enum Pose { case glow, shush, coverEyes, stunned }
+
+    /// Strikes a pose for a while.
+    private func hold(_ pose: Pose, for seconds: Double) {
+        set(pose, true)
+        Task {
+            try? await Task.sleep(for: .seconds(seconds))
+            set(pose, false)
+        }
+    }
+
+    private func set(_ pose: Pose, _ value: Bool) {
+        withAnimation(.spring(duration: 0.3)) {
+            switch pose {
+            case .glow: glow = value
+            case .shush: shush = value
+            case .coverEyes: coverEyes = value
+            case .stunned: stunned = value
+            }
+        }
+    }
+
+    /// Meets the moments an outfit stands for.
+    private func meetOutfit(_ outfit: OwlOutfit) {
+        switch outfit.hat {
+        case .headset: OwlMoment.onCall.meet()
+        case .nightcap where !eyesOpen: OwlMoment.sweetDreams.meet()
+        case .santa: OwlMoment.santa.meet()
+        case .witch: OwlMoment.witch.meet()
+        default: break
+        }
+        if outfit.eyewear == .shades { OwlMoment.presenting.meet() }
+        if outfit.eyewear == .glasses { OwlMoment.atTheDesk.meet() }
+        switch outfit.prop {
+        case .coffee: OwlMoment.coffee.meet()
+        case .twoCoffees: OwlMoment.doubleShot.meet()
+        case .thermos: OwlMoment.allNighter.meet()
+        case .blanket: OwlMoment.lidClosed.meet()
+        case .none: break
+        }
+    }
+
     private func getDizzy() {
         dizzy = true
         say("@_@", for: 2.2)
+        OwlMoment.dizzy.meet()
         Task {
             for _ in 0..<4 {
                 withAnimation(.easeInOut(duration: 0.28)) { sway = 9 }
@@ -231,13 +441,23 @@ struct WatchingOwl: View {
     }
 
     private func wiggle() {
-        guard !reduceMotion else { return }
+        guard moves else { return }
         Task {
             for angle in [6.0, -6, 4, -3, 0] {
                 withAnimation(.easeInOut(duration: 0.12)) { sway = angle }
                 try? await Task.sleep(for: .milliseconds(120))
             }
         }
+    }
+
+    private func dance() async {
+        cheering = true
+        OwlMoment.dance.meet()
+        for angle in [8.0, -8, 8, -8, 0] {
+            withAnimation(.easeInOut(duration: 0.2)) { sway = angle; hop = angle == 0 ? 0 : -3 }
+            try? await Task.sleep(for: .milliseconds(200))
+        }
+        cheering = false
     }
 
     private func say(_ text: String, for seconds: Double) {
@@ -259,7 +479,7 @@ struct WatchingOwl: View {
     }
 
     private func burst(_ kind: Burst.Kind) {
-        guard !reduceMotion else { return }
+        guard moves else { return }
         let new = Burst(kind: kind)
         bursts.append(new)
         Task {
@@ -270,7 +490,7 @@ struct WatchingOwl: View {
 
     /// A squash, a hop and a bouncy landing.
     private func bounce(height: CGFloat) {
-        guard !reduceMotion else { return }
+        guard moves else { return }
         Task { await hopOnce(height: height) }
     }
 
@@ -284,7 +504,7 @@ struct WatchingOwl: View {
     }
 
     private func flap(times: Int) {
-        guard !reduceMotion else { return }
+        guard moves else { return }
         Task { await flapWings(times: times) }
     }
 
@@ -298,16 +518,17 @@ struct WatchingOwl: View {
     }
 
     private func turnRound() {
-        guard !reduceMotion else { return }
+        guard moves else { return }
         withAnimation(.spring(duration: 1.2, bounce: 0.25)) { turn += 2 * .pi }
     }
 
     // MARK: Living
 
     /// The owl's own life: a curious tilt, a stretch or a little dance now
-    /// and then. Left alone it gets drowsy, and startles when you're back.
+    /// and then, more often after midnight. Left alone it gets drowsy, and
+    /// startles when you're back.
     private func liveALittle() async {
-        guard playful, awake, !reduceMotion else { return }
+        guard playful, idles, awake else { return }
         defer { tilt = 0; lids = 0 }
         var lastMouse = NSEvent.mouseLocation
         var still: TimeInterval = 0
@@ -320,11 +541,12 @@ struct WatchingOwl: View {
                 lastMouse = mouse
                 if lids > 0.3 {
                     // Caught napping!
-                    withAnimation(.spring(duration: 0.25)) { lids = 0 }
+                    withAnimation(.spring(duration: 0.25)) { lids = 0; tilt = 0 }
                     stunned = true
                     say("!", for: 0.9)
                     bounce(height: 8)
                     flap(times: 1)
+                    OwlMoment.caughtNapping.meet()
                     try? await Task.sleep(for: .milliseconds(700))
                     stunned = false
                 }
@@ -342,7 +564,18 @@ struct WatchingOwl: View {
                 continue
             }
             guard Date.now >= nextTrick else { continue }
-            nextTrick = Date.now.addingTimeInterval(.random(in: 20...40))
+            // A night owl: livelier between midnight and four.
+            let night = (0..<4).contains(Calendar.current.component(.hour, from: .now))
+            nextTrick = Date.now.addingTimeInterval(night ? .random(in: 6...12) : .random(in: 20...40))
+            if night {
+                OwlMoment.nightOwl.meet()
+                if Bool.random() {
+                    withAnimation(.easeInOut(duration: 0.3)) { glow = true }
+                    try? await Task.sleep(for: .seconds(1.5))
+                    withAnimation(.easeInOut(duration: 0.5)) { glow = false }
+                    continue
+                }
+            }
             switch Int.random(in: 0..<5) {
             case 0, 1:
                 withAnimation(.spring(duration: 0.5, bounce: 0.35)) { tilt = .random(in: 10...16) * (Bool.random() ? 1 : -1) }
@@ -352,23 +585,40 @@ struct WatchingOwl: View {
                 await flapWings(times: 1)
             case 3:
                 // A stretch.
+                OwlMoment.stretch.meet()
                 withAnimation(.easeOut(duration: 0.4)) { wingLift = 1.2; squash = 1.06 }
                 try? await Task.sleep(for: .milliseconds(600))
                 withAnimation(.spring(duration: 0.5, bounce: 0.4)) { wingLift = 0; squash = 1 }
             default:
-                // A little dance.
-                cheering = true
-                for angle in [8.0, -8, 8, -8, 0] {
-                    withAnimation(.easeInOut(duration: 0.2)) { sway = angle; hop = angle == 0 ? 0 : -3 }
-                    try? await Task.sleep(for: .milliseconds(200))
-                }
-                cheering = false
+                await dance()
             }
         }
     }
 
+    /// Once a day, the first owl you see says good morning; once a year it
+    /// celebrates New Year and its birthday.
+    private func greetTheDay() async {
+        guard moves, side >= 28, awake else { return }
+        let now = Calendar.current.dateComponents([.month, .day, .hour], from: .now)
+        try? await Task.sleep(for: .milliseconds(400))
+        if now.month == 1, (now.day ?? 99) <= 7, OwlOccasions.firstTime("newYear", period: OwlOccasions.thisYear) {
+            say("Happy New Year!", for: 2)
+            burst(.confetti)
+            OwlMoment.newYear.meet()
+        } else if now.month == OwlOutfit.birthday.month, now.day == OwlOutfit.birthday.day,
+                  OwlOccasions.firstTime("birthday", period: OwlOccasions.thisYear) {
+            say("It's my birthday!", for: 2)
+            burst(.confetti)
+            OwlMoment.birthday.meet()
+        } else if (5..<11).contains(now.hour ?? 0), OwlOccasions.firstTime("morning", period: OwlOccasions.today) {
+            OwlMoment.morning.meet()
+            await yawnAndStretch()
+            say("Morning!", for: 1.6)
+        }
+    }
+
     private func perform(_ entrance: Entrance) async {
-        guard !reduceMotion else { return }
+        guard moves else { return }
         switch entrance {
         case .none:
             return
@@ -381,6 +631,7 @@ struct WatchingOwl: View {
         case .celebrate:
             try? await Task.sleep(for: .milliseconds(300))
             burst(.confetti)
+            OwlMoment.hooray.meet()
             for _ in 0..<3 {
                 async let wings: Void = flapWings(times: 2)
                 await hopOnce(height: 16)
@@ -392,6 +643,7 @@ struct WatchingOwl: View {
         case .puzzled:
             try? await Task.sleep(for: .milliseconds(250))
             say("?", for: 1.6)
+            OwlMoment.puzzled.meet()
             withAnimation(.spring(duration: 0.5, bounce: 0.4)) { tilt = 14 }
             try? await Task.sleep(for: .seconds(1.2))
             withAnimation(.spring(duration: 0.6, bounce: 0.3)) { tilt = 0 }

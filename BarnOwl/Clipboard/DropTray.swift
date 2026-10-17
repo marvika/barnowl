@@ -21,6 +21,10 @@ final class DropTray {
     var isTargeted = false
     /// Briefly true after a drop, for a little celebration.
     var justReceived = false
+    /// Reactions for the Nest's owl: bye, sweep, nom.
+    var owlCue: OwlCue?
+    /// A file is held right over the owl, which opens its beak.
+    var owlTargeted = false
 
     @ObservationIgnored let clipboard: ClipboardHistory
     @ObservationIgnored private var panel: FloatingPanel?
@@ -70,11 +74,14 @@ final class DropTray {
         collapseLater(after: 1.2)
     }
 
-    /// Files dropped on the tray.
-    func receive(_ urls: [URL]) {
+    /// Files dropped on the tray; `fedToOwl` when dropped right on the owl.
+    func receive(_ urls: [URL], fedToOwl: Bool = false) {
         let files = urls.filter(\.isFileURL)
         guard !files.isEmpty else { return }
         DragSourceView.noteDropInBarnOwl()
+        owlTargeted = false
+        // The open nest's owl takes over from the receiving one: cue it once it's there.
+        cueOwl(fedToOwl ? .nom : .caught, after: 0.35)
         clipboard.addToShelf(files)
         justReceived = true
         Task { [weak self] in
@@ -102,7 +109,21 @@ final class DropTray {
 
     func clear() {
         clipboard.clearShelf()
-        settle()
+        // A sweep of the wing, then the empty nest tucks away.
+        cueOwl(.sweep, after: 0)
+        collapseTask?.cancel()
+        collapseTask = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(1.3))
+            guard !Task.isCancelled else { return }
+            self?.settle()
+        }
+    }
+
+    private func cueOwl(_ kind: OwlCue.Kind, after seconds: Double) {
+        Task { [weak self] in
+            if seconds > 0 { try? await Task.sleep(for: .seconds(seconds)) }
+            self?.owlCue = OwlCue(kind)
+        }
     }
 
     func remove(_ url: URL) {
@@ -115,7 +136,17 @@ final class DropTray {
     func takenOut(_ urls: [URL]) {
         guard !Preferences.nestKeepsDraggedFiles else { return }
         clipboard.removeFromShelf(urls)
-        if clipboard.shelf.isEmpty { settle() }
+        cueOwl(.bye, after: 0)
+        guard clipboard.shelf.isEmpty else { return }
+        // Wave goodbye on the tab, then tuck away.
+        if mode == .hidden { return }
+        if mode != .tab { set(.tab) }
+        collapseTask?.cancel()
+        collapseTask = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(1.5))
+            guard !Task.isCancelled else { return }
+            self?.settle()
+        }
     }
 
     private func collapseLater(after seconds: Double) {
@@ -204,17 +235,25 @@ struct DropTrayView: View {
     private var tab: some View {
         Button { tray.toggleOpen() } label: {
             HStack(spacing: 6) {
-                OwlView(blinks: false).frame(width: 16, height: 16)
-                Text("\(files.count) in the nest")
-                Image(systemName: "chevron.down").font(.caption2)
+                Text(files.isEmpty ? "All gone!" : "\(files.count) in the nest")
+                if !files.isEmpty { Image(systemName: "chevron.down").font(.caption2) }
             }
             .font(.callout.weight(.medium))
-            .padding(.horizontal, 12)
+            .padding(.leading, 34)
+            .padding(.trailing, 12)
             .frame(height: 26)
             .glassEffect(.regular, in: .capsule)
             .contentShape(.capsule)
         }
         .buttonStyle(.plain)
+        .overlay(alignment: .leading) {
+            // Peeking over the edge of the tab.
+            WatchingOwl(playful: false, snores: false, talks: false, cue: tray.owlCue)
+                .frame(width: 26, height: 26)
+                .offset(x: 6, y: -9)
+                .allowsHitTesting(false)
+        }
+        .padding(.top, 10)
         .help("The nest: click or hover to drag files out")
         .accessibilityLabel("Nest, \(files.count) files")
     }
@@ -235,12 +274,17 @@ struct DropTrayView: View {
         VStack(spacing: 8) {
             if tray.mode == .receiving {
                 HStack(spacing: 12) {
-                    WatchingOwl(surprised: tray.isTargeted, talks: false)
+                    WatchingOwl(surprised: tray.isTargeted, talks: false, hungry: tray.owlTargeted)
                         .frame(width: 44, height: 44)
-                        .scaleEffect(tray.isTargeted ? 1.15 : 1)
-                        .animation(.spring(duration: 0.3, bounce: 0.5), value: tray.isTargeted)
+                        .scaleEffect(tray.isTargeted || tray.owlTargeted ? 1.15 : 1)
+                        .animation(.spring(duration: 0.3, bounce: 0.5), value: tray.isTargeted || tray.owlTargeted)
+                        // Feed the owl: drop a file right on it.
+                        .dropDestination(for: URL.self) { urls, _ in
+                            tray.receive(urls, fedToOwl: true)
+                            return true
+                        } isTargeted: { tray.owlTargeted = $0 }
                     VStack(alignment: .leading, spacing: 2) {
-                        Text(tray.isTargeted ? "Ooh! Let go to keep it" : "Drop it in the nest")
+                        Text(tray.owlTargeted ? "Feed the owl?" : tray.isTargeted ? "Ooh! Let go to keep it" : "Drop it in the nest")
                             .font(.headline)
                         Text("Barn Owl holds it here until you need it.")
                             .font(.caption).foregroundStyle(.secondary)
@@ -253,15 +297,15 @@ struct DropTrayView: View {
                     .strokeBorder(tray.isTargeted ? Color.accentColor : Color.secondary.opacity(0.4),
                                   style: StrokeStyle(lineWidth: 2, dash: [6, 4])))
             }
-            if !files.isEmpty {
-                if tray.mode == .open {
-                    HStack(spacing: 8) {
-                        WatchingOwl(happy: tray.justReceived).frame(width: 22, height: 22)
-                        Text("The nest").font(.headline)
-                        Spacer()
-                        if files.count > 1 { dragAll }
-                    }
+            if tray.mode == .open {
+                HStack(spacing: 8) {
+                    WatchingOwl(happy: tray.justReceived, cue: tray.owlCue).frame(width: 24, height: 24)
+                    Text(files.isEmpty ? "All clear" : "The nest").font(.headline)
+                    Spacer()
+                    if files.count > 1 { dragAll }
                 }
+            }
+            if !files.isEmpty {
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 8) {
                         ForEach(files, id: \.self) { url in

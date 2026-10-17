@@ -38,14 +38,17 @@ toggles, clipboard history and a nest for your files.
 <img src="docs/images/owl-moods.png" alt="The owl wide awake, hooting, in shades, petted, in a party hat, and asleep in a nightcap" width="900">
 
 The owl lives in your menu bar. Its eyes are open while it keeps your Mac
-awake and shut when your Mac may sleep. Inside the app it watches your
-pointer, hoots and hops when you click it, wears shades while you present,
-catches files in the Nest and dozes off in a nightcap. Press and hold to pet
-it; click it a few too many times and it gets dizzy. Leave it alone long
-enough and it nods off.
+awake and shut when your Mac may sleep. Inside the app it reacts to what
+you're doing: it wears a headset during calls and shades while you present,
+gets coffee on long sessions, covers its eyes when you copy a password, says
+"Nom!" when you feed it a file, and waves goodbye when files leave the Nest.
+Click it, pet it, throw it, or leave it alone until it nods off. There are
+38 owl moments to meet; Settings → About keeps count.
 
-Pick its colours in Settings → Appearance: **Golden Barn**, **Ghost Owl**,
-**Ember** or **Moonlit Lilac**. With Reduce Motion on, it keeps still.
+Pick its colours in Settings → Appearance (**Golden Barn**, **Ghost Owl**,
+**Ember** or **Moonlit Lilac**) and its personality: *Lively*, *Calm* or
+*Still*. With Reduce Motion on, it keeps still. See
+[the owl](docs/user-guide.md#the-owl) for everything it does.
 
 ## A tidy menu bar
 

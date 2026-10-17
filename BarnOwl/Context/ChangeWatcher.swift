@@ -15,6 +15,8 @@ final class ChangeWatcher {
     private(set) var watchedKeys: Set<String>
     /// Icons showing because they changed, and when they hide again.
     private(set) var surfaced: [String: Date] = [:]
+    /// Called with an icon's new frame when it's brought into view.
+    @ObservationIgnored var onSurface: ((CGRect) -> Void)?
 
     @ObservationIgnored private let scanner: ItemScanner
     @ObservationIgnored private let layout: LayoutController
@@ -138,6 +140,7 @@ final class ChangeWatcher {
             if changed {
                 Log.menuBar.info("\(item.key) looks different")
                 surfaced[item.key] = Date().addingTimeInterval(Preferences.changeShowDuration)
+                announce(item)
             } else if !visible {
                 await layout.returnToRow(item.key)
             }
@@ -157,6 +160,14 @@ final class ChangeWatcher {
         surfaced[item.key] = until
         await mover.move(item.windowID, to: .rightOf(divider))
         scanner.updateFrames()
+        announce(item)
+    }
+
+    /// Tells the owl where the icon now is, so it can glance at it.
+    private func announce(_ item: MenuBarItem) {
+        if let frame = scanner.items.first(where: { $0.windowID == item.windowID })?.frame {
+            onSurface?(frame)
+        }
     }
 
     private func hideExpired() async {

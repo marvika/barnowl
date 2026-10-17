@@ -6,8 +6,10 @@ import SwiftUI
 enum MenuBarOwl {
     /// A solid owl with its heart-shaped face cut out, so it reads as an owl
     /// even at 16 points, and the eyes inside. Openness above 1 is a wide
-    /// stare, for waking up.
-    static func image(openness: CGFloat, height: CGFloat = 17) -> NSImage {
+    /// stare, for waking up. `look` (-1…1) moves the eyes sideways by up to a
+    /// point; `winkRight` shuts one eye; `shades` puts on sunglasses.
+    static func image(openness: CGFloat, look: CGFloat = 0, winkRight: Bool = false, shades: Bool = false,
+                      height: CGFloat = 17) -> NSImage {
         let bounds = OwlGeometry.pebbleBounds
         let size = NSSize(width: (height * bounds.width / bounds.height).rounded(.up), height: height)
         let image = NSImage(size: size, flipped: true) { rect in
@@ -21,11 +23,23 @@ enum MenuBarOwl {
             context.setFillColor(NSColor.black.cgColor)
             context.fillPath(using: .evenOdd)
 
-            let (left, right) = OwlGeometry.eyeCentres(in: unit)
-            for centre in [left, right] {
-                if openness > 0.15 {
-                    let width = scale * 0.105 * max(1, sqrt(openness))
-                    let eyeHeight = scale * 0.115 * openness
+            let (leftEye, rightEye) = OwlGeometry.eyeCentres(in: unit)
+            let shift = max(-1, min(1, look)) * scale * 0.035
+            let left = CGPoint(x: leftEye.x + shift, y: leftEye.y), right = CGPoint(x: rightEye.x + shift, y: rightEye.y)
+            if shades {
+                for centre in [left, right] {
+                    context.addPath(CGPath(roundedRect: CGRect(x: centre.x - scale * 0.085, y: centre.y - scale * 0.06,
+                                                               width: scale * 0.17, height: scale * 0.12),
+                                           cornerWidth: scale * 0.03, cornerHeight: scale * 0.03, transform: nil))
+                }
+                context.addRect(CGRect(x: left.x, y: left.y - scale * 0.045, width: right.x - left.x, height: scale * 0.025))
+                context.fillPath()
+            }
+            for (index, centre) in [left, right].enumerated() where !shades {
+                let open = index == 1 && winkRight ? 0 : openness
+                if open > 0.15 {
+                    let width = scale * 0.105 * max(1, sqrt(open))
+                    let eyeHeight = scale * 0.115 * open
                     context.fillEllipse(in: CGRect(x: centre.x - width / 2, y: centre.y - eyeHeight / 2,
                                                    width: width, height: eyeHeight))
                 } else {
@@ -151,27 +165,11 @@ enum IconRenderer {
 
 /// Every look of the owl, in every colour, on dusk, light and dark.
 private struct OwlSheet: View {
-    private let looks: [(String, OwlView)] = [
-        ("Awake", OwlView(blinks: false)),
-        ("Asleep", OwlView(eyesOpen: false, blinks: false)),
-        ("Happy", OwlView(blinks: false, happy: true)),
-        ("Surprised", OwlView(blinks: false, surprised: true)),
-        ("Drowsy", OwlView(blinks: false, lids: 0.6)),
-        ("Yawn", OwlView(blinks: false, lids: 0.5, yawn: 1)),
-        ("Love", OwlView(blinks: false, hearts: true)),
-        ("Dizzy", OwlView(blinks: false, dizzy: true)),
-        ("Wings up", OwlView(blinks: false, wingLift: 1.2)),
-        ("Turning", OwlView(blinks: false, turn: 0.9)),
-        ("Tilt", OwlView(look: CGVector(dx: -0.8, dy: 0.3), blinks: false, tilt: 10)),
-        ("Shades", OwlView(blinks: false, accessory: .sunglasses)),
-        ("Party", OwlView(blinks: false, happy: true, accessory: .partyHat)),
-        ("Nightcap", OwlView(eyesOpen: false, blinks: false, accessory: .nightcap)),
-        ("Santa", OwlView(blinks: false, accessory: .santaHat)),
-    ]
+    private let looks: [(String, OwlView)] = OwlMoment.allCases.map { ($0.title, $0.look) }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            LazyVGrid(columns: Array(repeating: GridItem(.fixed(120)), count: 5), spacing: 10) {
+            LazyVGrid(columns: Array(repeating: GridItem(.fixed(120)), count: 8), spacing: 10) {
                 ForEach(looks.indices, id: \.self) { index in
                     VStack(spacing: 4) {
                         ZStack {

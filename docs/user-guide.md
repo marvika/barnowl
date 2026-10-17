@@ -284,20 +284,42 @@ Settings → Appearance:
 ## The owl
 
 The owl in the menu bar has its eyes open while your Mac is kept awake and
-shut when it may sleep. Inside Barn Owl it has a life of its own:
+shut when it may sleep. It blinks now and then, its eyes follow your pointer
+when you hover over it, it winks when you Option-click it, it wears shades
+while you present, and its eyes droop in the last minute of a timed session.
+When an icon pops into view because it changed, the owl glances at it.
 
-- It watches your pointer, blinks, and tilts its head now and then.
+Inside Barn Owl it has a life of its own:
+
 - **Click it** for a hoot and a hop. Click three times quickly and it turns
   its head all the way round; keep clicking and it gets dizzy.
-- **Press and hold** to pet it.
-- Start keeping awake and it stretches, wide awake; stop and it yawns and
-  dozes off.
-- It wears shades while you present, a nightcap on an empty Perch, a party hat
-  at the end of setup, and something festive in December.
-- Leave it alone for a while and it nods off. Move the mouse to startle it.
+- **Press and hold** to pet it. In About, **grab it and throw it**.
+- **Quick panel:** it stretches when keep-awake starts and yawns when it
+  stops. It reacts to the toggles: glowing eyes for Dark Mode, "Shh!" for a
+  muted microphone, "Peekaboo!" when the desktop hides. It wears a headset
+  during calls, glasses at your desk, a blanket in closed-lid mode, and gets
+  coffee the longer you stay up (two hours, five, then an all-nighter). It
+  perks up when you plug in, and looks tired on a low battery.
+- **The Nest:** it peeks over the tab, leans in when a file comes near, says
+  "Nom!" if you drop one right on it, waves "Bye!" when a file leaves, and
+  sweeps up when you clear it.
+- **The Perch:** it sits on the corner and watches the icon you point at.
+- **Search:** it watches the selected result and hops when exactly one thing
+  matches. Try typing "hoot" or "dance".
+- **Clipboard:** it covers its eyes when Barn Owl skips a password, and its
+  chest turns the colour of a colour code you copy, like `#F5A633`.
+- **Now and then:** it says good morning once a day, is livelier after
+  midnight, nods off if you leave it alone (move the mouse to startle it),
+  and dresses up for Halloween, December, New Year and its birthday. The
+  dusk sky shows tonight's real moon.
+- **In the Terminal:** `barnowl hoot`.
 
-Pick its colours in Settings → Appearance. With **Reduce Motion** on (System
-Settings → Accessibility → Display), the owl keeps still.
+Settings → About shows how many of its moments you've met.
+
+Settings → Appearance has its colours and its **personality**: *Lively* does
+everything, *Calm* only reacts to what you do, and *Still* keeps it still.
+With **Reduce Motion** on (System Settings → Accessibility → Display), it
+keeps still too.
 
 ## Automation
 

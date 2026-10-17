@@ -203,6 +203,7 @@ private struct AppearancePane: View {
         Form {
             Section {
                 OwlPalettePicker()
+                OwlPersonalityPicker()
             } header: {
                 Text("Owl")
             } footer: {
@@ -299,6 +300,21 @@ private struct AppearancePane: View {
     private func color(_ keyPath: WritableKeyPath<MenuBarStyle, StoredColor>) -> Binding<Color> {
         Binding(get: { appearance.style[keyPath: keyPath].color },
                 set: { appearance.style[keyPath: keyPath] = StoredColor($0) })
+    }
+}
+
+/// How much the owl gets up to.
+private struct OwlPersonalityPicker: View {
+    @AppStorage(PrefKey.owlPersonality) private var personality = OwlPersonality.lively
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Picker("Personality", selection: $personality) {
+                ForEach(OwlPersonality.allCases) { Text($0.title).tag($0) }
+            }
+            .pickerStyle(.segmented)
+            Text(personality.summary).font(.caption).foregroundStyle(.secondary)
+        }
     }
 }
 
@@ -942,13 +958,28 @@ private struct ShortcutsPane: View {
 // MARK: - About
 
 private struct AboutPane: View {
+    @State private var throwOffset = CGSize.zero
+    @State private var owlCue: OwlCue?
+    @State private var showingCollection = false
+    private var collection: OwlCollection { .shared }
+
     var body: some View {
         VStack(spacing: 12) {
             ZStack {
                 DuskSky().clipShape(.rect(cornerRadius: 18))
-                WatchingOwl(entrance: .greet)
+                WatchingOwl(entrance: .greet, cue: owlCue)
                     .frame(width: 130, height: 130)
                     .shadow(color: .black.opacity(0.35), radius: 12, y: 6)
+                    .rotationEffect(.degrees(Double(throwOffset.width) * 0.15))
+                    .offset(throwOffset)
+                    // Grab the owl and throw it: it flaps back to its spot.
+                    .gesture(DragGesture(minimumDistance: 6)
+                        .onChanged { throwOffset = $0.translation }
+                        .onEnded { _ in
+                            withAnimation(.spring(duration: 0.9, bounce: 0.45)) { throwOffset = .zero }
+                            owlCue = OwlCue(.thrown)
+                        })
+                    .zIndex(1)
             }
             .frame(width: 320, height: 170)
             Text("Barn Owl").font(.title.bold())
@@ -960,7 +991,58 @@ private struct AboutPane: View {
                 Text("·").foregroundStyle(.tertiary)
                 Link("Report an Issue", destination: URL(string: "https://github.com/marvika/barnowl/issues")!)
             }
+            Button {
+                showingCollection = true
+            } label: {
+                Label("You've met \(collection.met.count) of \(OwlMoment.allCases.count) owls", systemImage: "sparkles")
+            }
+            .buttonStyle(.link)
+            .padding(.top, 4)
+            .popover(isPresented: $showingCollection, arrowEdge: .bottom) { OwlCollectionView() }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+}
+
+/// Every owl moment: the ones you've met, and question marks for the rest.
+private struct OwlCollectionView: View {
+    private var met: Set<OwlMoment> { OwlCollection.shared.met }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Owls you've met").font(.headline)
+            Text("\(met.count) of \(OwlMoment.allCases.count). Hover over one to see how you met it.")
+                .font(.caption).foregroundStyle(.secondary)
+            ScrollView {
+                LazyVGrid(columns: Array(repeating: GridItem(.fixed(84), spacing: 8), count: 5), spacing: 10) {
+                    ForEach(OwlMoment.allCases) { moment in
+                        let known = met.contains(moment)
+                        VStack(spacing: 4) {
+                            ZStack {
+                                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                    .fill(known ? AnyShapeStyle(Brand.dusk) : AnyShapeStyle(Color.primary.opacity(0.06)))
+                                if known {
+                                    moment.look.padding(10)
+                                } else {
+                                    // A silhouette, still to be found.
+                                    OwlView(blinks: false).padding(10)
+                                        .colorMultiply(.black).opacity(0.25)
+                                    Text("?").font(.title2.bold()).foregroundStyle(.secondary)
+                                }
+                            }
+                            .frame(width: 76, height: 76)
+                            Text(known ? moment.title : "???")
+                                .font(.caption2).lineLimit(1)
+                                .foregroundStyle(known ? .primary : .tertiary)
+                        }
+                        .help(known ? moment.hint : "Not met yet")
+                    }
+                }
+                .padding(.vertical, 4)
+            }
+            .frame(height: 380)
+        }
+        .padding(16)
+        .frame(width: 480)
     }
 }

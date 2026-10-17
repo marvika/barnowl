@@ -41,6 +41,9 @@ struct ClipEntry: Identifiable, Codable, Hashable, Sendable {
 final class ClipboardHistory {
     private(set) var entries: [ClipEntry] = []
     /// Files parked on the shelf to drag out later.
+    /// For the owl in the clipboard panel: a skipped password, a colour.
+    var owlCue: OwlCue?
+    @ObservationIgnored private(set) var lastSecretSkipped = Date.distantPast
     private(set) var shelf: [URL] = []
 
     @ObservationIgnored private var changeCount = NSPasteboard.general.changeCount
@@ -100,7 +103,14 @@ final class ClipboardHistory {
         let types = Set((pasteboard.types ?? []).map(\.rawValue))
         let app = NSWorkspace.shared.frontmostApplication
         guard types.isDisjoint(with: Self.privateTypes),
-              !Self.privateApps.contains(app?.bundleIdentifier ?? "") else { return }
+              !Self.privateApps.contains(app?.bundleIdentifier ?? "") else {
+            // A password, most likely: the owl looks away.
+            if types.contains("org.nspasteboard.ConcealedType") || Self.privateApps.contains(app?.bundleIdentifier ?? "") {
+                lastSecretSkipped = Date()
+                owlCue = OwlCue(.didntSee)
+            }
+            return
+        }
 
         var entry: ClipEntry?
         if let urls = pasteboard.readObjects(forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true])
@@ -115,6 +125,7 @@ final class ClipboardHistory {
         guard var entry else { return }
         entry.sourceApp = app?.localizedName
         add(entry)
+        if let text = entry.text, let colour = colourFromHex(text) { owlCue = OwlCue(.colour(colour)) }
     }
 
     private func add(_ entry: ClipEntry) {

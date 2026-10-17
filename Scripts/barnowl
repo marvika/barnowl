@@ -10,12 +10,35 @@
 #   barnowl watch <app> [off]                show the icon when it changes
 #   barnowl icon <app> <text>|reset          replace an app's icon with text or an emoji
 #   barnowl settings [layout|general|menuBar|appearance|keepAwake|toggles|clipboard|shortcuts]
+#   barnowl hoot                             say hello to the owl
 
 set -e
 encode() { python3 -c 'import sys, urllib.parse; print(urllib.parse.quote(sys.argv[1]))' "$1"; }
 go() { open -g "barnowl://$1"; }
+script=$0
+usage() { sed -n '2,14p' "$script" | sed 's/^# \{0,1\}//'; }
 
-case "${1:-help}" in
+# The owl, in amber where the terminal has colour.
+owl() {
+  local a="" r=""
+  if [[ -t 1 ]]; then a=$'\e[38;5;215m'; r=$'\e[0m'; fi
+  print -r -- "${a}   ,___,${r}"
+  print -r -- "${a}  ( O,O )${r}  $1"
+  print -r -- "${a}  /)  _)${r}   $2"
+  print -r -- "${a} --\"--\"--${r}"
+}
+
+if (( $# == 0 )); then
+  owl "Barn Owl" "Wise about your menu bar. Wide awake when you need it."
+  echo
+  usage
+  exit 0
+fi
+
+case "$1" in
+  hoot)
+    hoots=("Hoo!" "Hoo hoo!" "Hoot!" "Who? Me?" "Hello there!")
+    owl "${hoots[$(( RANDOM % ${#hoots} + 1 ))]}" "" ;;
   show|toggle) go toggle ;;
   hide) go hide ;;
   all) go show-all ;;
@@ -42,5 +65,5 @@ case "${1:-help}" in
     if [[ "${3:-}" == reset ]]; then go "icon?app=$(encode "$2")&reset=1"
     else go "icon?app=$(encode "$2")&label=$(encode "${3:-★}")"; fi ;;
   settings) go "settings${2:+?pane=$2}" ;;
-  *) sed -n '2,13p' "$0" | sed 's/^# \{0,1\}//' ;;
+  *) usage ;;
 esac

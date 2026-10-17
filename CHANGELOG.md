@@ -13,6 +13,19 @@ before 1.0, a minor version can change behaviour.
 - The quick panel no longer closes when Barn Owl moves icons, for example
   when you start presenting.
 - When presenting starts, the owl says "Incognito!" instead of "Wide awake!".
+- **The owl everywhere:** it reacts to the quick toggles, dresses for what's
+  going on (a headset in calls, glasses at your desk, a blanket in closed-lid
+  mode, coffee on long sessions), perks up when you plug in, perches on the
+  Perch, peeks over the Nest's tab and waves files goodbye, follows search
+  results, and covers its eyes when you copy a password.
+- **Menu bar owl:** its eyes follow your pointer, it winks on Option-click,
+  wears shades while presenting, droops in a session's last minute, glances
+  at icons that pop into view, and blinks awake with your Mac.
+- **Surprises:** good morning once a day, a livelier night owl, Halloween,
+  New Year and birthday outfits, tonight's real moon in the sky, a throwable
+  owl in About, and `barnowl hoot` in the Terminal.
+- **Owl personality** in Settings → Appearance: Lively, Calm or Still.
+- **A collection** in Settings → About: 38 owl moments to meet.
 - The docs say macOS 26 *and later*: Barn Owl runs on macOS 27 too.
 
 ## 0.8.0
