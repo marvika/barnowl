@@ -9,5 +9,25 @@
         <description>New versions of Barn Owl.</description>
         <language>en</language>
         <!-- Releases, newest first -->
+        <item>
+            <title>Barn Owl 0.8.0</title>
+            <link>https://github.com/marvika/barnowl/releases/tag/v0.8.0</link>
+            <pubDate>Sat, 17 Oct 2026 21:08:21 +0000</pubDate>
+            <sparkle:version>9</sparkle:version>
+            <sparkle:shortVersionString>0.8.0</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>26.0</sparkle:minimumSystemVersion>
+            <sparkle:fullReleaseNotesLink>https://github.com/marvika/barnowl/releases/tag/v0.8.0</sparkle:fullReleaseNotesLink>
+            <description sparkle:format="markdown"><![CDATA[
+- Barn Owl can update itself. On the second launch it asks whether to check
+  automatically (once a day), and it always asks before installing. Change
+  that or check right away in Settings → General, or use the new button at
+  the bottom of the quick panel.
+- The Homebrew cask is marked as updating itself, so `brew upgrade` leaves it
+  alone.
+- Clicking an owl in Settings → Appearance now always switches its colours.
+  Before, a click on the owl itself was sometimes ignored.
+]]></description>
+            <enclosure url="https://github.com/marvika/barnowl/releases/download/v0.8.0/BarnOwl-0.8.0.zip" sparkle:edSignature="5f6ul9WOW1A1KitS3NNo+7JL9W0iYkx8lMtMgchd96CaO5MRfhK+j5j2pTDvS+dh7yp3EX13r5WyNac3RITmBA==" length="5113455" type="application/octet-stream"/>
+        </item>
     </channel>
 </rss>
