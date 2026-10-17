@@ -614,7 +614,7 @@ struct ScreenAnchorView: NSViewRepresentable {
     let anchor: ScreenAnchor
 
     func makeNSView(context: Context) -> NSView {
-        let view = NSView()
+        let view = ClickThroughView()
         anchor.view = view
         return view
     }
@@ -622,4 +622,9 @@ struct ScreenAnchorView: NSViewRepresentable {
     func updateNSView(_ nsView: NSView, context: Context) {
         anchor.view = nsView
     }
+}
+
+/// A view that's only there to be measured; clicks go to whatever is around it.
+private final class ClickThroughView: NSView {
+    override func hitTest(_ point: NSPoint) -> NSView? { nil }
 }

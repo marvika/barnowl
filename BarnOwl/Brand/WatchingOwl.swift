@@ -106,9 +106,9 @@ struct WatchingOwl: View {
         }
         .aspectRatio(1, contentMode: .fit)
         .background(ScreenAnchorView(anchor: anchor))
-        .contentShape(Rectangle())
-        .onTapGesture { if playful { poke() } }
-        .onLongPressGesture(minimumDuration: 0.5) { if playful { pet() } }
+        // Only a playful owl takes clicks; otherwise they pass through to
+        // whatever it sits in, such as a button.
+        .modifier(OwlGestures(enabled: playful, tap: poke, hold: pet))
         .onChange(of: surprised) { _, now in if now { notice() } }
         .onChange(of: eyesOpen) { _, now in now ? wakeUp() : doze() }
         .onChange(of: happy) { _, now in if now { catchIt() } }
@@ -394,6 +394,23 @@ struct WatchingOwl: View {
             withAnimation(.spring(duration: 0.5, bounce: 0.4)) { tilt = 14 }
             try? await Task.sleep(for: .seconds(1.2))
             withAnimation(.spring(duration: 0.6, bounce: 0.3)) { tilt = 0 }
+        }
+    }
+}
+
+private struct OwlGestures: ViewModifier {
+    let enabled: Bool
+    let tap: () -> Void
+    let hold: () -> Void
+
+    func body(content: Content) -> some View {
+        if enabled {
+            content
+                .contentShape(Rectangle())
+                .onTapGesture(perform: tap)
+                .onLongPressGesture(minimumDuration: 0.5, perform: hold)
+        } else {
+            content
         }
     }
 }
