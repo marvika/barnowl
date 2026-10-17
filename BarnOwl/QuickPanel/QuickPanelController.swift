@@ -1,15 +1,19 @@
 import AppKit
 import SwiftUI
 
-/// Shows the quick panel under the cup icon or the arrow, and owns the
-/// optional cup icon itself.
+/// Shows the quick panel under the owl or the arrow, and owns the owl in the
+/// menu bar, whose eyes are open while your Mac is kept awake.
 @MainActor
 final class QuickPanelController: NSObject {
     private let model: AppModel
     private var panel: FloatingPanel?
     private let outsideClicks = OutsideClickMonitor()
-    private(set) var cupItem: NSStatusItem?
+    private(set) var owlItem: NSStatusItem?
     private var countdownTask: Task<Void, Never>?
+    private var eyesTask: Task<Void, Never>?
+    private var blinkTask: Task<Void, Never>?
+    /// How open the owl's eyes are right now, 0 (shut) to 1.
+    private var openness: CGFloat = 0
 
     var isOpen: Bool { panel?.isVisible ?? false }
 
@@ -17,32 +21,76 @@ final class QuickPanelController: NSObject {
         self.model = model
     }
 
-    /// Adds or removes the cup icon to match the setting, and updates its look.
-    func syncCupIcon() {
-        if Preferences.showKeepAwakeIcon {
-            let item = cupItem ?? makeCupItem()
-            cupItem = item
-            let active = model.keepAwake.isActive
-            item.button?.image = NSImage(systemSymbolName: active ? "cup.and.heat.waves.fill" : "cup.and.saucer",
-                                         accessibilityDescription: active ? "Keep awake on" : "Keep awake off")?
-                .withSymbolConfiguration(.init(pointSize: 13, weight: .medium))
-            item.button?.toolTip = "Keep Awake: \(KeepAwakeFormatter.status(of: model.keepAwake))"
-            // Time left next to the cup, like Amphetamine.
-            if Preferences.keepAwakeCountdown, let end = model.keepAwake.endDate {
-                item.button?.title = " " + KeepAwakeFormatter.countdown(end.timeIntervalSinceNow)
-                item.button?.imagePosition = .imageLeading
-                item.button?.font = .monospacedDigitSystemFont(ofSize: NSFont.systemFontSize, weight: .medium)
-                startCountdown()
-            } else {
-                item.button?.title = ""
-                item.button?.imagePosition = .imageOnly
-                countdownTask?.cancel()
-                countdownTask = nil
-            }
-        } else if let cupItem {
-            NSStatusBar.system.removeStatusItem(cupItem)
-            self.cupItem = nil
+    /// Adds or removes the owl to match the setting, and updates it: eyes
+    /// open while keeping awake, plus the time left in a timed session.
+    func syncOwlIcon() {
+        guard Preferences.showKeepAwakeIcon else {
+            if let owlItem { NSStatusBar.system.removeStatusItem(owlItem) }
+            owlItem = nil
+            blinkTask?.cancel()
+            return
         }
+        let item = owlItem ?? makeOwlItem()
+        owlItem = item
+        let awake = model.keepAwake.isActive
+        animateEyes(to: awake ? 1 : 0)
+        awake ? startBlinking() : stopBlinking()
+        item.button?.setAccessibilityLabel(awake ? "Barn Owl, keeping your Mac awake" : "Barn Owl")
+        item.button?.toolTip = "Keep Awake: \(KeepAwakeFormatter.status(of: model.keepAwake))"
+        // Time left next to the owl, like Amphetamine.
+        if Preferences.keepAwakeCountdown, let end = model.keepAwake.endDate {
+            item.button?.title = " " + KeepAwakeFormatter.countdown(end.timeIntervalSinceNow)
+            item.button?.imagePosition = .imageLeading
+            item.button?.font = .monospacedDigitSystemFont(ofSize: NSFont.systemFontSize, weight: .medium)
+            startCountdown()
+        } else {
+            item.button?.title = ""
+            item.button?.imagePosition = .imageOnly
+            countdownTask?.cancel()
+            countdownTask = nil
+        }
+    }
+
+    private func setEyes(_ value: CGFloat) {
+        openness = value
+        owlItem?.button?.image = MenuBarOwl.image(openness: value)
+    }
+
+    /// Waking up, the eyes pop wide open and settle. Dozing off, they droop
+    /// halfway, hang there sleepily, then close.
+    private func animateEyes(to target: CGFloat) {
+        guard target != openness || owlItem?.button?.image == nil else { return }
+        eyesTask?.cancel()
+        let frames: [(CGFloat, Int)] = target > openness
+            ? [(0.3, 35), (0.75, 35), (1.2, 35), (1.35, 70), (1.15, 45), (1.0, 0)]
+            : [(0.7, 60), (0.45, 60), (0.42, 260), (0.5, 120), (0.3, 70), (0.15, 70), (0, 0)]
+        eyesTask = Task { [weak self] in
+            for (value, pause) in frames {
+                guard !Task.isCancelled else { return }
+                self?.setEyes(value)
+                try? await Task.sleep(for: .milliseconds(pause))
+            }
+        }
+    }
+
+    /// While awake, the owl blinks every half a minute or so.
+    private func startBlinking() {
+        guard blinkTask == nil else { return }
+        blinkTask = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(Double.random(in: 20...45)))
+                guard let self, !Task.isCancelled, self.openness > 0.9 else { continue }
+                for value in [0.4, 0.1, 0.5, 1.0] as [CGFloat] {
+                    self.setEyes(value)
+                    try? await Task.sleep(for: .milliseconds(45))
+                }
+            }
+        }
+    }
+
+    private func stopBlinking() {
+        blinkTask?.cancel()
+        blinkTask = nil
     }
 
     /// Refreshes the countdown every few seconds while a timed session runs.
@@ -53,17 +101,18 @@ final class QuickPanelController: NSObject {
                 try? await Task.sleep(for: .seconds(5))
                 guard let self else { return }
                 self.countdownTask = nil
-                self.syncCupIcon()
+                self.syncOwlIcon()
                 return
             }
         }
     }
 
-    private func makeCupItem() -> NSStatusItem {
+    private func makeOwlItem() -> NSStatusItem {
         let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         item.autosaveName = "BarnOwlKeepAwake"
         item.button?.target = self
-        item.button?.action = #selector(cupClicked)
+        item.button?.action = #selector(owlClicked)
+        item.button?.image = MenuBarOwl.image(openness: 0)
         item.button?.sendAction(on: [.leftMouseUp, .rightMouseUp])
         // A new status item appears at the far left, in a hidden section. Put
         // it next to the arrow once; after that macOS remembers its place.
@@ -81,7 +130,7 @@ final class QuickPanelController: NSObject {
         return item
     }
 
-    @objc private func cupClicked() {
+    @objc private func owlClicked() {
         // Option-click starts or stops keep awake without opening the panel.
         if NSApp.currentEvent?.modifierFlags.contains(.option) == true {
             if model.keepAwake.session != nil {
@@ -91,7 +140,7 @@ final class QuickPanelController: NSObject {
             }
             return
         }
-        toggle(under: cupItem?.button?.window?.frame)
+        toggle(under: owlItem?.button?.window?.frame)
     }
 
     func toggle(under anchor: NSRect?) {

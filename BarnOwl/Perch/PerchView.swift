@@ -65,11 +65,15 @@ struct PerchView: View {
     }
 
     private var emptyState: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text("Nothing hidden yet").font(.headline)
-            Text("Hold ⌘ and drag icons to the left of the | divider to hide them.")
-                .font(.callout).foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
+        HStack(spacing: 12) {
+            WatchingOwl(eyesOpen: false, accessory: .nightcap)
+                .frame(width: 44, height: 44)
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Nothing on the perch yet").font(.headline)
+                Text("Drag icons into Hidden in Settings → Layout, or ⌘-drag them left of the | divider.")
+                    .font(.callout).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
         }
         .padding(4)
     }

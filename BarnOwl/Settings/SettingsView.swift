@@ -28,7 +28,7 @@ enum SettingsPane: String, CaseIterable, Identifiable {
         case .menuBar: "menubar.rectangle"
         case .appearance: "paintpalette.fill"
         case .clipboard: "doc.on.clipboard.fill"
-        case .keepAwake: "cup.and.heat.waves.fill"
+        case .keepAwake: "eyes"
         case .toggles: "switch.2"
         case .shortcuts: "keyboard.fill"
         case .about: "info"
@@ -194,6 +194,13 @@ private struct AppearancePane: View {
     var body: some View {
         Form {
             Section {
+                OwlPalettePicker()
+            } header: {
+                Text("Owl")
+            } footer: {
+                Text("The owl in setup, panels and About. In the menu bar it takes the menu bar's colour.")
+            }
+            Section {
                 ZStack {
                     LinearGradient(colors: [.blue.opacity(0.7), .purple.opacity(0.6)], startPoint: .topLeading,
                                    endPoint: .bottomTrailing)
@@ -205,7 +212,8 @@ private struct AppearancePane: View {
                         Text("Finder").bold()
                         Text("File   Edit   View").foregroundStyle(.secondary)
                         Spacer()
-                        ForEach(["cup.and.heat.waves.fill", "wifi", "chevron.left", "battery.75percent"], id: \.self) {
+                        Image(nsImage: MenuBarOwl.image(openness: 1, height: 13)).renderingMode(.template)
+                        ForEach(["wifi", "chevron.left", "battery.75percent"], id: \.self) {
                             Image(systemName: $0)
                         }
                         Text("Fri 9:41")
@@ -286,6 +294,46 @@ private struct AppearancePane: View {
     }
 }
 
+/// Four owls to choose from; the one you pick hops for joy.
+private struct OwlPalettePicker: View {
+    @AppStorage(PrefKey.owlPalette) private var palette = OwlPalette.golden
+    @State private var justPicked: OwlPalette?
+
+    var body: some View {
+        HStack(spacing: 12) {
+            ForEach(OwlPalette.allCases) { option in
+                let selected = palette == option
+                Button {
+                    palette = option
+                    justPicked = option
+                    Task {
+                        try? await Task.sleep(for: .seconds(1.2))
+                        if justPicked == option { justPicked = nil }
+                    }
+                } label: {
+                    VStack(spacing: 6) {
+                        WatchingOwl(happy: justPicked == option, playful: false, palette: option)
+                            .frame(width: 56, height: 56)
+                            .padding(10)
+                            .background(RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                .fill(selected ? Color.accentColor.opacity(0.16) : Color.primary.opacity(0.04)))
+                            .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                .strokeBorder(selected ? Color.accentColor : Color.clear, lineWidth: 2))
+                        Text(option.title).font(.caption).foregroundStyle(selected ? .primary : .secondary)
+                    }
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(option.title)
+                .accessibilityAddTraits(selected ? .isSelected : [])
+            }
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 6)
+        .animation(.spring(duration: 0.3), value: palette)
+    }
+}
+
 // MARK: - General
 
 private struct GeneralPane: View {
@@ -313,7 +361,7 @@ private struct GeneralPane: View {
             Section("How to use Barn Owl") {
                 hint("cursorarrow.click", "Click the arrow to show or hide icons.")
                 hint("option", "Option-click the arrow to show every icon, including always-hidden ones.")
-                hint("cup.and.saucer", "Click the cup (or right-click the arrow) for Keep Awake and quick toggles.")
+                hint("moon.zzz", "Click the owl (or right-click the arrow) for Keep Awake and quick toggles.")
                 hint("command", "Hold ⌘ and drag icons across the | divider to hide or show them.")
             }
         }
@@ -395,7 +443,7 @@ private struct MenuBarPane: View {
                                symbol: "rectangle.on.rectangle", color: .purple)
                 }
                 Toggle(isOn: $presenterKeepAwake) {
-                    BadgeLabel(title: "Keep the Mac and display awake", symbol: "cup.and.heat.waves.fill",
+                    BadgeLabel(title: "Keep the Mac and display awake", symbol: "eyes",
                                color: .orange)
                 }
                 Toggle(isOn: $presenterHideDesktop) {
@@ -406,7 +454,7 @@ private struct MenuBarPane: View {
             } header: {
                 Text("Presenter mode")
             } footer: {
-                Text("Hides every menu bar icon except the clock and Control Center. Click the arrow for your icons in the Perch.")
+                Text("Hides every menu bar icon except the clock and Control Center. Click the arrow for your icons on the Perch.")
             }
             Section("Hiding") {
                 Picker(selection: $newIcons) {
@@ -485,7 +533,7 @@ private struct KeepAwakePane: View {
         Form {
             Section {
                 HStack(spacing: 14) {
-                    IconBadge(symbol: keepAwake.isActive ? "cup.and.heat.waves.fill" : "cup.and.saucer",
+                    IconBadge(symbol: keepAwake.isActive ? "eyes" : "moon.zzz",
                               color: keepAwake.isActive ? .orange : .gray, size: 40)
                     VStack(alignment: .leading, spacing: 2) {
                         Text(keepAwake.isActive ? "Your Mac is staying awake" : "Keep awake is off").font(.headline)
@@ -569,12 +617,12 @@ private struct KeepAwakePane: View {
 
             Section("Options") {
                 Toggle(isOn: $showIcon) {
-                    BadgeLabel(title: "Show the cup in the menu bar",
-                               subtitle: "Click it for keep awake and toggles. Option-click to start or stop.",
-                               symbol: "cup.and.saucer.fill", color: .orange)
+                    BadgeLabel(title: "Show the owl in the menu bar",
+                               subtitle: "Its eyes open while it keeps your Mac awake. Click it for keep awake and toggles; option-click to start or stop.",
+                               symbol: "moon.zzz.fill", color: .orange)
                 }
                 Toggle(isOn: $countdown) {
-                    BadgeLabel(title: "Show time left next to the cup",
+                    BadgeLabel(title: "Show time left next to the owl",
                                subtitle: "During a timed session, like 42m or 1:05.",
                                symbol: "timer", color: .orange)
                 }
@@ -833,7 +881,7 @@ private struct TogglesPane: View {
             } header: {
                 Text("Show in the quick panel")
             } footer: {
-                Text("Open the quick panel from the cup icon or by right-clicking the arrow. Desktop and hidden-file toggles restart Finder.")
+                Text("Open the quick panel from the owl or by right-clicking the arrow. Desktop and hidden-file toggles restart Finder.")
             }
         }
     }
@@ -848,7 +896,7 @@ private struct ShortcutsPane: View {
                 recorder("Show or hide icons", "chevron.left.2", .blue, .toggleHiddenItems)
                 recorder("Search the menu bar", "magnifyingglass", .teal, .searchItems)
                 recorder("Show every icon", "eye.fill", .purple, .showAllItems)
-                recorder("Toggle keep awake", "cup.and.heat.waves.fill", .orange, .toggleKeepAwake)
+                recorder("Toggle keep awake", "eyes", .orange, .toggleKeepAwake)
                 recorder("Presenter mode", "rectangle.on.rectangle", .purple, .togglePresenter)
                 recorder("Clipboard history", "doc.on.clipboard", .teal, .clipboard)
             } footer: {
@@ -876,10 +924,16 @@ private struct AboutPane: View {
 
     var body: some View {
         VStack(spacing: 12) {
-            AppMark(size: 80)
+            ZStack {
+                DuskSky().clipShape(.rect(cornerRadius: 18))
+                WatchingOwl(entrance: .greet)
+                    .frame(width: 130, height: 130)
+                    .shadow(color: .black.opacity(0.35), radius: 12, y: 6)
+            }
+            .frame(width: 320, height: 170)
             Text("Barn Owl").font(.title.bold())
             Text("Version \(version)").foregroundStyle(.secondary)
-            Text("Tidies your menu bar and keeps your Mac awake.\nOpen source under the MIT License.")
+            Text("Wise about your menu bar. Wide awake when you need it.\nOpen source under the MIT License.")
                 .multilineTextAlignment(.center)
             HStack {
                 Link("Source Code", destination: URL(string: "https://github.com/marvika/barnowl")!)

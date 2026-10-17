@@ -60,8 +60,8 @@ private struct KeepAwakeCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 10) {
-                IconBadge(symbol: keepAwake.isActive ? "cup.and.heat.waves.fill" : "cup.and.saucer.fill",
-                          color: keepAwake.isActive ? .orange : .gray, size: 34)
+                AwakeOwlBadge(keepAwake: keepAwake, presenting: model.presenter.isPresenting)
+                    .zIndex(1) // so the owl's speech bubble shows over the title
                 VStack(alignment: .leading, spacing: 1) {
                     Text("Keep Awake").font(.headline)
                     TimelineView(.periodic(from: .now, by: 5)) { _ in
@@ -311,5 +311,37 @@ private struct QuickFooterButton: View {
         .onHover { hovering = $0 }
         .help(help)
         .accessibilityLabel(help)
+    }
+}
+
+/// The owl with its eyes open while keeping awake, inside a ring that runs
+/// down as a timed session does.
+struct AwakeOwlBadge: View {
+    let keepAwake: KeepAwakeController
+    /// While presenting, the owl wears shades.
+    var presenting = false
+    var size: CGFloat = 40
+
+    var body: some View {
+        TimelineView(.periodic(from: .now, by: 1)) { _ in
+            ZStack {
+                Circle()
+                    .fill(keepAwake.isActive ? Brand.indigo.opacity(0.55) : Color.primary.opacity(0.08))
+                if let fraction = keepAwake.remainingFraction {
+                    Circle()
+                        .trim(from: 0, to: fraction)
+                        .stroke(Brand.amber, style: StrokeStyle(lineWidth: 3, lineCap: .round))
+                        .rotationEffect(.degrees(-90))
+                        .padding(1.5)
+                        .animation(.linear(duration: 1), value: fraction)
+                }
+                WatchingOwl(eyesOpen: keepAwake.isActive, playful: false, snores: false,
+                            accessory: presenting ? .sunglasses : nil)
+                    .padding(size * 0.14)
+            }
+        }
+        .frame(width: size, height: size)
+        .animation(.spring(duration: 0.35), value: keepAwake.isActive)
+        .accessibilityLabel(keepAwake.isActive ? "Keeping your Mac awake" : "Keep awake is off")
     }
 }

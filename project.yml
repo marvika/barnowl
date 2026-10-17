@@ -36,6 +36,7 @@ targets:
         CURRENT_PROJECT_VERSION: 6
         GENERATE_INFOPLIST_FILE: NO
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
   BarnOwlTests:
     type: bundle.unit-test
     platform: macOS

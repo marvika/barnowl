@@ -37,8 +37,8 @@ enum AppCommand: Hashable, Sendable, Identifiable {
 
     var symbol: String {
         switch self {
-        case .keepAwake, .extendKeepAwake: "cup.and.heat.waves.fill"
-        case .stopKeepAwake: "cup.and.saucer"
+        case .keepAwake, .extendKeepAwake: "eyes"
+        case .stopKeepAwake: "moon.zzz"
         case .presenter: "rectangle.on.rectangle"
         case .darkMode: "circle.lefthalf.filled"
         case .microphone: "mic.slash.fill"

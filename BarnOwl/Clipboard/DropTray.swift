@@ -19,6 +19,8 @@ final class DropTray {
 
     private(set) var mode = Mode.hidden
     var isTargeted = false
+    /// Briefly true after a drop, for a little celebration.
+    var justReceived = false
 
     @ObservationIgnored let clipboard: ClipboardHistory
     @ObservationIgnored private var panel: FloatingPanel?
@@ -72,6 +74,11 @@ final class DropTray {
         let files = urls.filter(\.isFileURL)
         guard !files.isEmpty else { return }
         clipboard.addToShelf(files)
+        justReceived = true
+        Task { [weak self] in
+            try? await Task.sleep(for: .seconds(1.6))
+            self?.justReceived = false
+        }
         // Show what's held now, then tuck away once the pointer leaves.
         set(.open)
         if !hovering { collapseLater(after: 2) }
@@ -185,8 +192,8 @@ struct DropTrayView: View {
     private var tab: some View {
         Button { tray.toggleOpen() } label: {
             HStack(spacing: 6) {
-                Image(systemName: "tray.full.fill")
-                Text("\(files.count) \(files.count == 1 ? "file" : "files")")
+                OwlView(blinks: false).frame(width: 16, height: 16)
+                Text("\(files.count) in the nest")
                 Image(systemName: "chevron.down").font(.caption2)
             }
             .font(.callout.weight(.medium))
@@ -203,12 +210,17 @@ struct DropTrayView: View {
     private var expanded: some View {
         VStack(spacing: 8) {
             if tray.mode == .receiving {
-                HStack(spacing: 8) {
-                    Image(systemName: tray.isTargeted ? "tray.and.arrow.down.fill" : "tray.and.arrow.down")
-                        .font(.title2)
-                        .symbolEffect(.bounce, value: tray.isTargeted)
-                    Text(tray.isTargeted ? "Let go to keep it here" : "Drop here to hold for later")
-                        .font(.headline)
+                HStack(spacing: 12) {
+                    WatchingOwl(surprised: tray.isTargeted, talks: false)
+                        .frame(width: 44, height: 44)
+                        .scaleEffect(tray.isTargeted ? 1.15 : 1)
+                        .animation(.spring(duration: 0.3, bounce: 0.5), value: tray.isTargeted)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(tray.isTargeted ? "Ooh! Let go to keep it" : "Drop it in the nest")
+                            .font(.headline)
+                        Text("Barn Owl holds it here until you need it.")
+                            .font(.caption).foregroundStyle(.secondary)
+                    }
                 }
                 .frame(maxWidth: .infinity, minHeight: 56)
                 .background(tray.isTargeted ? Color.accentColor.opacity(0.3) : Color.primary.opacity(0.06),
@@ -218,6 +230,13 @@ struct DropTrayView: View {
                                   style: StrokeStyle(lineWidth: 2, dash: [6, 4])))
             }
             if !files.isEmpty {
+                if tray.mode == .open {
+                    HStack(spacing: 8) {
+                        WatchingOwl(happy: tray.justReceived).frame(width: 22, height: 22)
+                        Text("The nest").font(.headline)
+                        Spacer()
+                    }
+                }
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 8) {
                         ForEach(files, id: \.self) { url in
@@ -228,7 +247,13 @@ struct DropTrayView: View {
                 .frame(height: 104)
                 .frame(maxWidth: .infinity, alignment: .center)
                 HStack {
-                    Text("Drag files out to use them").font(.caption).foregroundStyle(.secondary)
+                    if tray.justReceived {
+                        Label("Got it!", systemImage: "checkmark.circle.fill")
+                            .font(.caption.weight(.semibold)).foregroundStyle(Brand.amber)
+                            .transition(.scale.combined(with: .opacity))
+                    } else {
+                        Text("Drag files out to use them").font(.caption).foregroundStyle(.secondary)
+                    }
                     Spacer()
                     Button("Clear") { tray.clear() }.buttonStyle(.borderless).font(.caption)
                 }

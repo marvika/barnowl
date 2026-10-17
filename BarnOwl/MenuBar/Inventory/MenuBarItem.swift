@@ -187,7 +187,7 @@ enum HiddenIconsDisplay: String, CaseIterable, Identifiable, Sendable {
         switch self {
         case .automatic: "Automatic"
         case .menuBar: "In the menu bar"
-        case .perch: "In the Perch"
+        case .perch: "On the Perch"
         }
     }
 

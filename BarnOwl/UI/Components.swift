@@ -43,7 +43,7 @@ struct MenuBarDiagram: View {
 
     private let alwaysHiddenIcons = ["externaldrive", "printer"]
     private let hiddenIcons = ["shield.lefthalf.filled", "network", "cloud", "shippingbox"]
-    private let visibleIcons = ["camera.viewfinder", "cup.and.saucer"]
+    private let visibleIcons = ["camera.viewfinder"]
     private let systemIcons = ["wifi", "battery.75percent"]
 
     var body: some View {
@@ -64,6 +64,8 @@ struct MenuBarDiagram: View {
                 divider("line.diagonal", rotated: false)
             }
             icons(visibleIcons)
+            Image(nsImage: MenuBarOwl.image(openness: collapsed ? 0 : 1, height: 15))
+                .renderingMode(.template)
             Image(systemName: collapsed ? "chevron.left" : "chevron.right")
                 .font(.system(size: 12, weight: .bold))
                 .foregroundStyle(Color.accentColor)
@@ -97,20 +99,14 @@ struct MenuBarDiagram: View {
     }
 }
 
-/// The app's mark, drawn from symbols so it needs no image assets yet.
+/// The app's mark: the owl against the dusk sky, as in the app icon.
 struct AppMark: View {
     var size: CGFloat = 72
 
     var body: some View {
-        Image(systemName: "cup.and.heat.waves.fill")
-            .font(.system(size: size * 0.48, weight: .semibold))
-            .foregroundStyle(.white)
+        AppIconArtwork()
+            .frame(width: size * 1.24, height: size * 1.24)
             .frame(width: size, height: size)
-            .background(
-                LinearGradient(colors: [.orange, .pink], startPoint: .topLeading, endPoint: .bottomTrailing),
-                in: .rect(cornerRadius: size * 0.24)
-            )
-            .shadow(color: .orange.opacity(0.35), radius: 12, y: 6)
     }
 }
 

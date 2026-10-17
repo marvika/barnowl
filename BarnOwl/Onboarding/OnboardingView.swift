@@ -2,7 +2,7 @@ import KeyboardShortcuts
 import ServiceManagement
 import SwiftUI
 
-/// First-run setup: five short steps, each with one thing to do.
+/// First-run setup: six short steps under a dusk sky, with the owl along.
 struct OnboardingView: View {
     enum Step: Int, CaseIterable {
         case welcome, display, arrange, shortcuts, preferences, done
@@ -36,26 +36,33 @@ struct OnboardingView: View {
             footer
         }
         .frame(width: 680, height: 600)
+        .background(DuskSky())
+        // The sky is always dark, so the setup guide is too.
+        .environment(\.colorScheme, .dark)
+        .tint(Brand.lavender)
         .animation(.smooth(duration: 0.35), value: step)
     }
 
     // MARK: Steps
 
     private var welcome: some View {
-        VStack(spacing: 18) {
-            AppMark(size: 84)
+        VStack(spacing: 16) {
+            WelcomeOwl()
+                .frame(width: 160, height: 160)
             Text("Welcome to Barn Owl").font(.largeTitle.bold())
-            Text("A tidier menu bar, and a Mac that stays awake when you need it to.")
+            Text("Wise about your menu bar. Wide awake when you need it.")
                 .font(.title3).foregroundStyle(.secondary).multilineTextAlignment(.center)
             VStack(alignment: .leading, spacing: 14) {
-                BadgeLabel(title: "Hide the clutter", subtitle: "Arrange, hide and group your menu bar icons.",
-                           symbol: "rectangle.compress.vertical", color: .blue)
-                BadgeLabel(title: "Keep awake", subtitle: "For an hour, while an app runs, or automatically by rules.",
-                           symbol: "cup.and.heat.waves.fill", color: .orange)
-                BadgeLabel(title: "Quick toggles", subtitle: "Dark mode, desktop icons and more in one click.",
-                           symbol: "switch.2", color: .green)
+                BadgeLabel(title: "A tidy menu bar",
+                           subtitle: "Arrange, hide and group your icons. Nothing gets lost behind the notch.",
+                           symbol: "rectangle.compress.vertical", color: Brand.lavender)
+                BadgeLabel(title: "Wide awake", subtitle: "For an hour, while an app runs, or automatically by rules.",
+                           symbol: "eyes", color: Brand.amber)
+                BadgeLabel(title: "Handy helpers",
+                           subtitle: "Search, quick toggles, clipboard history and a nest for your files.",
+                           symbol: "sparkles", color: .teal)
             }
-            .padding(.top, 8)
+            .padding(.top, 6)
         }
     }
 
@@ -77,7 +84,7 @@ struct OnboardingView: View {
                 CardRow(title: "Show or hide icons", symbol: "chevron.left.2", color: .blue) {
                     KeyboardShortcuts.Recorder(for: .toggleHiddenItems)
                 }
-                CardRow(title: "Toggle keep awake", symbol: "cup.and.heat.waves.fill", color: .orange) {
+                CardRow(title: "Toggle keep awake", symbol: "eyes", color: .orange) {
                     KeyboardShortcuts.Recorder(for: .toggleKeepAwake)
                 }
                 CardRow(title: "Search the menu bar", symbol: "magnifyingglass", color: .teal) {
@@ -98,16 +105,15 @@ struct OnboardingView: View {
     }
 
     private var done: some View {
-        VStack(spacing: 18) {
-            Image(systemName: "checkmark.circle.fill")
-                .font(.system(size: 64))
-                .symbolRenderingMode(.palette)
-                .foregroundStyle(.white, .green)
-                .symbolEffect(.bounce, value: step)
-            Text("You're all set").font(.largeTitle.bold())
-            Text("Click the cup for Keep Awake and quick toggles. Click the arrow for your hidden icons, or press ⌃⌥⌘M to search them.")
-                .font(.title3).foregroundStyle(.secondary).multilineTextAlignment(.center)
-            MenuBarDiagram(collapsed: true).frame(maxWidth: 420).padding(.top, 8)
+        ZStack {
+            VStack(spacing: 18) {
+                HoppingOwl()
+                    .frame(width: 140, height: 140)
+                Text("Hoo-ray, you're all set!").font(.largeTitle.bold())
+                Text("Click the owl for Keep Awake and quick toggles. Click the arrow for your hidden icons, or press ⌃⌥⌘M to search them.")
+                    .font(.title3).foregroundStyle(.secondary).multilineTextAlignment(.center)
+                MenuBarDiagram(collapsed: true).frame(maxWidth: 420).padding(.top, 8)
+            }
         }
     }
 
@@ -137,7 +143,7 @@ struct OnboardingView: View {
             .keyboardShortcut(.defaultAction)
         }
         .padding(20)
-        .background(.bar)
+        .background(.ultraThinMaterial)
     }
 
     private var primaryTitle: String {
@@ -153,10 +159,7 @@ struct OnboardingView: View {
     }
 
     private func header(_ title: String, _ subtitle: String) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text(title).font(.title.bold())
-            Text(subtitle).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
-        }
+        StepHeader(title: title, subtitle: subtitle)
     }
 
 
@@ -168,11 +171,8 @@ private struct DisplayStep: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            VStack(alignment: .leading, spacing: 6) {
-                Text("Where hidden icons appear").font(.title.bold())
-                Text("Your Mac's notch only leaves room for a few icons. The Perch shows the rest, including any stuck behind the notch.")
-                    .foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
-            }
+            StepHeader(title: "Where hidden icons appear",
+                       subtitle: "Your Mac's notch only leaves room for a few icons. The Perch, a strip under the menu bar, shows the rest, including any stuck behind the notch.")
             HiddenIconsDisplayPicker(selection: $display)
             Card {
                 PermissionRow(permission: .accessibility, model: model)
@@ -189,10 +189,7 @@ private struct PreferencesStep: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            VStack(alignment: .leading, spacing: 6) {
-                Text("A couple of choices").font(.title.bold())
-                Text("You can change these later in Settings.").foregroundStyle(.secondary)
-            }
+            StepHeader(title: "A couple of choices", subtitle: "You can change these later in Settings.")
             Card {
                 CardRow(title: "Open Barn Owl at login", subtitle: "Recommended, so your menu bar stays tidy.",
                         symbol: "power", color: .gray) {
@@ -239,5 +236,52 @@ enum LaunchAtLogin {
             Log.app.error("Launch at login change failed: \(error.localizedDescription)")
             correct(isEnabled)
         }
+    }
+}
+
+/// A step's title with a small owl peeking in from the side.
+private struct StepHeader: View {
+    let title: String
+    let subtitle: String
+    @State private var peeked = false
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 14) {
+            WatchingOwl()
+                .frame(width: 46, height: 46)
+                .offset(y: peeked ? 0 : 12)
+                .opacity(peeked ? 1 : 0)
+            VStack(alignment: .leading, spacing: 6) {
+                Text(title).font(.title.bold())
+                Text(subtitle).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .onAppear {
+            withAnimation(.spring(duration: 0.5, bounce: 0.45).delay(0.15)) { peeked = true }
+        }
+    }
+}
+
+/// The big owl on the welcome page: pops in, then watches your pointer.
+private struct WelcomeOwl: View {
+    @State private var arrived = false
+
+    var body: some View {
+        WatchingOwl(entrance: .greet)
+            .shadow(color: .black.opacity(0.35), radius: 16, y: 8)
+            .scaleEffect(arrived ? 1 : 0.4)
+            .rotationEffect(.degrees(arrived ? 0 : -18))
+            .opacity(arrived ? 1 : 0)
+            .onAppear {
+                withAnimation(.spring(duration: 0.7, bounce: 0.5)) { arrived = true }
+            }
+    }
+}
+
+/// The owl hopping for joy at the end of setup, flapping, then spinning round.
+private struct HoppingOwl: View {
+    var body: some View {
+        WatchingOwl(happy: true, watches: false, accessory: .partyHat, entrance: .celebrate)
+            .shadow(color: .black.opacity(0.35), radius: 12, y: 6)
     }
 }

@@ -20,6 +20,9 @@ final class KeepAwakeController {
     }
 
     private(set) var session: Session?
+    /// When the current timed session started (or was last extended), for
+    /// the countdown ring.
+    private(set) var sessionStart: Date?
     /// The rule keeping the Mac awake right now, if any.
     private(set) var activeRule: KeepAwakeRule?
     /// Set when a session or the rules stopped because the battery got low.
@@ -71,6 +74,7 @@ final class KeepAwakeController {
         }
         stoppedForBattery = false
         self.session = session
+        sessionStart = Date()
         Log.keepAwake.info("Keep awake started: \(String(describing: session))")
         evaluate()
         onChange?()
@@ -93,6 +97,14 @@ final class KeepAwakeController {
     nonisolated static func extended(_ session: Session, by minutes: Int, now: Date = Date()) -> Session? {
         guard case .until(let end) = session, minutes > 0 else { return nil }
         return .until(max(end, now).addingTimeInterval(TimeInterval(minutes * 60)))
+    }
+
+    /// How much of a timed session is left, 1 at the start to 0 at the end.
+    var remainingFraction: Double? {
+        guard let end = endDate, let start = sessionStart else { return nil }
+        let total = end.timeIntervalSince(start)
+        guard total > 0 else { return 0 }
+        return max(0, min(1, end.timeIntervalSinceNow / total))
     }
 
     /// When the current session ends, if it has an end time.

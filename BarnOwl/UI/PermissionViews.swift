@@ -110,7 +110,7 @@ struct HiddenIconsDisplayPicker: View {
     var body: some View {
         HStack(spacing: 10) {
             choice(.automatic, symbol: "wand.and.sparkles",
-                   caption: "Menu bar when there's room, Perch when there isn't.")
+                   caption: "Menu bar when there's room, the Perch when there isn't.")
             choice(.menuBar, symbol: "menubar.rectangle", caption: "Icons slide back into the menu bar.")
             choice(.perch, symbol: "rectangle.topthird.inset.filled",
                    caption: "Icons appear in a strip under the menu bar.")

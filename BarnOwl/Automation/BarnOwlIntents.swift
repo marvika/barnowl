@@ -123,9 +123,9 @@ struct OpenClipboardIntent: AppIntent {
 struct BarnOwlShortcuts: AppShortcutsProvider {
     static var appShortcuts: [AppShortcut] {
         AppShortcut(intent: KeepAwakeIntent(), phrases: ["Keep my Mac awake with \(.applicationName)"],
-                    shortTitle: "Keep Awake", systemImageName: "cup.and.heat.waves.fill")
+                    shortTitle: "Keep Awake", systemImageName: "eyes")
         AppShortcut(intent: StopKeepAwakeIntent(), phrases: ["Stop keeping awake with \(.applicationName)"],
-                    shortTitle: "Stop Keep Awake", systemImageName: "cup.and.saucer")
+                    shortTitle: "Stop Keep Awake", systemImageName: "moon.zzz")
         AppShortcut(intent: PresenterModeIntent(), phrases: ["Start presenting with \(.applicationName)"],
                     shortTitle: "Presenter Mode", systemImageName: "rectangle.on.rectangle")
         AppShortcut(intent: ToggleHiddenIconsIntent(), phrases: ["Show hidden icons with \(.applicationName)"],

@@ -15,6 +15,7 @@ enum PrefKey {
     static let menuShowsMicrophone = "menuShowsMicrophone"
     static let menuShowsSleepDisplay = "menuShowsSleepDisplay"
     static let hiddenIconsDisplay = "hiddenIconsDisplay"
+    static let owlPalette = "owlPalette"
     static let newIconPlacement = "newIconPlacement"
     static let keepAwakeStopBelowBattery = "keepAwakeStopBelowBattery"
     static let keepAwakeKeepAvailable = "keepAwakeKeepAvailable"
@@ -52,6 +53,7 @@ enum Preferences {
             PrefKey.menuShowsMicrophone: true,
             PrefKey.menuShowsSleepDisplay: true,
             PrefKey.hiddenIconsDisplay: HiddenIconsDisplay.automatic.rawValue,
+            PrefKey.owlPalette: OwlPalette.golden.rawValue,
             PrefKey.newIconPlacement: NewIconPlacement.hidden.rawValue,
             PrefKey.keepAwakeStopBelowBattery: 10,
             PrefKey.keepAwakeKeepAvailable: false,

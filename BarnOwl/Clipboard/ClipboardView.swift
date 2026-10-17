@@ -65,7 +65,11 @@ struct ClipboardView: View {
             .padding(.horizontal, 14)
             .padding(.vertical, 10)
             if results.isEmpty {
-                Text(clipboard.entries.isEmpty ? "Things you copy show up here." : "Nothing matches “\(query)”")
+                Label {
+                    Text(clipboard.entries.isEmpty ? "Things you copy show up here." : "Hoo? Nothing matches “\(query)”")
+                } icon: {
+                    WatchingOwl(eyesOpen: !clipboard.entries.isEmpty, snores: false).frame(width: 24, height: 24)
+                }
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity)
                     .padding(24)

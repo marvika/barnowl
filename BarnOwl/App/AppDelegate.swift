@@ -41,7 +41,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         scanner.ownWindowFrames = { [weak self] in
             guard let self else { return [] }
             let own: [NSStatusItem?] = [self.items.toggle, self.items.separator, self.items.alwaysHidden,
-                                        self.quickPanel?.cupItem] + self.groupIcons.allStatusItems
+                                        self.quickPanel?.owlItem] + self.groupIcons.allStatusItems
             guard let primary = NSScreen.screens.first else { return [] }
             return own.compactMap { StatusItems.layoutFrame(of: $0) }.map {
                 CGRect(x: $0.minX, y: primary.frame.maxY - $0.maxY, width: $0.width, height: $0.height)
@@ -68,7 +68,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         model.showSetup = { [weak self] in self?.onboardingWindow.show() }
         model.openSettingsWindow = { [weak self] in self?.settingsWindow.show() }
         quickPanel = QuickPanelController(model: model)
-        quickPanel.syncCupIcon()
+        quickPanel.syncOwlIcon()
         keepAwake.start()
         model.watcher.start()
         gestures = RevealGestures(statusItems: items, isCollapsed: { [weak self] in
@@ -112,7 +112,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         keepAwake.onChange = { [weak self] in
             self?.updateToggleIcon()
-            self?.quickPanel.syncCupIcon()
+            self?.quickPanel.syncOwlIcon()
         }
         updateToggleIcon()
 
@@ -347,9 +347,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         lastAllowDisplaySleep = allowDisplaySleep
 
-        quickPanel.syncCupIcon()
-        if Preferences.showKeepAwakeIcon != (quickPanel.cupItem != nil) {
-            quickPanel.syncCupIcon()
+        quickPanel.syncOwlIcon()
+        if Preferences.showKeepAwakeIcon != (quickPanel.owlItem != nil) {
+            quickPanel.syncOwlIcon()
             updateToggleIcon()
         }
         dropTray?.refresh()
@@ -365,7 +365,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard !model.presenter.isPresenting else {
             button.image = NSImage(systemSymbolName: "eye.slash.fill", accessibilityDescription: "Presenting")?
                 .withSymbolConfiguration(.init(pointSize: 13, weight: .semibold))
-            button.toolTip = "Presenting: menu bar icons are hidden\nClick for your icons in the Perch"
+            button.toolTip = "Presenting: menu bar icons are hidden\nClick for your icons on the Perch"
             return
         }
         let collapsed = sections.state == .collapsed
@@ -382,19 +382,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 }
 
 enum ToggleIcon {
-    /// The arrow, plus a small cup while keep-awake is on.
+    /// The arrow, plus a small awake owl while keep-awake is on (when the owl
+    /// isn't in the menu bar by itself).
     @MainActor
     static func make(collapsed: Bool, keepAwake: Bool) -> NSImage? {
         let config = NSImage.SymbolConfiguration(pointSize: 13, weight: .semibold)
         guard let arrow = NSImage(systemSymbolName: collapsed ? "chevron.left" : "chevron.right",
                                   accessibilityDescription: collapsed ? "Show hidden icons" : "Hide icons")?
             .withSymbolConfiguration(config) else { return nil }
-        guard keepAwake,
-              let cup = NSImage(systemSymbolName: "cup.and.heat.waves.fill", accessibilityDescription: "Keep awake on")?
-                .withSymbolConfiguration(NSImage.SymbolConfiguration(pointSize: 12, weight: .regular)) else {
+        guard keepAwake else {
             arrow.isTemplate = true
             return arrow
         }
+        let cup = MenuBarOwl.image(openness: 1, height: 15)
         let spacing: CGFloat = 4
         let size = NSSize(width: cup.size.width + spacing + arrow.size.width,
                           height: max(cup.size.height, arrow.size.height))

@@ -77,7 +77,11 @@ struct SearchView: View {
                 }
             } else if !query.isEmpty {
                 Divider()
-                Text("Nothing matches “\(query)”")
+                Label {
+                    Text("Hoo? Nothing matches “\(query)”")
+                } icon: {
+                    WatchingOwl(snores: false, entrance: .puzzled).frame(width: 28, height: 28)
+                }
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity)
                     .padding(16)
