@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: User guide
+    url: https://github.com/marvika/barnowl/blob/main/docs/user-guide.md
+    about: How to use Barn Owl, and answers to common problems.
+  - name: Security problem
+    url: https://github.com/marvika/barnowl/blob/main/SECURITY.md
+    about: Please report security problems privately.

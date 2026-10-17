@@ -8,6 +8,13 @@
 </p>
 
 <p align="center">
+  <a href="https://github.com/marvika/barnowl/actions/workflows/ci.yml"><img src="https://github.com/marvika/barnowl/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <img src="https://img.shields.io/badge/macOS-26%20Tahoe-3D3A8F" alt="macOS 26 Tahoe">
+  <img src="https://img.shields.io/badge/Swift-6-F05138" alt="Swift 6">
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-F0B04F" alt="MIT License"></a>
+</p>
+
+<p align="center">
   <a href="https://github.com/marvika/barnowl/releases/latest">Download</a> ·
   <a href="docs/user-guide.md">User guide</a> ·
   <a href="docs/how-it-works.md">How it works</a> ·
@@ -226,6 +233,13 @@ itself: `Scripts/make-icon.sh` and `Scripts/make-hero.sh`.
 To make a release, `Scripts/release.sh` builds Barn Owl with your Developer
 ID, has Apple notarize it and staples the ticket. `--publish` also creates a
 draft GitHub release. The script lists what it needs at the top.
+
+## Contributing
+
+Bug reports, ideas and pull requests are welcome. See
+[CONTRIBUTING.md](CONTRIBUTING.md) for how to build and test, and the
+[changelog](CHANGELOG.md) for what's new. Please report security problems
+privately, as [SECURITY.md](SECURITY.md) describes.
 
 ## Credits
 

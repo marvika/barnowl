@@ -1,0 +1,19 @@
+name: Idea
+description: Suggest something new or better.
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What would you like to do?
+      description: The problem or wish, in your own words.
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: How could Barn Owl help?
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: How do you do it today?

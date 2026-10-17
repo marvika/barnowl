@@ -1,0 +1,56 @@
+name: Bug report
+description: Something doesn't work as it should.
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: What did you do, what did you expect, and what happened instead?
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to see it
+      placeholder: |
+        1. Open Settings → Layout
+        2. Drag the Wi-Fi icon to Hidden
+        3. ...
+  - type: input
+    id: version
+    attributes:
+      label: Barn Owl version
+      description: Settings → About.
+      placeholder: "0.7.0"
+    validations:
+      required: true
+  - type: input
+    id: macos
+    attributes:
+      label: macOS version
+      placeholder: "26.1"
+    validations:
+      required: true
+  - type: dropdown
+    id: mac
+    attributes:
+      label: Your Mac
+      options:
+        - MacBook with a notch
+        - MacBook without a notch
+        - Desktop Mac
+    validations:
+      required: true
+  - type: checkboxes
+    id: displays
+    attributes:
+      label: Setup
+      options:
+        - label: An external display is connected
+        - label: Another menu bar app (Bartender, Ice, Hidden Bar…) is running
+  - type: textarea
+    id: extra
+    attributes:
+      label: Screenshots or anything else
+      description: Check that screenshots don't show anything private.
