@@ -62,6 +62,7 @@ final class AppModel {
     func perform(_ command: BarkeepCommand) {
         switch command {
         case .keepAwake(let minutes): keepAwake.start(minutes: minutes)
+        case .extendKeepAwake(let minutes): keepAwake.extend(minutes: minutes)
         case .stopKeepAwake: keepAwake.stop()
         case .presenter: Task { await presenter.toggle() }
         case .darkMode: QuickToggles.toggleDarkMode()

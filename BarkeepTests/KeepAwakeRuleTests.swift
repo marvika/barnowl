@@ -76,3 +76,32 @@ struct KeepAwakeStatusTests {
         #expect(KeepAwakeFormatter.status(for: .whileDownloading) == "Awake until downloads finish")
     }
 }
+
+struct KeepAwakeExtendTests {
+    private let now = Date(timeIntervalSince1970: 1_000_000)
+
+    @Test func addsToTheEndTime() {
+        let session = KeepAwakeController.Session.until(now.addingTimeInterval(10 * 60))
+        #expect(KeepAwakeController.extended(session, by: 30, now: now) == .until(now.addingTimeInterval(40 * 60)))
+    }
+
+    @Test func anExpiredSessionExtendsFromNow() {
+        let session = KeepAwakeController.Session.until(now.addingTimeInterval(-60))
+        #expect(KeepAwakeController.extended(session, by: 15, now: now) == .until(now.addingTimeInterval(15 * 60)))
+    }
+
+    @Test func untimedSessionsCantBeExtended() {
+        #expect(KeepAwakeController.extended(.indefinite, by: 15, now: now) == nil)
+        #expect(KeepAwakeController.extended(.whileDownloading, by: 15, now: now) == nil)
+    }
+
+    @Test(arguments: [(30.0, "1m"), (42 * 60.0, "42m"), (65 * 60.0, "1:05"), (8 * 3600.0, "8:00"), (0.0, "<1m")])
+    func countdown(seconds: TimeInterval, text: String) {
+        #expect(KeepAwakeFormatter.countdown(seconds) == text)
+    }
+
+    @Test func searchCanAddTime() {
+        #expect(CommandParser.commands(for: "awake +30") == [.extendKeepAwake(minutes: 30)])
+        #expect(CommandParser.commands(for: "awake +1h") == [.extendKeepAwake(minutes: 60)])
+    }
+}

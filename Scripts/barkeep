@@ -3,7 +3,7 @@
 #
 #   barkeep show | hide | toggle | all       hidden icons
 #   barkeep bar | search | clipboard         panels
-#   barkeep awake [minutes|stop]             keep awake (no minutes = until stopped)
+#   barkeep awake [minutes|+minutes|stop]    keep awake (no minutes = until stopped; +30 adds time)
 #   barkeep present [on|off]                 presenter mode (no argument = toggle)
 #   barkeep open <app>                       open an app's menu bar icon
 #   barkeep place <app> visible|hidden|alwaysHidden
@@ -25,6 +25,7 @@ case "${1:-help}" in
   awake)
     case "${2:-}" in
       stop|off) go keep-awake/stop ;;
+      +*) go "keep-awake/extend?minutes=${2#+}" ;;
       "") go "keep-awake?minutes=0" ;;
       *) go "keep-awake?minutes=$2" ;;
     esac ;;

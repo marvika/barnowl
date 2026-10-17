@@ -34,6 +34,7 @@ enum PrefKey {
     static let clipboardRemember = "clipboardRemember"
     static let dropTrayEnabled = "dropTrayEnabled"
     static let dropTrayTab = "dropTrayTab"
+    static let keepAwakeCountdown = "keepAwakeCountdown"
 }
 
 enum Preferences {
@@ -69,6 +70,7 @@ enum Preferences {
             PrefKey.clipboardRemember: true,
             PrefKey.dropTrayEnabled: true,
             PrefKey.dropTrayTab: true,
+            PrefKey.keepAwakeCountdown: true,
         ])
     }
 
@@ -121,6 +123,8 @@ enum Preferences {
     static var dropTrayEnabled: Bool { defaults.bool(forKey: PrefKey.dropTrayEnabled) }
     /// Keep a small tab under the notch while the shelf holds files.
     static var dropTrayTab: Bool { defaults.bool(forKey: PrefKey.dropTrayTab) }
+    /// Show the time left next to the cup during a timed session.
+    static var keepAwakeCountdown: Bool { defaults.bool(forKey: PrefKey.keepAwakeCountdown) }
     static var hasShownWelcome: Bool {
         get { defaults.bool(forKey: PrefKey.hasShownWelcome) }
         set { defaults.set(newValue, forKey: PrefKey.hasShownWelcome) }

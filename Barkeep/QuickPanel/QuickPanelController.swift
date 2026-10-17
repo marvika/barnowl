@@ -9,6 +9,7 @@ final class QuickPanelController: NSObject {
     private var panel: FloatingPanel?
     private let outsideClicks = OutsideClickMonitor()
     private(set) var cupItem: NSStatusItem?
+    private var countdownTask: Task<Void, Never>?
 
     var isOpen: Bool { panel?.isVisible ?? false }
 
@@ -26,9 +27,35 @@ final class QuickPanelController: NSObject {
                                          accessibilityDescription: active ? "Keep awake on" : "Keep awake off")?
                 .withSymbolConfiguration(.init(pointSize: 13, weight: .medium))
             item.button?.toolTip = "Keep Awake: \(KeepAwakeFormatter.status(of: model.keepAwake))"
+            // Time left next to the cup, like Amphetamine.
+            if Preferences.keepAwakeCountdown, let end = model.keepAwake.endDate {
+                item.button?.title = " " + KeepAwakeFormatter.countdown(end.timeIntervalSinceNow)
+                item.button?.imagePosition = .imageLeading
+                item.button?.font = .monospacedDigitSystemFont(ofSize: NSFont.systemFontSize, weight: .medium)
+                startCountdown()
+            } else {
+                item.button?.title = ""
+                item.button?.imagePosition = .imageOnly
+                countdownTask?.cancel()
+                countdownTask = nil
+            }
         } else if let cupItem {
             NSStatusBar.system.removeStatusItem(cupItem)
             self.cupItem = nil
+        }
+    }
+
+    /// Refreshes the countdown every few seconds while a timed session runs.
+    private func startCountdown() {
+        guard countdownTask == nil else { return }
+        countdownTask = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(5))
+                guard let self else { return }
+                self.countdownTask = nil
+                self.syncCupIcon()
+                return
+            }
         }
     }
 

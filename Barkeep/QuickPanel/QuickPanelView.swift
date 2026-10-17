@@ -63,7 +63,7 @@ private struct KeepAwakeCard: View {
                           color: keepAwake.isActive ? .orange : .gray, size: 34)
                 VStack(alignment: .leading, spacing: 1) {
                     Text("Keep Awake").font(.headline)
-                    TimelineView(.periodic(from: .now, by: 30)) { _ in
+                    TimelineView(.periodic(from: .now, by: 5)) { _ in
                         Text(KeepAwakeFormatter.status(of: keepAwake))
                             .font(.caption).foregroundStyle(.secondary).lineLimit(2)
                     }
@@ -76,7 +76,24 @@ private struct KeepAwakeCard: View {
                     .labelsHidden()
                     .accessibilityLabel("Keep awake")
             }
+            if keepAwake.endDate != nil {
+                HStack(spacing: 6) {
+                    Text("Add").font(.callout).foregroundStyle(.secondary)
+                        .frame(width: 26, alignment: .leading)
+                    ForEach(KeepAwakeController.extensions, id: \.self) { minutes in
+                        DurationChip(title: "+" + KeepAwakeFormatter.durationLabel(minutes: minutes)) {
+                            keepAwake.extend(minutes: minutes)
+                        }
+                        .help("Keep awake \(KeepAwakeFormatter.durationLabel(minutes: minutes)) longer")
+                    }
+                }
+            }
             HStack(spacing: 6) {
+                if keepAwake.endDate != nil {
+                    // Next to "Add", these start the session over.
+                    Text("Set").font(.callout).foregroundStyle(.secondary)
+                        .frame(width: 26, alignment: .leading)
+                }
                 ForEach([15, 60, 120, 240, 0], id: \.self) { minutes in
                     DurationChip(title: minutes == 0 ? "∞" : KeepAwakeFormatter.durationLabel(minutes: minutes)) {
                         keepAwake.start(minutes: minutes)

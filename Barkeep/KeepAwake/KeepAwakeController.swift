@@ -80,6 +80,27 @@ final class KeepAwakeController {
         start(minutes > 0 ? .until(Date().addingTimeInterval(TimeInterval(minutes * 60))) : .indefinite)
     }
 
+    /// Adds time to a timed session (from now if it has already run out).
+    /// Other sessions have no end time, so there's nothing to add to.
+    func extend(minutes: Int) {
+        guard let current = session, let extended = Self.extended(current, by: minutes) else { return }
+        session = extended
+        Log.keepAwake.info("Keep awake extended by \(minutes) min")
+        evaluate()
+        onChange?()
+    }
+
+    nonisolated static func extended(_ session: Session, by minutes: Int, now: Date = Date()) -> Session? {
+        guard case .until(let end) = session, minutes > 0 else { return nil }
+        return .until(max(end, now).addingTimeInterval(TimeInterval(minutes * 60)))
+    }
+
+    /// When the current session ends, if it has an end time.
+    var endDate: Date? {
+        if case .until(let date) = session { return date }
+        return nil
+    }
+
     /// Ends the user's session. Rules keep working.
     func stop() {
         guard session != nil else { return }
@@ -232,6 +253,8 @@ final class KeepAwakeController {
 extension KeepAwakeController {
     /// The durations offered in menus and Settings; 0 means indefinitely.
     static let durations = [0, 15, 30, 60, 120, 240, 480]
+    /// What the add-time buttons offer.
+    static let extensions = [15, 30, 60, 120]
 }
 
 enum KeepAwakeFormatter {
@@ -259,6 +282,14 @@ enum KeepAwakeFormatter {
         if controller.presenting { return "Awake while you present" }
         if controller.stoppedForBattery { return "Stopped: battery low" }
         return "Off. Your Mac sleeps as usual."
+    }
+
+    /// Time left for the menu bar, kept short: "42m", "1:05", "<1m".
+    static func countdown(_ interval: TimeInterval) -> String {
+        let minutes = Int((interval / 60).rounded(.up))
+        if interval <= 0 || minutes < 1 { return "<1m" }
+        if minutes < 60 { return "\(minutes)m" }
+        return String(format: "%d:%02d", minutes / 60, minutes % 60)
     }
 
     static func remaining(_ interval: TimeInterval) -> String {

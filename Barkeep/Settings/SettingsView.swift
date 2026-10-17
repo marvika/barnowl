@@ -474,6 +474,7 @@ private struct KeepAwakePane: View {
     @AppStorage(PrefKey.keepAwakeKeepAvailable) private var keepAvailable = false
     @AppStorage(PrefKey.keepAwakeNotify) private var notify = false
     @AppStorage(PrefKey.showKeepAwakeIcon) private var showIcon = true
+    @AppStorage(PrefKey.keepAwakeCountdown) private var countdown = true
     @State private var startMinutes = 60
     @State private var editingRule: KeepAwakeRule?
     @State private var closedLid = ClosedLidMode.isEnabled
@@ -488,12 +489,22 @@ private struct KeepAwakePane: View {
                               color: keepAwake.isActive ? .orange : .gray, size: 40)
                     VStack(alignment: .leading, spacing: 2) {
                         Text(keepAwake.isActive ? "Your Mac is staying awake" : "Keep awake is off").font(.headline)
-                        TimelineView(.periodic(from: .now, by: 30)) { _ in
+                        TimelineView(.periodic(from: .now, by: 5)) { _ in
                             Text(KeepAwakeFormatter.status(of: keepAwake)).foregroundStyle(.secondary)
                         }
                     }
                     Spacer()
                     if keepAwake.session != nil {
+                        if keepAwake.endDate != nil {
+                            Menu("Add Time") {
+                                ForEach(KeepAwakeController.extensions, id: \.self) { minutes in
+                                    Button("+" + KeepAwakeFormatter.durationLabel(minutes: minutes)) {
+                                        keepAwake.extend(minutes: minutes)
+                                    }
+                                }
+                            }
+                            .fixedSize()
+                        }
                         Button("Stop") { keepAwake.stop() }.controlSize(.large)
                     } else {
                         Picker("", selection: $startMinutes) {
@@ -562,6 +573,12 @@ private struct KeepAwakePane: View {
                                subtitle: "Click it for keep awake and toggles. Option-click to start or stop.",
                                symbol: "cup.and.saucer.fill", color: .orange)
                 }
+                Toggle(isOn: $countdown) {
+                    BadgeLabel(title: "Show time left next to the cup",
+                               subtitle: "During a timed session, like 42m or 1:05.",
+                               symbol: "timer", color: .orange)
+                }
+                .disabled(!showIcon)
                 Toggle(isOn: $allowDisplaySleep) {
                     BadgeLabel(title: "Let the display sleep", subtitle: "Your Mac keeps running; only the screen turns off.",
                                symbol: "display", color: .blue)

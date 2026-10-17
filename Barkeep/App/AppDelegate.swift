@@ -247,6 +247,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             case ("show-all", _): sections.showAll()
             case ("hide", _): sections.collapse()
             case ("keep-awake", "/stop"): keepAwake.stop()
+            case ("keep-awake", "/extend"):
+                // barkeep://keep-awake/extend?minutes=30
+                let minutes = query?.first { $0.name == "minutes" }?.value.flatMap(Int.init) ?? 15
+                keepAwake.extend(minutes: minutes)
             case ("keep-awake", _):
                 let minutes = query?.first { $0.name == "minutes" }?.value.flatMap(Int.init) ?? 0
                 keepAwake.start(minutes: minutes)
@@ -334,6 +338,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         lastAllowDisplaySleep = allowDisplaySleep
 
+        quickPanel.syncCupIcon()
         if Preferences.showKeepAwakeIcon != (quickPanel.cupItem != nil) {
             quickPanel.syncCupIcon()
             updateToggleIcon()

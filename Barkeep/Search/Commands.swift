@@ -3,6 +3,7 @@ import Foundation
 /// Something Barkeep can do from search.
 enum BarkeepCommand: Hashable, Sendable, Identifiable {
     case keepAwake(minutes: Int)
+    case extendKeepAwake(minutes: Int)
     case stopKeepAwake
     case presenter
     case darkMode
@@ -20,6 +21,7 @@ enum BarkeepCommand: Hashable, Sendable, Identifiable {
         switch self {
         case .keepAwake(let minutes):
             minutes == 0 ? "Keep awake indefinitely" : "Keep awake for \(KeepAwakeFormatter.durationLabel(minutes: minutes))"
+        case .extendKeepAwake(let minutes): "Keep awake \(KeepAwakeFormatter.durationLabel(minutes: minutes)) longer"
         case .stopKeepAwake: "Stop keeping awake"
         case .presenter: "Presenter mode"
         case .darkMode: "Dark mode"
@@ -35,7 +37,7 @@ enum BarkeepCommand: Hashable, Sendable, Identifiable {
 
     var symbol: String {
         switch self {
-        case .keepAwake: "cup.and.heat.waves.fill"
+        case .keepAwake, .extendKeepAwake: "cup.and.heat.waves.fill"
         case .stopKeepAwake: "cup.and.saucer"
         case .presenter: "rectangle.on.rectangle"
         case .darkMode: "circle.lefthalf.filled"
@@ -53,7 +55,7 @@ enum BarkeepCommand: Hashable, Sendable, Identifiable {
     /// one of them.
     var keywords: [String] {
         switch self {
-        case .keepAwake: ["awake", "keep", "caffeinate", "amphetamine", "coffee", "nosleep"]
+        case .keepAwake, .extendKeepAwake: ["awake", "keep", "caffeinate", "amphetamine", "coffee", "nosleep"]
         case .stopKeepAwake: ["stop", "sleep", "awake"]
         case .presenter: ["presenter", "present", "presentation", "share", "screen"]
         case .darkMode: ["dark", "light", "appearance", "theme"]
@@ -116,6 +118,11 @@ enum CommandParser {
         let wantsAwake = ["awake", "keep", "caffeinate", "amphetamine", "coffee", "nosleep"]
             .contains { $0.hasPrefix(first) }
         if wantsAwake {
+            // "awake +30" adds to a running session.
+            if let extra = words.dropFirst().first(where: { $0.hasPrefix("+") }),
+               let minutes = duration(from: String(extra.dropFirst())), minutes > 0 {
+                return [.extendKeepAwake(minutes: minutes)]
+            }
             if let minutes = words.dropFirst().compactMap(duration(from:)).first {
                 results.append(.keepAwake(minutes: minutes))
             } else {
