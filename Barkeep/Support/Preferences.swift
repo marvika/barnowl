@@ -12,8 +12,15 @@ enum PrefKey {
     static let menuShowsDarkMode = "menuShowsDarkMode"
     static let menuShowsDesktopIcons = "menuShowsDesktopIcons"
     static let menuShowsHiddenFiles = "menuShowsHiddenFiles"
+    static let menuShowsMicrophone = "menuShowsMicrophone"
+    static let menuShowsSleepDisplay = "menuShowsSleepDisplay"
     static let hiddenIconsDisplay = "hiddenIconsDisplay"
     static let newIconPlacement = "newIconPlacement"
+    static let keepAwakeStopBelowBattery = "keepAwakeStopBelowBattery"
+    static let keepAwakeKeepAvailable = "keepAwakeKeepAvailable"
+    static let keepAwakeNotify = "keepAwakeNotify"
+    static let showKeepAwakeIcon = "showKeepAwakeIcon"
+    static let closedLidMode = "closedLidMode"
 }
 
 enum Preferences {
@@ -28,8 +35,14 @@ enum Preferences {
             PrefKey.menuShowsDarkMode: true,
             PrefKey.menuShowsDesktopIcons: true,
             PrefKey.menuShowsHiddenFiles: true,
+            PrefKey.menuShowsMicrophone: true,
+            PrefKey.menuShowsSleepDisplay: true,
             PrefKey.hiddenIconsDisplay: HiddenIconsDisplay.automatic.rawValue,
             PrefKey.newIconPlacement: NewIconPlacement.hidden.rawValue,
+            PrefKey.keepAwakeStopBelowBattery: 10,
+            PrefKey.keepAwakeKeepAvailable: false,
+            PrefKey.keepAwakeNotify: false,
+            PrefKey.showKeepAwakeIcon: true,
         ])
     }
 
@@ -52,6 +65,16 @@ enum Preferences {
     }
     static var newIconPlacement: NewIconPlacement {
         NewIconPlacement(rawValue: defaults.string(forKey: PrefKey.newIconPlacement) ?? "") ?? .hidden
+    }
+    /// 0 means never.
+    static var keepAwakeStopBelowBattery: Int { defaults.integer(forKey: PrefKey.keepAwakeStopBelowBattery) }
+    static var keepAwakeKeepAvailable: Bool { defaults.bool(forKey: PrefKey.keepAwakeKeepAvailable) }
+    static var keepAwakeNotify: Bool { defaults.bool(forKey: PrefKey.keepAwakeNotify) }
+    static var showKeepAwakeIcon: Bool { defaults.bool(forKey: PrefKey.showKeepAwakeIcon) }
+    /// Whether Barkeep turned closed-lid mode on (so it should turn it off again).
+    static var closedLidMode: Bool {
+        get { defaults.bool(forKey: PrefKey.closedLidMode) }
+        set { defaults.set(newValue, forKey: PrefKey.closedLidMode) }
     }
     static var hasShownWelcome: Bool {
         get { defaults.bool(forKey: PrefKey.hasShownWelcome) }

@@ -5,8 +5,8 @@ import KeyboardShortcuts
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private var items: StatusItems!
     private var sections: SectionController!
-    private let keepAwake = KeepAwakeController()
-    private var menuBuilder: MenuBuilder!
+    private let keepAwake = KeepAwakeController(rules: RuleStore())
+    private var quickPanel: QuickPanelController!
     private var model: AppModel!
     private var settingsWindow: SettingsWindowController!
     private var onboardingWindow: OnboardingWindowController!
@@ -53,11 +53,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         model.showSetup = { [weak self] in self?.onboardingWindow.show() }
         model.openSettingsWindow = { [weak self] in self?.settingsWindow.show() }
-        menuBuilder = MenuBuilder(sections: sections, keepAwake: keepAwake, openSettings: { [weak self] in
-            self?.settingsWindow.show()
-        }, openSearch: { [weak self] in
-            self?.search.show()
-        })
+        quickPanel = QuickPanelController(model: model)
+        quickPanel.syncCupIcon()
+        keepAwake.start()
 
         if let button = items.toggle.button {
             button.target = self
@@ -69,7 +67,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             self?.updateToggleIcon()
             self?.sectionsMoved(revealed: state != .collapsed)
         }
-        keepAwake.onChange = { [weak self] in self?.updateToggleIcon() }
+        keepAwake.onChange = { [weak self] in
+            self?.updateToggleIcon()
+            self?.quickPanel.syncCupIcon()
+        }
         updateToggleIcon()
 
         KeyboardShortcuts.onKeyUp(for: .toggleHiddenItems) { [weak self] in self?.revealHiddenIcons() }
@@ -77,7 +78,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         KeyboardShortcuts.onKeyUp(for: .showAllItems) { [weak self] in self?.sections.showAll() }
         KeyboardShortcuts.onKeyUp(for: .toggleKeepAwake) { [weak self] in
             guard let self else { return }
-            if self.keepAwake.isActive {
+            if self.keepAwake.session != nil {
                 self.keepAwake.stop()
             } else {
                 self.keepAwake.start(minutes: Preferences.keepAwakeHotkeyMinutes)
@@ -171,6 +172,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationWillTerminate(_ notification: Notification) {
         keepAwake.stop()
+        // Never leave the Mac unable to sleep after Barkeep is gone.
+        if Preferences.closedLidMode, ClosedLidMode.isEnabled {
+            ClosedLidMode.set(false)
+        }
     }
 
     @objc private func toggleClicked() {
@@ -182,7 +187,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let flags = event.modifierFlags
         if event.type == .rightMouseUp || flags.contains(.control) {
             bar.close()
-            showMenu()
+            quickPanel.toggle(under: items.toggle.button?.window?.frame)
         } else if flags.contains(.option) {
             bar.close()
             sections.showAll()
@@ -215,15 +220,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    private func showMenu() {
-        // Attaching the menu only while it's open keeps left clicks free for toggling.
-        items.toggle.menu = menuBuilder.makeMenu()
-        items.toggle.button?.performClick(nil)
-        items.toggle.menu = nil
-    }
 
     private var lastAlwaysHiddenEnabled: Bool?
     private var lastAllowDisplaySleep: Bool?
+    private var askedForNotifications = false
 
     private func preferencesChanged() {
         let alwaysHidden = Preferences.alwaysHiddenEnabled
@@ -237,16 +237,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             keepAwake.refreshAssertion()
         }
         lastAllowDisplaySleep = allowDisplaySleep
+
+        if Preferences.showKeepAwakeIcon != (quickPanel.cupItem != nil) {
+            quickPanel.syncCupIcon()
+            updateToggleIcon()
+        }
+        if Preferences.keepAwakeNotify, !askedForNotifications {
+            askedForNotifications = true
+            KeepAwakeController.requestNotificationPermission()
+        }
     }
 
     private func updateToggleIcon() {
         guard let button = items.toggle.button else { return }
         let collapsed = sections.state == .collapsed
-        button.image = ToggleIcon.make(collapsed: collapsed, keepAwake: keepAwake.isActive)
+        // The cup icon shows keep-awake when it's in the menu bar; otherwise the arrow does.
+        button.image = ToggleIcon.make(collapsed: collapsed,
+                                       keepAwake: keepAwake.isActive && !Preferences.showKeepAwakeIcon)
         var tip = collapsed ? "Click to show hidden icons" : "Click to hide icons"
-        tip += "\nOption-click to show everything · Right-click for the menu"
-        if let session = keepAwake.session {
-            tip += "\n" + KeepAwakeFormatter.status(for: session)
+        tip += "\nOption-click to show everything · Right-click for keep awake and toggles"
+        if keepAwake.isActive {
+            tip += "\n" + KeepAwakeFormatter.status(of: keepAwake)
         }
         button.toolTip = tip
     }
