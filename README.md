@@ -159,6 +159,9 @@ This also puts the `barnowl` command on your PATH. Or download it yourself:
 3. The setup guide takes it from there.
 
 Barn Owl is signed and notarized by Apple, so it opens like any other app.
+It can update itself: after the second launch it asks whether to check for
+updates automatically, and it always asks before installing one. Settings →
+General has the switch and a **Check for Updates…** button.
 
 <p>
   <img src="docs/images/setup-welcome.png" alt="Setup: welcome" width="270">
@@ -198,8 +201,10 @@ Prefer building it yourself? See [Building from source](#building-from-source).
 
 ## Privacy and permissions
 
-Barn Owl works entirely on your Mac. It has no accounts, no analytics and no
-network requests.
+Barn Owl works entirely on your Mac. It has no accounts and no analytics. Its
+only network request is checking GitHub for new versions: it downloads the
+list of releases and sends nothing about you or your Mac. Switch automatic
+checks off in Settings → General.
 
 - **Accessibility** lets it list menu bar icons, move them and open them.
 - **Screen Recording** lets it show real pictures of hidden icons. Without
@@ -219,7 +224,9 @@ Scripts/install.sh
 
 This builds a Release copy, installs it in /Applications, puts the `barnowl`
 command on your PATH and starts Barn Owl. Run it again to update. macOS trusts
-apps built on the same Mac, so there's no "Open Anyway" step.
+apps built on the same Mac, so there's no "Open Anyway" step. Your copy checks
+for updates too and offers the latest release; switch that off in Settings →
+General to keep your own build.
 
 For development, run `xcodegen generate`, open `BarnOwl.xcodeproj` and run the
 tests:
@@ -239,8 +246,10 @@ Barn Owl back. The owl pictures and the hero image are drawn by the app
 itself: `Scripts/make-icon.sh` and `Scripts/make-hero.sh`.
 
 To make a release, `Scripts/release.sh` builds Barn Owl with your Developer
-ID, has Apple notarize it and staples the ticket. `--publish` also creates a
-draft GitHub release. The script lists what it needs at the top.
+ID, has Apple notarize it, staples the ticket, signs the zip for updates and
+adds it to the update feed (`appcast.xml`) and the Homebrew cask. `--publish`
+also creates a draft GitHub release, and `--dry-run` stops before notarizing.
+See [CONTRIBUTING.md](CONTRIBUTING.md#making-a-release).
 
 ## Contributing
 
@@ -256,7 +265,8 @@ Barn Owl learned from [Hidden Bar](https://github.com/dwarvesf/hidden) and
 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md). It also learned from reading
 [Ice](https://github.com/jordanbaird/Ice) and
 [Thaw](https://github.com/thaw-app/Thaw), both GPL-3; no code was copied.
-Hotkeys use [KeyboardShortcuts](https://github.com/sindresorhus/KeyboardShortcuts).
+Hotkeys use [KeyboardShortcuts](https://github.com/sindresorhus/KeyboardShortcuts),
+and updates use [Sparkle](https://sparkle-project.org).
 
 ## License
 

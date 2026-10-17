@@ -14,6 +14,7 @@
 - [Appearance](#appearance)
 - [The owl](#the-owl)
 - [Automation](#automation)
+- [Updates](#updates)
 - [Troubleshooting](#troubleshooting)
 
 ## Getting started
@@ -342,11 +343,30 @@ For Raycast, Alfred, scripts and anything that can open a URL:
 | `barnowl://settings?pane=layout` | Settings |
 | `barnowl://setup` | The setup guide |
 
+## Updates
+
+The second time you open Barn Owl, it asks whether to check for updates
+automatically. If you say yes, it checks once a day. When there's a new
+version, it shows what's new and asks before installing; it restarts by
+itself afterwards. To
+check right away, use **Check for Updates…** in Settings → General, or the
+arrow button at the bottom of the quick panel.
+
+Switch off **Automatically check for updates** in Settings → General to only
+check when you ask. The check downloads the list of releases from GitHub and
+sends nothing about you or your Mac.
+
+If you installed Barn Owl with Homebrew, it still updates itself;
+`brew upgrade` leaves it alone.
+
 ## Troubleshooting
 
 **The Perch or search says "Allow Accessibility".** Turn on Barn Owl in
 System Settings → Privacy & Security → Accessibility. If it's already on,
 switch it off and on again. That's sometimes needed after updating Barn Owl.
+
+**Check for Updates… is greyed out.** Barn Owl is already checking, or an
+update window is open. Look for it behind other windows.
 
 **Hidden icons show app icons instead of their real pictures.** Allow
 Screen Recording and relaunch Barn Owl, then use Layout → **Refresh Pictures**.

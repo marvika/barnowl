@@ -43,5 +43,11 @@
 	<string>Barn Owl asks System Events to switch between light and dark mode.</string>
 	<key>NSHumanReadableCopyright</key>
 	<string>Copyright © 2026 Marius Vika. MIT License.</string>
+	<key>SUFeedURL</key>
+	<string>https://raw.githubusercontent.com/marvika/barnowl/main/appcast.xml</string>
+	<key>SUPublicEDKey</key>
+	<string>QsOQWSfgtxoDuYm0FVpSbYo1UxkSRoEDWAznnuCcNXg=</string>
+	<key>SUEnableSystemProfiling</key>
+	<false/>
 </dict>
 </plist>

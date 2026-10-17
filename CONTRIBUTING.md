@@ -35,6 +35,34 @@ to `Config/Local.xcconfig` and set your team ID. That file is git-ignored.
 [docs/how-it-works.md](docs/how-it-works.md) explains how hiding, moving and
 opening icons work.
 
+## Making a release
+
+Releases are signed with the maintainer's Developer ID and notarized, and
+Sparkle updates installed copies from `appcast.xml` on main.
+
+1. Bump `MARKETING_VERSION` and `CURRENT_PROJECT_VERSION` in `project.yml`
+   (Sparkle compares the build number), and rename **Unreleased** in
+   `CHANGELOG.md` to the version. That section is what the update window shows.
+2. Run `Scripts/release.sh --publish`. It builds, notarizes, staples, signs the
+   zip for Sparkle, adds it to `appcast.xml`, points `Casks/barn-owl.rb` at it
+   and creates a draft GitHub release. `Scripts/release.sh --dry-run` stops
+   before notarizing and changes nothing.
+3. Publish the draft, then commit `appcast.xml` and the cask and push them to
+   main. Not before: the appcast would point at a download that isn't public.
+4. Run `Scripts/update-tap.sh` to copy the cask to
+   [marvika/homebrew-tap](https://github.com/marvika/homebrew-tap).
+
+The Sparkle signing key lives only in the maintainer's login keychain (Sparkle's
+`generate_keys` made it; the public half is `SUPublicEDKey` in Info.plist).
+**Back it up**, for example in a password manager: if it's lost, installed
+copies can never be updated again. Export it with
+`build/DerivedData/SourcePackages/artifacts/sparkle/Sparkle/bin/generate_keys -x sparkle-key.txt`,
+save the file's contents, and delete the file. On a new Mac, `generate_keys -f`
+imports it.
+
+Releases are built on the maintainer's Mac only; no signing certificate or
+key is stored on GitHub.
+
 ## Pull requests
 
 - Keep each pull request to one change, and describe what it fixes or adds

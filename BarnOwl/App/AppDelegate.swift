@@ -95,6 +95,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
         }
         model.presenter.start()
+        if !DemoMode.isOn { model.updater.start() }
         model.presenter.onChange = { [weak self] _ in
             self?.bar.close()
             self?.updateToggleIcon()
