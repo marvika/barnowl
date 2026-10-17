@@ -92,7 +92,9 @@ final class ItemMover {
                 Log.menuBar.error("Move of \(itemID) skipped: item, target or arrow not found")
                 return false
             }
-            let down = CGPoint(x: arrow.midX, y: arrow.midY)
+            // Near the arrow's right edge: while presenting the arrow is very
+            // wide and its middle is off screen.
+            let down = CGPoint(x: arrow.maxX - min(12, arrow.width / 2), y: arrow.midY)
             let posted = await Task.detached {
                 Self.postCommandDrag(itemID: itemID, originalFrame: itemFrame, mouseDown: down,
                                      destination: destination)

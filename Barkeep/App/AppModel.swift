@@ -13,6 +13,8 @@ final class AppModel {
     @ObservationIgnored let mover: ItemMover
     let groups: GroupStore
     let layout: LayoutController
+    let watcher: ChangeWatcher
+    let presenter: PresenterMode
     @ObservationIgnored var showSetup: () -> Void = {}
     @ObservationIgnored var openSettingsWindow: () -> Void = {}
     @ObservationIgnored var showSearch: () -> Void = {}
@@ -39,6 +41,13 @@ final class AppModel {
         layout = LayoutController(scanner: scanner, mover: mover, statusItems: sections.items, sections: sections,
                                   groups: groups)
         layout.images = images
+        watcher = ChangeWatcher(scanner: scanner, layout: layout, mover: mover, images: images,
+                                statusItems: sections.items)
+        presenter = PresenterMode(sections: sections, keepAwake: keepAwake, images: images, scanner: scanner,
+                                  mover: mover, layout: layout)
+        layout.temporarilyMoved = { [watcher] in Set(watcher.surfaced.keys) }
+        layout.isPaused = { [presenter] in presenter.isPresenting || presenter.isChanging }
+        watcher.isPaused = { [presenter] in presenter.isPresenting || presenter.isChanging }
     }
 
     func showSettings(_ pane: SettingsPane? = nil) {

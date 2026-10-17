@@ -15,6 +15,16 @@ Open source (MIT), for macOS 26 Tahoe and macOS 27.
 - **Icons stay put.** Barkeep remembers where each icon belongs and puts it
   back when an app relaunches. New icons go to Hidden (or the menu bar, if
   you prefer).
+- **Show on change.** Right-click an icon and choose "Show When It Changes":
+  when its status changes (OneDrive starts syncing, a VPN drops), it shows
+  next to the arrow for a while, then hides again.
+- **Presenter mode.** Starts by itself when you share or record your screen
+  (or from the quick panel or a shortcut): every other app's icon goes out of
+  sight, the Mac stays awake, and everything comes back afterwards. Optional:
+  hide desktop icons too.
+- **A layout for your desk.** Optionally keep one layout for the laptop screen
+  and another while an external display is connected; Barkeep switches when
+  you dock.
 - **Barkeep Bar.** On a notched MacBook there's only room for a few icons.
   The Barkeep Bar shows hidden icons, and any stuck behind the notch, in a
   strip under the menu bar. Click one and its menu opens right there.
@@ -47,6 +57,7 @@ For Shortcuts, Raycast or scripts:
 barkeep://toggle            barkeep://show-all          barkeep://hide
 barkeep://bar               barkeep://search            barkeep://open?app=OneDrive
 barkeep://place?app=Zscaler&row=hidden      barkeep://settings?pane=layout
+barkeep://watch?app=Zscaler     barkeep://presenter?on=1
 barkeep://keep-awake?minutes=60    barkeep://keep-awake/stop
 barkeep://settings          barkeep://setup
 ```
@@ -110,6 +121,13 @@ menu bar items needs Accessibility, and macOS 27 hiding uses a private API.
 - **Opening a hidden item:** a hidden item ignores presses, so Barkeep moves it
   next to the icon you clicked, presses it through Accessibility (falling back
   to a real click), and moves it back once its menu closes (`ItemOpener`).
+- **Show on change:** macOS can't photograph hidden icons, so Barkeep watches
+  what it can read (status text, width, the app re-adding the icon) every few
+  seconds, and after a network change (or every few minutes, if you opt in)
+  slides watched icons into view for a moment to compare their pictures.
+- **Presenter mode** spots screen sharing from Control Center's own
+  "Screen Recording is in use" description, and ignores the few seconds after
+  Barkeep's own icon pictures, which light up the same indicator.
 - **Pictures** are kept in `~/Library/Application Support/Barkeep/Icons`, so
   they survive relaunches.
 - **Keep awake** holds an `IOPMAssertion`, like `caffeinate` and Amphetamine.

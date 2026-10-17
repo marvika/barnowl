@@ -49,4 +49,10 @@ final class LengthEngine: HidingEngine {
     func invalidateLayout() {
         // Lengths are recomputed from the current screens on the next apply.
     }
+
+    /// A divider can only hide what's left of it, and macOS doesn't draw a
+    /// status item that runs off screen, so presenting moves icons instead.
+    func setPresenting(_ presenting: Bool) async -> Bool {
+        false
+    }
 }

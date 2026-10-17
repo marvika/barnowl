@@ -14,6 +14,10 @@ import ScreenCaptureKit
 @Observable
 final class ItemImageCache {
     private(set) var images: [CGWindowID: NSImage] = [:]
+    /// When Barkeep last took pictures. Each capture briefly turns on macOS's
+    /// screen-recording indicator, which presenter mode must not mistake for
+    /// screen sharing.
+    @ObservationIgnored private(set) var lastCapture = Date.distantPast
     /// Pictures from earlier runs, by item key; filled from disk on demand.
     @ObservationIgnored private var saved: [String: NSImage] = [:]
 
@@ -65,6 +69,8 @@ final class ItemImageCache {
     /// pictures of windows not in it are dropped.
     func capture(_ items: [MenuBarItem], pruning: Bool = true) async {
         guard Self.hasPermission, let screen = NSScreen.screens.first else { return }
+        lastCapture = Date()
+        defer { lastCapture = Date() }
         // The clock's window runs a couple of points past the screen edge.
         let onScreen = items.filter { $0.frame.minX >= screen.frame.minX && $0.frame.maxX <= screen.frame.maxX + 4 }
         guard !onScreen.isEmpty, let captured = await Self.capture(onScreen, screen: screen) else { return }

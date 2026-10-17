@@ -11,7 +11,7 @@ struct QuickPanelView: View {
         VStack(alignment: .leading, spacing: 14) {
             KeepAwakeCard(model: model, close: close)
             Divider()
-            TogglesGrid()
+            TogglesGrid(model: model)
             Divider()
             footer
         }
@@ -191,6 +191,7 @@ private struct DurationChip: View {
 
 /// The quick toggles as tiles, like Control Center.
 struct TogglesGrid: View {
+    let model: AppModel
     @AppStorage(PrefKey.menuShowsDarkMode) private var showDarkMode = true
     @AppStorage(PrefKey.menuShowsDesktopIcons) private var showDesktop = true
     @AppStorage(PrefKey.menuShowsHiddenFiles) private var showHiddenFiles = true
@@ -202,6 +203,9 @@ struct TogglesGrid: View {
     var body: some View {
         let _ = refresh
         LazyVGrid(columns: [GridItem(.flexible(), spacing: 8), GridItem(.flexible(), spacing: 8)], spacing: 8) {
+            ToggleTile(title: "Presenting", symbol: "rectangle.on.rectangle", isOn: model.presenter.isPresenting) {
+                Task { await model.presenter.toggle() }
+            }
             if showDarkMode {
                 ToggleTile(title: "Dark Mode", symbol: "circle.lefthalf.filled", isOn: QuickToggles.isDarkMode) {
                     run(QuickToggles.toggleDarkMode)

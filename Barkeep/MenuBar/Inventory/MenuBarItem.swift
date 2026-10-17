@@ -31,11 +31,15 @@ struct MenuBarItem: Identifiable, Hashable, Sendable {
 
     var id: CGWindowID { windowID }
 
-    /// The clock and Control Center can't be moved, by hand or otherwise.
+    /// The clock, Control Center and the camera/microphone/screen-recording
+    /// indicator can't be moved, by hand or otherwise, and the indicator must
+    /// never be hidden.
     var isMovable: Bool {
         guard bundleIdentifier == "com.apple.controlcenter" else { return true }
-        if let windowName, windowName == "Clock" || windowName.hasPrefix("BentoBox") { return false }
-        return !["Clock", "Control Center"].contains(title ?? "")
+        if let windowName, windowName == "Clock" || windowName.hasPrefix("BentoBox")
+            || windowName == "AudioVideoModule" { return false }
+        let name = (title ?? "").split(separator: ",").first.map(String.init) ?? ""
+        return !["Clock", "Control Center", "Audio and Video Controls"].contains(name)
     }
 
     /// Items macOS draws itself (clock, Control Center, Wi‑Fi…).

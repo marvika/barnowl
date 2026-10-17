@@ -56,6 +56,15 @@ enum AccessibilityInventory {
         }
     }
 
+    /// The item's current status text: its title, description or help (tooltip),
+    /// whichever it has. Many apps put their state there ("Syncing…").
+    nonisolated static func statusText(of element: AXUIElement) -> String {
+        AXUIElementSetMessagingTimeout(element, 0.1)
+        return [kAXTitleAttribute, kAXDescriptionAttribute, kAXHelpAttribute]
+            .compactMap { (attribute(element, $0) as String?) }
+            .joined(separator: "|")
+    }
+
     /// Accessibility titles sometimes span lines ("OneDrive\nBacked up and synced").
     private nonisolated static func cleaned(_ title: String) -> String {
         title.split(whereSeparator: \.isNewline).map { $0.trimmingCharacters(in: .whitespaces) }

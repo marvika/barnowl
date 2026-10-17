@@ -67,6 +67,17 @@ final class NativeVisibilityEngine: HidingEngine {
         if assertion == nil { layout = nil }
     }
 
+    /// Only Barkeep's own items (and the system's) stay.
+    func setPresenting(_ presenting: Bool) async -> Bool {
+        generation += 1
+        let generation = self.generation
+        if presenting {
+            return await activate(allowing: [Bundle.main.bundleIdentifier].compactMap { $0 }, generation: generation)
+        }
+        release()
+        return true
+    }
+
     /// Fresh from an unrestricted bar; while a restriction is active, hidden
     /// items report stale positions, so the cached layout stands in.
     private func currentLayout(alwaysHiddenEnabled: Bool) async -> SectionLayout? {

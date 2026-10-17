@@ -24,8 +24,10 @@ final class KeepAwakeController {
     private(set) var activeRule: KeepAwakeRule?
     /// Set when a session or the rules stopped because the battery got low.
     private(set) var stoppedForBattery = false
+    /// Presenter mode keeps the Mac (and display) awake while presenting.
+    private(set) var presenting = false
 
-    var isActive: Bool { session != nil || activeRule != nil }
+    var isActive: Bool { session != nil || activeRule != nil || presenting }
     @ObservationIgnored var onChange: (() -> Void)?
 
     @ObservationIgnored let rules: RuleStore
@@ -82,6 +84,12 @@ final class KeepAwakeController {
     func stop() {
         guard session != nil else { return }
         endSession(reason: nil)
+    }
+
+    func setPresenting(_ presenting: Bool) {
+        self.presenting = presenting
+        evaluate()
+        onChange?()
     }
 
     /// Re-applies after "allow display sleep" changes.
@@ -168,7 +176,7 @@ final class KeepAwakeController {
         // Display sleep is allowed only if every active source allows it.
         let sessionAllows = session == nil || Preferences.keepAwakeAllowDisplaySleep
         let ruleAllows = activeRule?.allowDisplaySleep ?? true
-        let type = sessionAllows && ruleAllows ? "PreventUserIdleSystemSleep" : "PreventUserIdleDisplaySleep"
+        let type = sessionAllows && ruleAllows && !presenting ? "PreventUserIdleSystemSleep" : "PreventUserIdleDisplaySleep"
         guard type != assertionType || assertionID == 0 else { return }
         releaseAssertion()
         let result = IOPMAssertionCreateWithName(type as CFString, IOPMAssertionLevel(kIOPMAssertionLevelOn),
@@ -248,6 +256,7 @@ enum KeepAwakeFormatter {
     static func status(of controller: KeepAwakeController) -> String {
         if let session = controller.session { return status(for: session) }
         if let rule = controller.activeRule { return "Awake because \(rule.phrase)" }
+        if controller.presenting { return "Awake while you present" }
         if controller.stoppedForBattery { return "Stopped: battery low" }
         return "Off. Your Mac sleeps as usual."
     }

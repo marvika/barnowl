@@ -21,6 +21,12 @@ enum PrefKey {
     static let keepAwakeNotify = "keepAwakeNotify"
     static let showKeepAwakeIcon = "showKeepAwakeIcon"
     static let closedLidMode = "closedLidMode"
+    static let changeShowDuration = "changeShowDuration"
+    static let changeLookInterval = "changeLookInterval"
+    static let presenterAutomatic = "presenterAutomatic"
+    static let presenterKeepAwake = "presenterKeepAwake"
+    static let presenterHideDesktopIcons = "presenterHideDesktopIcons"
+    static let displayProfiles = "displayProfiles"
 }
 
 enum Preferences {
@@ -43,6 +49,12 @@ enum Preferences {
             PrefKey.keepAwakeKeepAvailable: false,
             PrefKey.keepAwakeNotify: false,
             PrefKey.showKeepAwakeIcon: true,
+            PrefKey.changeShowDuration: 30.0,
+            PrefKey.changeLookInterval: 0,
+            PrefKey.presenterAutomatic: true,
+            PrefKey.presenterKeepAwake: true,
+            PrefKey.presenterHideDesktopIcons: false,
+            PrefKey.displayProfiles: false,
         ])
     }
 
@@ -76,6 +88,15 @@ enum Preferences {
         get { defaults.bool(forKey: PrefKey.closedLidMode) }
         set { defaults.set(newValue, forKey: PrefKey.closedLidMode) }
     }
+    /// How long a changed icon stays in view, in seconds.
+    static var changeShowDuration: TimeInterval { max(5, defaults.double(forKey: PrefKey.changeShowDuration)) }
+    /// Minutes between looks at watched icons' pictures; 0 = only after network changes.
+    static var changeLookInterval: Int { defaults.integer(forKey: PrefKey.changeLookInterval) }
+    static var presenterAutomatic: Bool { defaults.bool(forKey: PrefKey.presenterAutomatic) }
+    static var presenterKeepAwake: Bool { defaults.bool(forKey: PrefKey.presenterKeepAwake) }
+    static var presenterHideDesktopIcons: Bool { defaults.bool(forKey: PrefKey.presenterHideDesktopIcons) }
+    /// A separate layout while an external display is connected.
+    static var displayProfiles: Bool { defaults.bool(forKey: PrefKey.displayProfiles) }
     static var hasShownWelcome: Bool {
         get { defaults.bool(forKey: PrefKey.hasShownWelcome) }
         set { defaults.set(newValue, forKey: PrefKey.hasShownWelcome) }

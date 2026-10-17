@@ -8,6 +8,8 @@ final class SectionController {
     let engine: HidingEngine
     private(set) var state: SectionState = .expanded
     var onStateChange: ((SectionState) -> Void)?
+    /// Displays were connected, disconnected or rearranged.
+    var onScreensChanged: (() -> Void)?
 
     /// Keeps hidden icons showing, e.g. while setup or Settings asks the user
     /// to arrange them. Clearing it starts the auto-rehide timer again.
@@ -31,6 +33,7 @@ final class SectionController {
                 guard let self else { return }
                 self.engine.invalidateLayout()
                 self.set(self.state)
+                self.onScreensChanged?()
             }
         }
     }

@@ -143,6 +143,10 @@ private struct ItemChip: View {
                     if !item.isMovable {
                         Image(systemName: "lock.fill").font(.system(size: 8)).foregroundStyle(.secondary)
                             .padding(3)
+                    } else if model.watcher.isWatching(item.key) {
+                        Image(systemName: "bell.fill").font(.system(size: 8)).foregroundStyle(.orange)
+                            .padding(3)
+                            .help("Shown for a while when it changes")
                     }
                 }
             Text(item.name)
@@ -204,6 +208,10 @@ struct ItemContextMenu: View {
                     }
                 }
             }
+            Divider()
+            Toggle("Show When It Changes", isOn: Binding(
+                get: { model.watcher.isWatching(item.key) },
+                set: { model.watcher.setWatching(item.key, $0) }))
         } else {
             Text("macOS keeps \(item.name) in place")
         }

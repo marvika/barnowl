@@ -16,6 +16,11 @@ protocol HidingEngine: AnyObject {
 
     /// Display geometry changed (screen plugged in, resolution change).
     func invalidateLayout()
+
+    /// Hides every other app's icon, visible ones included, if the engine can
+    /// do that by itself. Returns false if it can't, and presenter mode then
+    /// moves the visible icons into the hidden section instead.
+    func setPresenting(_ presenting: Bool) async -> Bool
 }
 
 enum HidingEngineFactory {

@@ -36,13 +36,15 @@
 Still to verify: closed-lid mode (needs an admin password), click fallback for
 Electron apps such as Docker Desktop, everything on macOS 27.
 
-## v0.4: Context
+## v0.4: Context (done)
 
-- **Show on change**: surface a hidden icon for a while when its image changes
-  (VPN drops, sync errors, security agent alerts)
-- **Profiles by display**: tight layout on the laptop screen, roomier with an
-  external display
-- **Presenter mode**: hide everything while screen sharing or on camera
+- Show on change: status text, width and re-added icons every 3 s; picture
+  comparison after network changes or on an opt-in interval
+- Presenter mode: automatic while screen sharing or recording, manual tile and
+  shortcut; keeps awake; optional desktop-icon hiding
+- Display profiles: separate laptop and desk layouts, switched on dock/undock
+
+Still to verify: display profiles with a real external display.
 
 ## v0.5: Extras
 

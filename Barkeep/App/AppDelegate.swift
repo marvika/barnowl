@@ -57,6 +57,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         quickPanel = QuickPanelController(model: model)
         quickPanel.syncCupIcon()
         keepAwake.start()
+        model.watcher.start()
+        sections.onScreensChanged = { [weak self] in
+            Task {
+                // Give macOS a moment to settle the menu bar on the new displays.
+                try? await Task.sleep(for: .seconds(2))
+                await self?.model.layout.updateProfile()
+            }
+        }
+        model.presenter.start()
+        model.presenter.onChange = { [weak self] _ in
+            self?.bar.close()
+            self?.updateToggleIcon()
+        }
 
         if let button = items.toggle.button {
             button.target = self
@@ -76,6 +89,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         KeyboardShortcuts.onKeyUp(for: .toggleHiddenItems) { [weak self] in self?.revealHiddenIcons() }
         KeyboardShortcuts.onKeyUp(for: .searchItems) { [weak self] in self?.search.toggle() }
+        KeyboardShortcuts.onKeyUp(for: .togglePresenter) { [weak self] in
+            Task { await self?.model.presenter.toggle() }
+        }
         KeyboardShortcuts.onKeyUp(for: .showAllItems) { [weak self] in self?.sections.showAll() }
         KeyboardShortcuts.onKeyUp(for: .toggleKeepAwake) { [weak self] in
             guard let self else { return }
@@ -106,6 +122,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 await self.images.capture(items)
                 self.sections.collapse()
                 self.scanner.start()
+                await self.model.layout.updateProfile()
                 await self.model.layout.applyFirstRunDefaults()
             }
         } else {
@@ -121,7 +138,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     /// barkeep://settings, barkeep://setup, barkeep://search, barkeep://bar,
-    /// barkeep://open?app=NAME, barkeep://place?app=NAME&row=hidden, barkeep://toggle, barkeep://show-all,
+    /// barkeep://open?app=NAME, barkeep://place?app=NAME&row=hidden, barkeep://watch?app=NAME,
+    /// barkeep://presenter, barkeep://toggle, barkeep://show-all,
     /// barkeep://hide, barkeep://keep-awake?minutes=60 (0 or none = indefinitely),
     /// barkeep://keep-awake/stop. For Shortcuts, Raycast and scripts.
     func application(_ application: NSApplication, open urls: [URL]) {
@@ -138,6 +156,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 let pane = query?.first { $0.name == "pane" }?.value.flatMap(SettingsPane.init(rawValue:))
                 model.showSettings(pane)
             case ("search", _): search.show()
+            case ("presenter", _):
+                // barkeep://presenter (toggle), ?on=1 or ?on=0
+                let on = query?.first { $0.name == "on" }?.value
+                Task { await on == nil ? model.presenter.toggle() : model.presenter.set(on == "1", automatically: false) }
             case ("bar", _): bar.toggle()
             case ("place", _):
                 // barkeep://place?app=Claude&row=hidden (visible, hidden or alwaysHidden)
@@ -149,6 +171,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     if let item = items.first(where: { $0.bundleIdentifier?.lowercased() == app })
                         ?? items.first(where: { $0.appName.lowercased() == app || $0.name.lowercased() == app }) {
                         await model.layout.place(item.key, in: row)
+                    }
+                }
+            case ("watch", _):
+                // barkeep://watch?app=OneDrive&on=1: show the icon for a while when it changes.
+                guard let app = query?.first(where: { $0.name == "app" })?.value?.lowercased() else { break }
+                let on = query?.first { $0.name == "on" }?.value != "0"
+                Task {
+                    let items = await scanner.freshItems()
+                    if let item = items.first(where: { $0.bundleIdentifier?.lowercased() == app })
+                        ?? items.first(where: { $0.appName.lowercased() == app || $0.name.lowercased() == app }) {
+                        model.watcher.setWatching(item.key, on)
                     }
                 }
             case ("open", _):
@@ -206,7 +239,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// The arrow and its hotkey: hide what's showing, otherwise reveal the
     /// hidden icons in the menu bar or in the Barkeep Bar.
     private func revealHiddenIcons() {
-        if bar.isOpen {
+        // While presenting, never reveal icons on the shared screen by
+        // accident: the Barkeep Bar is a deliberate second step.
+        if model.presenter.isPresenting {
+            bar.toggle()
+        } else if bar.isOpen {
             bar.close()
         } else if sections.state != .collapsed {
             sections.collapse()
@@ -232,7 +269,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var lastAllowDisplaySleep: Bool?
     private var askedForNotifications = false
 
+    private var lastDisplayProfiles: Bool?
+
     private func preferencesChanged() {
+        if Preferences.displayProfiles != lastDisplayProfiles {
+            if lastDisplayProfiles != nil { Task { await model.layout.updateProfile() } }
+            lastDisplayProfiles = Preferences.displayProfiles
+        }
         let alwaysHidden = Preferences.alwaysHiddenEnabled
         if lastAlwaysHiddenEnabled != nil, alwaysHidden != lastAlwaysHiddenEnabled {
             sections.refresh()
@@ -257,6 +300,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func updateToggleIcon() {
         guard let button = items.toggle.button else { return }
+        // While presenting the arrow becomes an eye-slash, so it's clear why the bar is empty.
+        guard !model.presenter.isPresenting else {
+            button.image = NSImage(systemSymbolName: "eye.slash.fill", accessibilityDescription: "Presenting")?
+                .withSymbolConfiguration(.init(pointSize: 13, weight: .semibold))
+            button.toolTip = "Presenting: menu bar icons are hidden\nClick for your icons in the Barkeep Bar"
+            return
+        }
         let collapsed = sections.state == .collapsed
         // The cup icon shows keep-awake when it's in the menu bar; otherwise the arrow does.
         button.image = ToggleIcon.make(collapsed: collapsed,

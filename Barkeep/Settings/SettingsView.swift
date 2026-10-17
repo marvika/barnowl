@@ -84,10 +84,20 @@ struct SettingsView: View {
 
 private struct LayoutPane: View {
     let model: AppModel
+    @AppStorage(PrefKey.displayProfiles) private var displayProfiles = false
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 12) {
+                Card {
+                    CardRow(title: "Separate layout at your desk",
+                            subtitle: displayProfiles
+                                ? "Editing the \(model.layout.profile.title.lowercased()). Barkeep switches when you connect or disconnect a display."
+                                : "Keep one layout for the laptop screen and another while an external display is connected.",
+                            symbol: "display.2", color: .teal) {
+                        Toggle("", isOn: $displayProfiles).labelsHidden().toggleStyle(.switch)
+                    }
+                }
                 HStack(alignment: .top) {
                     Text("Drag icons between rows. Your menu bar changes right away. Right-click an icon for more options.")
                         .foregroundStyle(.secondary)
@@ -154,6 +164,11 @@ private struct MenuBarPane: View {
     @AppStorage(PrefKey.alwaysHiddenEnabled) private var alwaysHiddenEnabled = false
     @AppStorage(PrefKey.hiddenIconsDisplay) private var display = HiddenIconsDisplay.automatic
     @AppStorage(PrefKey.newIconPlacement) private var newIcons = NewIconPlacement.hidden
+    @AppStorage(PrefKey.changeShowDuration) private var changeDuration = 30.0
+    @AppStorage(PrefKey.changeLookInterval) private var lookInterval = 0
+    @AppStorage(PrefKey.presenterAutomatic) private var presenterAutomatic = true
+    @AppStorage(PrefKey.presenterKeepAwake) private var presenterKeepAwake = true
+    @AppStorage(PrefKey.presenterHideDesktopIcons) private var presenterHideDesktop = false
 
     var body: some View {
         Form {
@@ -174,6 +189,49 @@ private struct MenuBarPane: View {
                     .listRowInsets(EdgeInsets(top: 10, leading: 10, bottom: 10, trailing: 10))
             } header: {
                 Text("Hidden icons appear")
+            }
+            Section {
+                Picker(selection: $changeDuration) {
+                    Text("10 seconds").tag(10.0)
+                    Text("30 seconds").tag(30.0)
+                    Text("1 minute").tag(60.0)
+                    Text("5 minutes").tag(300.0)
+                } label: {
+                    BadgeLabel(title: "Show changed icons for",
+                               subtitle: "Right-click an icon in Layout or the Barkeep Bar and choose Show When It Changes.",
+                               symbol: "bell.badge.fill", color: .orange)
+                }
+                Picker(selection: $lookInterval) {
+                    Text("Only when the network changes").tag(0)
+                    Text("Every 2 minutes").tag(2)
+                    Text("Every 10 minutes").tag(10)
+                } label: {
+                    BadgeLabel(title: "Look at icon-only items",
+                               subtitle: "Icons without status text are checked by sliding them into view for a moment.",
+                               symbol: "eye", color: .blue)
+                }
+            } header: {
+                Text("Show icons when they change")
+            }
+            Section {
+                Toggle(isOn: $presenterAutomatic) {
+                    BadgeLabel(title: "Start when you share your screen",
+                               subtitle: "And stop when sharing ends. Detected from macOS's own screen-recording indicator.",
+                               symbol: "rectangle.on.rectangle", color: .purple)
+                }
+                Toggle(isOn: $presenterKeepAwake) {
+                    BadgeLabel(title: "Keep the Mac and display awake", symbol: "cup.and.heat.waves.fill",
+                               color: .orange)
+                }
+                Toggle(isOn: $presenterHideDesktop) {
+                    BadgeLabel(title: "Hide desktop icons too", subtitle: "Restarts Finder, so the screen flickers once.",
+                               symbol: "menubar.dock.rectangle", color: .teal)
+                }
+                LabeledContent("Shortcut") { KeyboardShortcuts.Recorder(for: .togglePresenter) }
+            } header: {
+                Text("Presenter mode")
+            } footer: {
+                Text("Hides every menu bar icon except the clock and Control Center. Click the arrow for your icons in the Barkeep Bar.")
             }
             Section("Hiding") {
                 Picker(selection: $newIcons) {
@@ -590,6 +648,7 @@ private struct ShortcutsPane: View {
                 recorder("Search the menu bar", "magnifyingglass", .teal, .searchItems)
                 recorder("Show every icon", "eye.fill", .purple, .showAllItems)
                 recorder("Toggle keep awake", "cup.and.heat.waves.fill", .orange, .toggleKeepAwake)
+                recorder("Presenter mode", "rectangle.on.rectangle", .purple, .togglePresenter)
             } footer: {
                 Text("Click a shortcut field and press the keys you want. Press Delete to clear it.")
             }

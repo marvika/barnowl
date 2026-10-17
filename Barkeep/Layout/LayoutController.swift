@@ -38,6 +38,29 @@ enum LayoutRow: Hashable, Sendable {
     }
 }
 
+enum DisplayProfile: String, Sendable {
+    case single
+    case laptop
+    case desk
+
+    var storageKey: String {
+        self == .single ? "itemRows" : "itemRows.\(rawValue)"
+    }
+
+    var title: String {
+        switch self {
+        case .single: "Your layout"
+        case .laptop: "Laptop layout"
+        case .desk: "Desk layout"
+        }
+    }
+
+    static func current(enabled: Bool, hasExternalDisplay: Bool) -> DisplayProfile {
+        guard enabled else { return .single }
+        return hasExternalDisplay ? .desk : .laptop
+    }
+}
+
 /// Where new icons go when an app adds one Barkeep hasn't seen before.
 enum NewIconPlacement: String, CaseIterable, Identifiable, Sendable {
     case hidden
@@ -115,7 +138,12 @@ final class LayoutController {
     @ObservationIgnored private var lastWindowIDs: [String: CGWindowID] = [:]
     @ObservationIgnored private var hasBaseline = false
     @ObservationIgnored private var isReconciling = false
-    @ObservationIgnored private let memoryKey = "itemRows"
+    /// Which layout is in use: one for everything, or with display profiles
+    /// on, one for the laptop screen alone and one for a desk with an
+    /// external display.
+    private(set) var profile: DisplayProfile = .single
+
+    private var memoryKey: String { profile.storageKey }
 
     private var remembered: [String: LayoutRow] {
         get {
@@ -216,11 +244,12 @@ final class LayoutController {
     /// new icons where the user wants them, and learn from the user's own
     /// ⌘-drags. Skipped while Barkeep itself is moving things.
     func reconcile() async {
-        guard !isBusy, !isReconciling, !sections.holdOpen, sections.state == .collapsed,
+        guard !isBusy, !isReconciling, !isPaused(), !sections.holdOpen, sections.state == .collapsed,
               !scanner.items.isEmpty else { return }
         isReconciling = true
         defer { isReconciling = false }
-        let snapshot = scanner.items.map {
+        let skipped = temporarilyMoved()
+        let snapshot = scanner.items.filter { !skipped.contains($0.key) }.map {
             (key: $0.key, windowID: $0.windowID, row: LayoutRow($0.section), movable: $0.isMovable)
         }
         let result = LayoutKeeper.reconcile(items: snapshot, groupOf: { self.groups.group(containing: $0)?.id },
@@ -269,6 +298,53 @@ final class LayoutController {
         _ = statusItems.ensureAlwaysHiddenItem()
         sections.refresh()
         try? await Task.sleep(for: .milliseconds(400))
+    }
+
+    /// Keys the keeper should leave alone for now (icons shown because they
+    /// changed, or hidden for presenting).
+    @ObservationIgnored var temporarilyMoved: () -> Set<String> = { [] }
+    /// While presenting, nothing is rearranged in the background.
+    @ObservationIgnored var isPaused: () -> Bool = { false }
+
+    /// Moves an icon back to its saved row without changing anything saved.
+    func returnToRow(_ key: String) async {
+        guard let item = scanner.items.first(where: { $0.key == key }) else { return }
+        let row = groups.group(containing: key).map { LayoutRow.group($0.id) } ?? remembered[key] ?? .hidden
+        guard let destination = await destination(for: row, before: nil, moving: item) else { return }
+        await mover.move(item.windowID, to: destination)
+        scanner.updateFrames()
+    }
+
+    /// Picks the layout for the displays connected now, and if that changed,
+    /// moves every icon to where that layout has it.
+    func updateProfile() async {
+        let next = DisplayProfile.current(enabled: Preferences.displayProfiles,
+                                          hasExternalDisplay: SystemConditions.hasExternalDisplay)
+        guard next != profile else { return }
+        let previous = profile
+        profile = next
+        // A profile used for the first time starts as a copy of the current layout.
+        let defaults = UserDefaults.standard
+        if defaults.dictionary(forKey: next.storageKey) == nil {
+            defaults.set(defaults.dictionary(forKey: previous.storageKey) ?? [:], forKey: next.storageKey)
+        }
+        Log.menuBar.info("Display profile: \(next.rawValue)")
+        await applyRemembered()
+    }
+
+    /// Moves every icon that isn't where the current layout wants it.
+    private func applyRemembered() async {
+        let skipped = temporarilyMoved()
+        let memory = remembered
+        for item in scanner.items where item.isMovable && !skipped.contains(item.key) {
+            if groups.group(containing: item.key) != nil {
+                if item.section != .alwaysHidden { await returnToRow(item.key) }
+                continue
+            }
+            guard let wanted = memory[item.key], wanted != LayoutRow(item.section) else { continue }
+            await returnToRow(item.key)
+        }
+        lastWindowIDs = Dictionary(scanner.items.map { ($0.key, $0.windowID) }, uniquingKeysWith: { a, _ in a })
     }
 
     /// First run: keep Battery and Wi‑Fi in the menu bar, since most people
