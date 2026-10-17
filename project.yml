@@ -21,6 +21,9 @@ targets:
     platform: macOS
     sources:
       - path: BarnOwl
+      # The barnowl command ships inside the app, for Homebrew to link.
+      - path: Scripts/barnowl
+        buildPhase: resources
     dependencies:
       - package: KeyboardShortcuts
     settings:

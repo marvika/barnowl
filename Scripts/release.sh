@@ -1,7 +1,8 @@
 #!/bin/zsh
 # Builds a release of Barn Owl that opens without warnings on any Mac: signed
 # with a Developer ID, notarized by Apple and stapled. Writes
-# build/dist/BarnOwl-<version>.zip and the barnowl command next to it.
+# build/dist/BarnOwl-<version>.zip and the barnowl command next to it, and
+# points the Homebrew cask (Casks/barn-owl.rb) at the new zip.
 #
 #   Scripts/release.sh             build, notarize and check
 #   Scripts/release.sh --publish   also create the GitHub release (draft)
@@ -57,6 +58,12 @@ ditto -c -k --keepParent "$app" "$zip"
 cp Scripts/barnowl "$dist/barnowl"
 shasum -a 256 "$zip" "$dist/barnowl" | tee "$dist/SHA256SUMS"
 echo "✓ $zip is ready"
+
+echo "› Updating the Homebrew cask"
+sha=$(shasum -a 256 "$zip" | cut -d' ' -f1)
+sed -i '' -e "s/^  version \".*\"/  version \"$version\"/" -e "s/^  sha256 \".*\"/  sha256 \"$sha\"/" Casks/barn-owl.rb
+echo "✓ Casks/barn-owl.rb now installs $version. Commit it with the release; copy it to"
+echo "  your homebrew-tap repository too, if you have one."
 
 if [[ "${1:-}" == --publish ]]; then
   echo "› Creating a draft GitHub release v$version"

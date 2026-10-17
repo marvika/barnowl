@@ -144,6 +144,14 @@ Once you've dropped a file somewhere, it leaves the Nest.
 
 Requires macOS 26 Tahoe, on Apple silicon or Intel.
 
+With [Homebrew](https://brew.sh):
+
+```bash
+brew install --cask marvika/tap/barn-owl
+```
+
+This also puts the `barnowl` command on your PATH. Or download it yourself:
+
 1. Download **BarnOwl-x.y.z.zip** from the
    [latest release](https://github.com/marvika/barnowl/releases/latest)
    and open it.

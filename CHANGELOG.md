@@ -10,6 +10,8 @@ before 1.0, a minor version can change behaviour.
 - **Drag all** takes every file in the Nest at once.
 - Files moved or deleted elsewhere leave the Nest by themselves.
 - The clipboard panel's Shelf tab is now called the Nest.
+- A Homebrew cask (`Casks/barn-owl.rb`), and the `barnowl` command now ships
+  inside the app so Homebrew can link it.
 
 ## 0.7.0
 
