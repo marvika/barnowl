@@ -247,10 +247,20 @@ Clipboard.
 
 The **Nest** appears under the notch as soon as you start dragging files in
 any app, and the owl watches your pointer until you let go. Drop them there to
-hold them. While it holds files, a small tab stays under the notch. Hover over it or click it to see them, then drag them
-out wherever you need them. The Nest only remembers where the files are; it
-never moves or copies them. The **Shelf** tab in clipboard history shows the
-same files. Turn off the Nest or its tab in Settings → Clipboard.
+hold them. While it holds files, a small tab stays under the notch. Hover over
+it or click it to see them, then drag them out wherever you need them, one at
+a time or with **Drag all**.
+
+A file leaves the Nest once you drop it somewhere; dropping it back on the
+Nest keeps it. To keep files in the Nest instead, turn on **Keep files in the
+Nest after dragging them out** in Settings → Clipboard.
+
+The Nest only remembers where the files are. Where you drop them decides what
+happens, as with any drag: Finder moves a file to another folder on the same
+disk, and copies it to another disk (hold Option to copy instead). Files you
+move or delete elsewhere leave the Nest by themselves. The **Nest** tab in
+clipboard history shows the same files. Turn off the Nest or its tab in
+Settings → Clipboard.
 
 ## Appearance
 

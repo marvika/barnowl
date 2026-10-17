@@ -63,7 +63,7 @@ enum AppCommand: Hashable, Sendable, Identifiable {
         case .desktopIcons: ["desktop", "icons", "clean"]
         case .hiddenFiles: ["hidden", "files", "dotfiles", "finder"]
         case .sleepDisplay: ["sleep", "display", "screen", "lock"]
-        case .clipboard: ["clipboard", "paste", "copy", "history", "shelf"]
+        case .clipboard: ["clipboard", "paste", "copy", "history", "nest", "shelf"]
         case .showAllIcons: ["show", "all", "icons", "reveal"]
         case .settings(let pane): ["settings", "preferences", pane.rawValue.lowercased()] + pane.extraKeywords
         }

@@ -128,7 +128,8 @@ password managers are never recorded.
 
 Start dragging files in any app and the **Nest** slides out under the
 notch, with the owl watching your pointer. Drop files there to hold them,
-then drag them out later, wherever you need them.
+then drag them out later, wherever you need them, one by one or all at once.
+Once you've dropped a file somewhere, it leaves the Nest.
 
 <img src="docs/images/drop-tray.png" alt="The Nest holding three files while the owl watches a file being dragged" width="380">
 

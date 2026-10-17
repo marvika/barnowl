@@ -134,6 +134,7 @@ private struct ClipboardPane: View {
     @AppStorage(PrefKey.clipboardRemember) private var remember = true
     @AppStorage(PrefKey.dropTrayEnabled) private var dropTray = true
     @AppStorage(PrefKey.dropTrayTab) private var dropTrayTab = true
+    @AppStorage(PrefKey.nestKeepsDraggedFiles) private var nestKeepsFiles = false
 
     var body: some View {
         Form {
@@ -159,21 +160,28 @@ private struct ClipboardPane: View {
             }
             Section {
                 Toggle(isOn: $dropTray) {
-                    BadgeLabel(title: "Show a drop tray when dragging files",
+                    BadgeLabel(title: "Show the Nest when you drag files",
                                subtitle: "It appears under the notch. Drop files to hold them, then drag them out later.",
                                symbol: "tray.and.arrow.down.fill", color: .orange)
                 }
                 Toggle(isOn: $dropTrayTab) {
-                    BadgeLabel(title: "Keep a tab under the notch while it holds files",
+                    BadgeLabel(title: "Keep a tab under the notch while the Nest holds files",
                                subtitle: "Hover or click it to drag the files out.",
                                symbol: "tray.full.fill", color: .orange)
                 }
                 .disabled(!dropTray)
+                Toggle(isOn: $nestKeepsFiles) {
+                    BadgeLabel(title: "Keep files in the Nest after dragging them out",
+                               subtitle: "Off: a file leaves the Nest once you drop it somewhere else.",
+                               symbol: "square.on.square", color: .orange)
+                }
             } header: {
-                Text("Shelf")
+                Text("Nest")
+            } footer: {
+                Text("The Nest only remembers where your files are; it never moves or copies them itself. Files you move or delete elsewhere leave the Nest too.")
             }
             Section {
-                LabeledContent("\(model.clipboard.entries.count) items, \(model.clipboard.shelf.count) on the shelf") {
+                LabeledContent("\(model.clipboard.entries.count) items, \(model.clipboard.shelf.count) in the nest") {
                     HStack {
                         Button("Open") { model.showClipboard() }
                         Button("Clear History", role: .destructive) { model.clipboard.clear() }

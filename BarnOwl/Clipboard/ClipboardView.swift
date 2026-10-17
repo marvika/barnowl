@@ -7,7 +7,7 @@ struct ClipboardView: View {
     let paste: (ClipEntry) -> Void
     let close: () -> Void
 
-    enum Tab: String, CaseIterable { case history = "Clipboard", shelf = "Shelf" }
+    enum Tab: String, CaseIterable { case history = "Clipboard", shelf = "Nest" }
 
     @State private var tab = Tab.history
     @State private var query = ""
@@ -118,7 +118,7 @@ struct ClipboardView: View {
             if clipboard.shelf.isEmpty {
                 VStack(spacing: 6) {
                     Image(systemName: "tray.and.arrow.down").font(.largeTitle).foregroundStyle(.secondary)
-                    Text("Drop files here to park them").font(.headline)
+                    Text("Drop files in the nest").font(.headline)
                     Text("Then drag them out wherever you need them.").foregroundStyle(.secondary)
                 }
                 .frame(maxWidth: .infinity, minHeight: 160)
@@ -126,7 +126,9 @@ struct ClipboardView: View {
                 ScrollView {
                     LazyVGrid(columns: Array(repeating: GridItem(.fixed(96), spacing: 8), count: 4), spacing: 10) {
                         ForEach(clipboard.shelf, id: \.self) { url in
-                            ShelfTile(url: url) { clipboard.removeFromShelf(url) }
+                            ShelfTile(url: url, remove: { clipboard.removeFromShelf(url) }, takenOut: { urls in
+                                if !Preferences.nestKeepsDraggedFiles { clipboard.removeFromShelf(urls) }
+                            })
                         }
                     }
                     .padding(10)
@@ -138,6 +140,7 @@ struct ClipboardView: View {
         .padding(8)
         .dropDestination(for: URL.self) { urls, _ in
             let files = urls.filter(\.isFileURL)
+            if !files.isEmpty { DragSourceView.noteDropInBarnOwl() }
             clipboard.addToShelf(files)
             return !files.isEmpty
         } isTargeted: { dropTargeted = $0 }
@@ -180,6 +183,8 @@ private struct ClipRow: View {
 struct ShelfTile: View {
     let url: URL
     let remove: () -> Void
+    /// The file was dragged out and dropped somewhere.
+    let takenOut: ([URL]) -> Void
     @State private var hovering = false
 
     var body: some View {
@@ -191,6 +196,7 @@ struct ShelfTile: View {
         }
         .frame(width: 96, height: 100)
         .background(Color.primary.opacity(hovering ? 0.1 : 0.04), in: .rect(cornerRadius: 10))
+        .overlay(FileDragSource(urls: { [url] }, takenOut: takenOut))
         .overlay(alignment: .topTrailing) {
             if hovering {
                 Button(action: remove) {
@@ -198,11 +204,10 @@ struct ShelfTile: View {
                 }
                 .buttonStyle(.plain)
                 .padding(4)
-                .accessibilityLabel("Remove from shelf")
+                .accessibilityLabel("Remove from the nest")
             }
         }
         .onHover { hovering = $0 }
-        .draggable(url)
         .help(url.path)
     }
 }

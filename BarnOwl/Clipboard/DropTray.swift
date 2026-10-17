@@ -73,6 +73,7 @@ final class DropTray {
     func receive(_ urls: [URL]) {
         let files = urls.filter(\.isFileURL)
         guard !files.isEmpty else { return }
+        DragSourceView.noteDropInBarnOwl()
         clipboard.addToShelf(files)
         justReceived = true
         Task { [weak self] in
@@ -108,6 +109,14 @@ final class DropTray {
         if clipboard.shelf.isEmpty { settle() }
     }
 
+    /// Files dragged out and dropped somewhere: they've left the nest,
+    /// unless you'd rather keep them (Settings → Clipboard).
+    func takenOut(_ urls: [URL]) {
+        guard !Preferences.nestKeepsDraggedFiles else { return }
+        clipboard.removeFromShelf(urls)
+        if clipboard.shelf.isEmpty { settle() }
+    }
+
     private func collapseLater(after seconds: Double) {
         collapseTask?.cancel()
         collapseTask = Task { [weak self] in
@@ -126,11 +135,13 @@ final class DropTray {
     /// Back to rest: a tab if something's held (and the tab is wanted), else nothing.
     func settle() {
         isTargeted = false
+        clipboard.pruneShelf()
         let showTab = Preferences.dropTrayEnabled && Preferences.dropTrayTab && !clipboard.shelf.isEmpty
         set(showTab ? .tab : .hidden)
     }
 
     private func set(_ newMode: Mode) {
+        if newMode == .open || newMode == .tab { clipboard.pruneShelf() }
         mode = newMode
         if newMode == .hidden {
             outsideClicks.stop()
@@ -203,8 +214,20 @@ struct DropTrayView: View {
             .contentShape(.capsule)
         }
         .buttonStyle(.plain)
-        .help("Your shelf: click or hover to drag files out")
-        .accessibilityLabel("Shelf, \(files.count) files")
+        .help("The nest: click or hover to drag files out")
+        .accessibilityLabel("Nest, \(files.count) files")
+    }
+
+    /// A handle that drags every file at once.
+    private var dragAll: some View {
+        Label("Drag all \(files.count)", systemImage: "square.stack.3d.up.fill")
+            .font(.caption.weight(.semibold))
+            .padding(.horizontal, 10)
+            .frame(height: 24)
+            .background(Color.accentColor.opacity(0.2), in: .capsule)
+            .overlay(FileDragSource(urls: { files }, takenOut: { tray.takenOut($0) }))
+            .help("Drag all the files in the nest at once")
+            .accessibilityLabel("Drag all \(files.count) files")
     }
 
     private var expanded: some View {
@@ -235,12 +258,13 @@ struct DropTrayView: View {
                         WatchingOwl(happy: tray.justReceived).frame(width: 22, height: 22)
                         Text("The nest").font(.headline)
                         Spacer()
+                        if files.count > 1 { dragAll }
                     }
                 }
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 8) {
                         ForEach(files, id: \.self) { url in
-                            ShelfTile(url: url) { tray.remove(url) }
+                            ShelfTile(url: url, remove: { tray.remove(url) }, takenOut: { tray.takenOut($0) })
                         }
                     }
                 }
@@ -252,7 +276,9 @@ struct DropTrayView: View {
                             .font(.caption.weight(.semibold)).foregroundStyle(Brand.amber)
                             .transition(.scale.combined(with: .opacity))
                     } else {
-                        Text("Drag files out to use them").font(.caption).foregroundStyle(.secondary)
+                        Text(Preferences.nestKeepsDraggedFiles ? "Drag files out to use them"
+                                                                 : "Drag files out to take them")
+                            .font(.caption).foregroundStyle(.secondary)
                     }
                     Spacer()
                     Button("Clear") { tray.clear() }.buttonStyle(.borderless).font(.caption)

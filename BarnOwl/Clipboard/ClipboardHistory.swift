@@ -200,8 +200,22 @@ final class ClipboardHistory {
     }
 
     func removeFromShelf(_ url: URL) {
-        shelf.removeAll { $0 == url }
+        removeFromShelf([url])
+    }
+
+    func removeFromShelf(_ urls: [URL]) {
+        shelf.removeAll { urls.contains($0) }
         save()
+    }
+
+    /// Lets go of files that were moved or deleted since they were dropped.
+    func pruneShelf() {
+        guard !DemoMode.isOn else { return }
+        let existing = shelf.filter { FileManager.default.fileExists(atPath: $0.path) }
+        if existing.count != shelf.count {
+            shelf = existing
+            save()
+        }
     }
 
     func clearShelf() {
