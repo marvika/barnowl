@@ -3,7 +3,7 @@
 All notable changes to Barn Owl. Versions follow [semantic versioning](https://semver.org);
 before 1.0, a minor version can change behaviour.
 
-## Unreleased
+## 0.8.0
 
 - Barn Owl can update itself. On the second launch it asks whether to check
   automatically (once a day), and it always asks before installing. Change
@@ -11,6 +11,8 @@ before 1.0, a minor version can change behaviour.
   the bottom of the quick panel.
 - The Homebrew cask is marked as updating itself, so `brew upgrade` leaves it
   alone.
+- Clicking an owl in Settings → Appearance now always switches its colours.
+  Before, a click on the owl itself was sometimes ignored.
 
 ## 0.7.1
 
