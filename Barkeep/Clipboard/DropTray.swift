@@ -63,7 +63,7 @@ final class DropTray {
 
     private func mouseUp() {
         guard mode == .receiving else { return }
-        // Let the drop land first, then step back.
+        // Let the drop land first; a drop switches to .open on its own.
         collapseLater(after: 1.2)
     }
 
@@ -72,7 +72,9 @@ final class DropTray {
         let files = urls.filter(\.isFileURL)
         guard !files.isEmpty else { return }
         clipboard.addToShelf(files)
-        collapseLater(after: 1.5)
+        // Show what's held now, then tuck away once the pointer leaves.
+        set(.open)
+        if !hovering { collapseLater(after: 2) }
     }
 
     func hover(_ inside: Bool) {
@@ -80,7 +82,7 @@ final class DropTray {
         if inside {
             collapseTask?.cancel()
             if mode == .tab { set(.open) }
-        } else if mode == .open {
+        } else if mode == .open || mode == .receiving {
             collapseLater(after: 1.5)
         }
     }
@@ -145,6 +147,9 @@ final class DropTray {
     private func makePanel() -> FloatingPanel {
         let panel = FloatingPanel(rootView: DropTrayView(tray: self))
         panel.level = .statusBar
+        // The glass draws its own edge; a window shadow would outline the
+        // panel's full (larger, transparent) frame.
+        panel.hasShadow = false
         panel.onResize = { [weak self] in self?.place($0) }
         return panel
     }
@@ -220,6 +225,7 @@ struct DropTrayView: View {
                     }
                 }
                 .frame(height: 104)
+                .frame(maxWidth: .infinity, alignment: .center)
                 HStack {
                     Text("Drag files out to use them").font(.caption).foregroundStyle(.secondary)
                     Spacer()
@@ -228,7 +234,7 @@ struct DropTrayView: View {
             }
         }
         .padding(12)
-        .frame(width: files.isEmpty ? 300 : min(CGFloat(files.count) * 104 + 24, 560))
+        .frame(width: max(320, min(CGFloat(files.count) * 104 + 24, 560)))
         .glassEffect(.regular, in: .rect(cornerRadius: 18))
         .dropDestination(for: URL.self) { urls, _ in
             tray.receive(urls)
