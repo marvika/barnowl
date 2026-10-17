@@ -43,7 +43,8 @@ struct ClipboardView: View {
         }
         .frame(width: 460)
         .glassEffect(.regular, in: .rect(cornerRadius: 18))
-        .padding(10)
+        .shadow(color: .black.opacity(0.28), radius: 14, y: 6)
+        .padding(FloatingPanel.shadowInset)
         .onAppear { focused = true }
     }
 

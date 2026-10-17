@@ -41,6 +41,7 @@ final class ItemImageCache {
 
     /// This run's capture, else the last one saved for the same icon.
     func image(for item: MenuBarItem) -> NSImage? {
+        if DemoMode.isOn { return DemoMode.image(for: item) }
         if let image = images[item.windowID] { return image }
         if let image = saved[item.key] { return image }
         guard let url = Self.file(for: item.key), let image = NSImage(contentsOf: url) else { return nil }
@@ -68,6 +69,7 @@ final class ItemImageCache {
     /// their last picture. With `pruning`, `items` is the full list and
     /// pictures of windows not in it are dropped.
     func capture(_ items: [MenuBarItem], pruning: Bool = true) async {
+        guard !DemoMode.isOn else { return }
         guard Self.hasPermission, let screen = NSScreen.screens.first else { return }
         lastCapture = Date()
         defer { lastCapture = Date() }

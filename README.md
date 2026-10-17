@@ -1,108 +1,188 @@
-# Barkeep
+<p align="center">
+  <img src="docs/images/hero.png" alt="Barkeep: a tidy menu bar with the Barkeep Bar and the keep-awake panel open" width="900">
+</p>
 
-A tidier macOS menu bar, and a Mac that stays awake when you need it to.
-Open source (MIT), for macOS 26 Tahoe and macOS 27.
+<p align="center">
+  <b>A tidier menu bar, and a Mac that stays awake when you need it to.</b><br>
+  Free and open source, for macOS 26 Tahoe.
+</p>
 
-- **Hide the clutter.** An arrow and a `|` divider split your menu bar. Icons
-  left of the divider are hidden until you click the arrow. An optional `⋮`
-  divider adds an always-hidden section.
-- **Arrange without fiddling.** Settings → Layout shows every icon with its
-  real picture. Drag icons between Menu bar, Hidden, Always hidden and your
-  groups, and Barkeep moves the real icons. Right-click any icon for "Always
-  Show in Menu Bar", "Hide" and more.
-- **Groups.** A group is one icon in the menu bar, for example a briefcase for
-  "Work", that opens a strip with its icons.
-- **Icons stay put.** Barkeep remembers where each icon belongs and puts it
-  back when an app relaunches. New icons go to Hidden (or the menu bar, if
-  you prefer).
-- **Show on change.** Right-click an icon and choose "Show When It Changes":
-  when its status changes (OneDrive starts syncing, a VPN drops), it shows
-  next to the arrow for a while, then hides again.
-- **Presenter mode.** Starts by itself when you share or record your screen
-  (or from the quick panel or a shortcut): every other app's icon goes out of
-  sight, the Mac stays awake, and everything comes back afterwards. Optional:
-  hide desktop icons too.
-- **A layout for your desk.** Optionally keep one layout for the laptop screen
-  and another while an external display is connected; Barkeep switches when
-  you dock.
-- **Barkeep Bar.** On a notched MacBook there's only room for a few icons.
-  The Barkeep Bar shows hidden icons, and any stuck behind the notch, in a
-  strip under the menu bar. Click one and its menu opens right there.
-- **Search and commands.** Press ⌃⌥⌘M and type to find and open any menu bar
-  icon, or type a command: "awake 2h", "dark", "present", "mute", "arrange".
-- **Custom icons.** Right-click an icon and choose "Replace Icon…" to show a
-  symbol, text or emoji instead (say "VPN" for Zscaler); it opens the real
-  icon's menu.
-- **Clipboard history and shelf.** ⌃⌥⌘V shows what you copied; Return pastes
-  it into the app you were using. Password-manager copies are never recorded.
-  Start dragging files and a drop tray slides out under the notch: drop them
-  there to hold them, and drag them out again whenever you need them (a small
-  tab under the notch shows what's held).
-- **Appearance.** Optional menu bar tint (off by default; full width, rounded
-  or split around the notch) and icon spacing, so more icons fit beside the
-  notch.
-- **Hover or scroll to reveal** hidden icons (optional).
-- **Keep awake.** Everything most people use Amphetamine for: for a set time,
-  until a time, while an app runs, until downloads finish, or by rules (on
-  power with an external display, during calls, on a schedule…). Stops below
-  a battery level, can keep Teams and Slack from showing you as Away, and has
-  an optional closed-lid mode.
-- **Quick panel.** Click the cup icon for keep awake and toggles: dark mode,
-  microphone mute, hide desktop icons, hidden files, sleep display.
-- **Guided setup and a System Settings–style Settings window.**
+<p align="center">
+  <a href="https://github.com/marvika/macos-menubar/releases/latest">Download</a> ·
+  <a href="docs/user-guide.md">User guide</a> ·
+  <a href="docs/how-it-works.md">How it works</a> ·
+  <a href="docs/ROADMAP.md">Roadmap</a>
+</p>
 
-## Using it
+---
 
-| Action | How |
-|---|---|
-| Show hidden icons | Click the arrow, or press ⌃⌥⌘B |
-| Search the menu bar | ⌃⌥⌘M |
-| Show every icon | Option-click the arrow |
-| Keep awake and toggles | Click the cup, or right-click the arrow |
-| Start or stop keep awake | Option-click the cup |
-| Arrange icons and groups | Settings → Layout, or ⌘-drag in the menu bar |
-| Clipboard history | ⌃⌥⌘V |
+Barkeep does two jobs that usually take two apps:
 
-### Shortcuts, Terminal and links
+- **It tidies your menu bar.** It hides the icons you rarely use, keeps the ones
+  you do in sight, and makes sure nothing gets lost behind the notch.
+- **It keeps your Mac awake.** For an hour, until a time, while an app runs, or
+  automatically by rules.
 
-Barkeep adds Shortcuts actions: Keep Mac Awake, Stop Keeping Mac Awake, Set
-Presenter Mode, Show or Hide Menu Bar Icons, Open Menu Bar Icon and Show
-Clipboard History.
+Around those it adds a few everyday tools you'll reach for: search, quick
+toggles, clipboard history and a drop tray for files.
 
-`Scripts/install.sh` also installs a `barkeep` command:
+## A tidy menu bar
 
-```
-barkeep awake 90          barkeep awake stop        barkeep present on
-barkeep open zscaler      barkeep place zscaler hidden
-barkeep icon zscaler VPN  barkeep watch onedrive    barkeep clipboard
-```
+<img src="docs/images/menu-bar.png" alt="A tidy menu bar: battery, Wi-Fi, a Work group, the keep-awake cup, Barkeep's arrow, Control Center and the clock" width="560">
 
-Everything is also available as `barkeep://` links (`barkeep://keep-awake?minutes=60`,
-`barkeep://open?app=OneDrive`, `barkeep://settings?pane=layout`…), for Raycast
-and the like.
+Barkeep adds an arrow to your menu bar. Everything you don't need right now
+waits behind it. Click the arrow, press **⌃⌥⌘B**, hover or scroll, and your
+hidden icons appear in the **Barkeep Bar**, a strip under the menu bar. Click
+any icon there and its menu opens as usual. On a notched MacBook this is also
+where icons that would otherwise sit behind the notch end up.
+
+<img src="docs/images/barkeep-bar.png" alt="The Barkeep Bar showing hidden and always-hidden icons" width="420">
+
+### Arrange by dragging
+
+Settings → Layout shows every icon with its real picture. Drag icons between
+**Menu bar**, **Hidden**, **Always hidden** and your groups, and Barkeep moves
+the real icons for you. There's no ⌘-dragging tiny icons, and nothing to lose
+behind the notch. Right-click any icon for **Always Show in Menu Bar**,
+**Hide**, **Replace Icon…** and more.
+
+<img src="docs/images/settings-layout.png" alt="The Layout editor in Barkeep Settings" width="640">
+
+Icons stay where you put them. When an app restarts and macOS drops its icon
+somewhere else, Barkeep puts it back. New apps' icons go to Hidden, or to the
+menu bar if you prefer.
+
+### Groups and custom icons
+
+<img src="docs/images/group.png" alt="A Work group open, showing a VPN, mail and chat icon" width="280" align="right">
+
+A **group** is one icon in the menu bar that opens a strip of others. For
+example, a briefcase can hold your VPN, mail and chat apps. You can also
+**replace any app's icon** with a symbol, an emoji or a bit of text, such as
+"VPN". Clicking it opens the app's menu.
+
+### It notices what matters
+
+- **Show when it changes:** a hidden icon pops into view for a while when it
+  changes. Your VPN dropped? Your cloud drive is out of sync? You'll see it.
+- **Presenter mode:** sharing your screen in a call hides every icon
+  automatically and keeps your Mac awake, then puts everything back when
+  you stop.
+- **Separate desk layout:** a roomier menu bar when an external display is
+  connected, and a tight one on the laptop screen.
+
+## Keep awake
+
+<img src="docs/images/quick-panel.png" alt="The quick panel: keep awake for 2 h 15 min more, add-time buttons, and toggles" width="380" align="right">
+
+Click the cup for the quick panel. Barkeep can keep your Mac awake:
+
+- **For a while:** 15 minutes, 1 hour, 2 hours, 4 hours, or until you stop it.
+  The time left counts down next to the cup, and you can add time with one
+  click.
+- **Until a time:** for example, until 17:30.
+- **While an app runs:** say, while your build or a video export runs.
+- **Until downloads finish.**
+- **Automatically, with rules:** on power with an external display, during
+  calls (whenever your microphone is in use), on weekdays 08:00–17:00, while
+  Docker runs… You can combine conditions.
+
+It stops below a battery level you choose. **Keep me available** stops Teams
+and Slack from marking you Away. There's also an optional **closed-lid mode**.
+
+<img src="docs/images/menu-bar-countdown.png" alt="The cup in the menu bar showing 2:15 left" width="560">
+
+The quick panel also has one-click toggles: presenter mode, dark mode,
+microphone mute, hide desktop icons, show hidden files and sleep display.
+
+## Find anything, do anything
+
+Press **⌃⌥⌘M** and type. You can find any menu bar icon, even hidden ones,
+and press Return to open it. You can also type a command:
+
+<img src="docs/images/search-commands.png" alt="Search showing keep-awake commands for the query awake" width="460">
+
+`awake 2h` · `awake +30` · `dark` · `present` · `mute` · `arrange` · `clipboard`
+
+## Clipboard history and a drop tray
+
+<img src="docs/images/clipboard.png" alt="Clipboard history with a pinned entry, a link and a file" width="420" align="right">
+
+**⌃⌥⌘V** shows what you've copied: text, links, images and files. Press Return
+to paste into the app you were using. Pin what you use often. Copies from
+password managers are never recorded.
+
+Start dragging files in any app and a **drop tray** slides out under the
+notch. Drop files there to hold them, then drag them out later, wherever you
+need them.
+
+<img src="docs/images/drop-tray.png" alt="The drop tray holding three files" width="380">
 
 ## Download
 
-Requires macOS 26 Tahoe on a Mac with Apple silicon or Intel.
+Requires macOS 26 Tahoe, on Apple silicon or Intel.
 
-1. Download `Barkeep-x.y.z.zip` from the latest
-   [release](https://github.com/marvika/macos-menubar/releases) and open it.
-2. Drag **Barkeep** into your Applications folder.
-3. Open it. Barkeep isn't notarized by Apple yet, so the first time macOS says
-   it can't verify the app. Click **Done**, then open **System Settings →
-   Privacy & Security**, scroll down and click **Open Anyway** next to the
-   Barkeep message. Confirm with **Open**. You only do this once.
-4. The setup guide walks you through the rest, including allowing
-   **Accessibility** and **Screen Recording** in System Settings.
+1. Download **Barkeep-x.y.z.zip** from the
+   [latest release](https://github.com/marvika/macos-menubar/releases/latest)
+   and open it.
+2. Drag **Barkeep** into your Applications folder and open it.
+3. Barkeep isn't notarized by Apple yet, so the first time macOS says it can't
+   verify the app. Click **Done**, then open **System Settings → Privacy &
+   Security**, scroll down and click **Open Anyway** next to the Barkeep
+   message. You only do this once.
+4. The setup guide takes it from there.
 
-Optional: to use the `barkeep` command in Terminal, download `barkeep` from
-the same release and run:
+<p>
+  <img src="docs/images/setup-welcome.png" alt="Setup: welcome" width="270">
+  <img src="docs/images/setup-display.png" alt="Setup: where hidden icons appear, and permissions" width="270">
+  <img src="docs/images/setup-layout.png" alt="Setup: choose what stays visible" width="270">
+</p>
 
-```bash
-chmod +x ~/Downloads/barkeep && mv ~/Downloads/barkeep /opt/homebrew/bin/
-```
+Prefer building it yourself? See [Building from source](#building-from-source).
 
-## Installing from source
+## Keyboard shortcuts
+
+| | |
+|---|---|
+| Show or hide hidden icons | ⌃⌥⌘B |
+| Search the menu bar, run a command | ⌃⌥⌘M |
+| Clipboard history | ⌃⌥⌘V |
+| Show every icon | Option-click the arrow |
+| Keep awake on or off | Option-click the cup |
+| Keep awake, presenter mode | Set your own in Settings → Shortcuts |
+
+## Automation
+
+- **Shortcuts:** Keep Mac Awake, Stop Keeping Mac Awake, Set Presenter Mode,
+  Show or Hide Menu Bar Icons, Open Menu Bar Icon, Show Clipboard History.
+- **Terminal:** the `barkeep` command (on the release page, or installed by
+  `Scripts/install.sh`):
+
+  ```
+  barkeep awake 90        barkeep awake +30       barkeep present on
+  barkeep open vpn        barkeep place mail hidden
+  barkeep icon vpn VPN    barkeep watch "cloud drive"
+  ```
+
+- **Links,** for Raycast, Alfred and scripts: `barkeep://keep-awake?minutes=60`,
+  `barkeep://open?app=Mail`, `barkeep://settings?pane=layout` and more. See the
+  [user guide](docs/user-guide.md#automation).
+
+## Privacy and permissions
+
+Barkeep works entirely on your Mac. It has no accounts, no analytics and no
+network requests.
+
+- **Accessibility** lets it list menu bar icons, move them and open them.
+- **Screen Recording** lets it show real pictures of hidden icons. Without
+  it, you see app icons instead.
+
+Clipboard history stays on your Mac, skips password managers and never saves
+images to disk. You can switch it off in Settings → Clipboard.
+
+## Building from source
+
+Requires Xcode 26 or later and [XcodeGen](https://github.com/yonaskolb/XcodeGen).
 
 ```bash
 brew install xcodegen
@@ -110,88 +190,34 @@ Scripts/install.sh
 ```
 
 This builds a Release copy, installs it in /Applications, puts the `barkeep`
-command on your PATH and starts Barkeep. Run it again to update.
+command on your PATH and starts Barkeep. Run it again to update. macOS trusts
+apps built on the same Mac, so there's no "Open Anyway" step.
 
-Building it yourself avoids the "can't verify" step, since macOS trusts apps
-built on the same Mac.
-
-## Building
-
-Requires Xcode 26 or later and [XcodeGen](https://github.com/yonaskolb/XcodeGen).
-
-```bash
-brew install xcodegen
-xcodegen generate
-open Barkeep.xcodeproj
-```
-
-Builds are ad-hoc signed by default. macOS ties Accessibility permission to
-the signature, so an ad-hoc build loses it on every rebuild. To keep it, copy
-`Config/Local.xcconfig.example` to `Config/Local.xcconfig` (git-ignored) and
-set your team ID.
-
-Run the tests with:
+For development, run `xcodegen generate`, open `Barkeep.xcodeproj` and run the
+tests:
 
 ```bash
 xcodebuild -project Barkeep.xcodeproj -scheme Barkeep test
 ```
 
-## Permissions
+Builds are ad-hoc signed by default, and macOS forgets an ad-hoc build's
+permissions on every rebuild. To keep them, copy
+`Config/Local.xcconfig.example` to `Config/Local.xcconfig` and set your team
+ID.
 
-- **Accessibility** lets Barkeep list menu bar icons and open them from the
-  Barkeep Bar and search.
-- **Screen Recording** lets the Barkeep Bar show real pictures of hidden icons
-  instead of app icons. macOS applies it after Barkeep relaunches.
+The screenshots come from a demo copy with made-up icons and data:
+`Scripts/demo.sh` starts it, and `Scripts/demo.sh stop` brings your own
+Barkeep back.
 
-Hiding itself needs neither on macOS 26.
-
-## How it works
-
-Barkeep isn't sandboxed and can't be on the App Store: reading other apps'
-menu bar items needs Accessibility, and macOS 27 hiding uses a private API.
-
-- **macOS 26:** the `|` divider is a status item whose width grows to about
-  the screen width, pushing everything to its left off screen
-  (`LengthEngine`). Needs no permissions. On first launch Barkeep seeds
-  `NSStatusItem Preferred Position` so its arrow sits next to Control Center,
-  not behind the notch.
-- **macOS 27:** the system drops over-wide status items, so Barkeep reads
-  which apps sit left of the divider through Accessibility and asks macOS to
-  show only the rest, through MenuBarClientCore's assessment-mode restriction
-  (`NativeVisibilityEngine`). Hiding is per app there, and system items always
-  stay. **Not yet tested on macOS 27.**
-- **Finding items:** on macOS 26 every menu bar item window belongs to
-  Control Center, so Barkeep reads each app's `AXExtrasMenuBar` items and
-  matches them to windows by position (`ItemScanner`).
-- **Pictures:** macOS 26 won't capture off-screen windows (ScreenCaptureKit
-  fails, and the old CGWindowList calls return nothing), so Barkeep takes one
-  ScreenCaptureKit shot of the menu bar strip whenever icons are showing and
-  keeps the crops (`ItemImageCache`).
-- **Moving icons:** a synthetic ⌘-drag whose mouse-down lands on Barkeep's own
-  arrow and is routed to the target icon by event field `0x33`, so even
-  off-screen icons can be moved and no other app's icon is ever clicked
-  (`ItemMover`, Frost's technique).
-- **Opening a hidden item:** a hidden item ignores presses, so Barkeep moves it
-  next to the icon you clicked, presses it through Accessibility (falling back
-  to a real click), and moves it back once its menu closes (`ItemOpener`).
-- **Show on change:** macOS can't photograph hidden icons, so Barkeep watches
-  what it can read (status text, width, the app re-adding the icon) every few
-  seconds, and after a network change (or every few minutes, if you opt in)
-  slides watched icons into view for a moment to compare their pictures.
-- **Presenter mode** spots screen sharing from Control Center's own
-  "Screen Recording is in use" description, and ignores the few seconds after
-  Barkeep's own icon pictures, which light up the same indicator.
-- **Pictures** are kept in `~/Library/Application Support/Barkeep/Icons`, so
-  they survive relaunches.
-- **Keep awake** holds an `IOPMAssertion`, like `caffeinate` and Amphetamine.
-
-Both engines sit behind the `HidingEngine` protocol, so a future macOS only
-needs a new engine. See [docs/ROADMAP.md](docs/ROADMAP.md) for what's next.
-
-## Prior art
+## Credits
 
 Barkeep learned from [Hidden Bar](https://github.com/dwarvesf/hidden) and
-[Frost](https://github.com/frostbar/frost) (both MIT; see
-[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)), and from reading
+[Frost](https://github.com/frostbar/frost), both MIT; see
+[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md). It also learned from reading
 [Ice](https://github.com/jordanbaird/Ice) and
-[Thaw](https://github.com/thaw-app/Thaw) (GPL-3; no code copied).
+[Thaw](https://github.com/thaw-app/Thaw), both GPL-3; no code was copied.
+Hotkeys use [KeyboardShortcuts](https://github.com/sindresorhus/KeyboardShortcuts).
+
+## License
+
+[MIT](LICENSE)

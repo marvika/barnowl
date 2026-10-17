@@ -141,7 +141,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             DispatchQueue.main.async { self.application(NSApp, open: urls) }
         }
 
-        if Preferences.hasShownWelcome {
+        if DemoMode.isOn {
+            scanner.loadDemo(DemoMode.items())
+            model.refreshPermissions()
+            Task {
+                try? await Task.sleep(for: .milliseconds(500))
+                self.sections.collapse()
+            }
+            if !Preferences.hasShownWelcome { onboardingWindow.show() }
+        } else if Preferences.hasShownWelcome {
             // Everything is showing right after launch: list the items and take
             // their pictures before hiding, so the Barkeep Bar has them.
             Task {

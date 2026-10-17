@@ -4,6 +4,9 @@ import SwiftUI
 /// A borderless panel that floats above the menu bar and can take keyboard
 /// focus, for the Barkeep Bar and search.
 final class FloatingPanel: NSPanel {
+    /// Transparent room around a panel's content for its shadow.
+    static let shadowInset: CGFloat = 20
+
     var onCancel: (() -> Void)?
     /// Called whenever the content changes size, so the owner can keep the
     /// panel anchored (SwiftUI grows it from the bottom-left corner otherwise).
@@ -15,7 +18,9 @@ final class FloatingPanel: NSPanel {
         level = .popUpMenu
         isOpaque = false
         backgroundColor = .clear
-        hasShadow = true
+        // The window shadow would outline the whole (larger, transparent)
+        // frame; panels draw their own shadow around the glass instead.
+        hasShadow = false
         isMovable = false
         hidesOnDeactivate = false
         collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .transient]
@@ -38,10 +43,11 @@ final class FloatingPanel: NSPanel {
     func place(under anchor: NSRect, alignRight: Bool = false) {
         guard let screen = NSScreen.screens.first(where: { $0.frame.intersects(anchor) }) ?? NSScreen.main else { return }
         let size = frame.size
-        // The SwiftUI content adds 8 pt of transparent padding for the shadow.
-        var x = alignRight ? anchor.maxX - size.width + 8 : anchor.midX - size.width / 2
-        x = min(max(x, screen.frame.minX + 4), screen.frame.maxX - size.width - 4)
-        setFrameOrigin(NSPoint(x: x, y: screen.visibleFrame.maxY - size.height + 4))
+        // The content has transparent room around it for the shadow.
+        let inset = Self.shadowInset
+        var x = alignRight ? anchor.maxX - size.width + inset : anchor.midX - size.width / 2
+        x = min(max(x, screen.frame.minX + 4 - inset), screen.frame.maxX - size.width - 4 + inset)
+        setFrameOrigin(NSPoint(x: x, y: screen.visibleFrame.maxY - size.height + inset - 4))
     }
 
     override var canBecomeKey: Bool { true }

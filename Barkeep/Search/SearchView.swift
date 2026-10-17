@@ -85,7 +85,8 @@ struct SearchView: View {
         }
         .frame(width: 560)
         .glassEffect(.regular, in: .rect(cornerRadius: 18))
-        .padding(10)
+        .shadow(color: .black.opacity(0.28), radius: 14, y: 6)
+        .padding(FloatingPanel.shadowInset)
         .onAppear {
             query = ""
             selection = 0
@@ -143,6 +144,7 @@ struct SearchView: View {
     }
 
     private func badge(for item: MenuBarItem) -> String {
+        if let group = model.groups.group(containing: item.key) { return "In \(group.name)" }
         if item.isBehindNotch { return "Behind notch" }
         switch item.section {
         case .visible: return "Visible"

@@ -106,6 +106,7 @@ final class PresenterMode {
     /// Starts when screen sharing starts, and stops when it stops, unless
     /// the user started presenting by hand.
     private func checkSharing() async {
+        guard !DemoMode.isOn else { return }
         guard Preferences.presenterAutomatic else { return }
         // Barkeep's own icon pictures light up the same indicator for a few
         // seconds; ignore it then, and require it to stay on for two checks.

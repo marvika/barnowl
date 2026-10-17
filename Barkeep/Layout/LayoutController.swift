@@ -224,6 +224,7 @@ final class LayoutController {
     /// Moves an icon into a row, before another icon if given (else at the
     /// row's end, nearest the arrow).
     func place(_ key: String, in row: LayoutRow, before beforeKey: String? = nil, isCorrection: Bool = false) async {
+        guard !DemoMode.isOn else { return }
         if !isCorrection { limiter.reset(key) }
         guard let item = scanner.items.first(where: { $0.key == key }) else { return }
         guard item.isMovable else {
@@ -276,6 +277,7 @@ final class LayoutController {
     /// new icons where the user wants them, and learn from the user's own
     /// ⌘-drags. Skipped while Barkeep itself is moving things.
     func reconcile() async {
+        guard !DemoMode.isOn else { return }
         guard !isBusy, !isReconciling, !isPaused(), !sections.holdOpen, sections.state == .collapsed,
               !scanner.items.isEmpty else { return }
         isReconciling = true

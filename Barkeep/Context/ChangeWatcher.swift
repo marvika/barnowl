@@ -86,6 +86,7 @@ final class ChangeWatcher {
     }
 
     private func tick() async {
+        guard !DemoMode.isOn else { return }
         guard !isPaused() else { return }
         await hideExpired()
         guard !watchedKeys.isEmpty, !layout.isBusy, !mover.isMoving else { return }

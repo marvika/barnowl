@@ -159,7 +159,8 @@ final class DropTray {
         guard let screen = NSScreen.screens.first else { return }
         let centre = NotchGeometry.of(screen).map { ($0.minX + $0.maxX) / 2 } ?? screen.frame.midX
         let size = panel.frame.size
-        panel.setFrameOrigin(NSPoint(x: centre - size.width / 2, y: screen.visibleFrame.maxY - size.height + 6))
+        panel.setFrameOrigin(NSPoint(x: centre - size.width / 2,
+                                     y: screen.visibleFrame.maxY - size.height + FloatingPanel.shadowInset - 2))
     }
 }
 
@@ -177,7 +178,7 @@ struct DropTrayView: View {
             }
         }
         .onHover { tray.hover($0) }
-        .padding(6)
+        .padding(FloatingPanel.shadowInset)
         .animation(.spring(duration: 0.3), value: tray.mode)
     }
 
@@ -236,6 +237,7 @@ struct DropTrayView: View {
         .padding(12)
         .frame(width: max(320, min(CGFloat(files.count) * 104 + 24, 560)))
         .glassEffect(.regular, in: .rect(cornerRadius: 18))
+        .shadow(color: .black.opacity(0.28), radius: 14, y: 6)
         .dropDestination(for: URL.self) { urls, _ in
             tray.receive(urls)
             return true

@@ -1,0 +1,70 @@
+#!/bin/zsh
+# Runs Barkeep in demo mode for screenshots: a separate copy with its own
+# settings and a made-up menu bar, so nothing real is shown or changed.
+#
+#   Scripts/demo.sh           start the demo (quits your Barkeep)
+#   Scripts/demo.sh setup     start it with the setup guide showing
+#   Scripts/demo.sh stop      quit the demo and start your Barkeep again
+set -euo pipefail
+cd "${0:A:h}/.."
+
+domain=io.github.marvika.Barkeep.demo
+demo="build/Demo/Barkeep.app"
+
+if [[ "${1:-}" == stop ]]; then
+  pkill -f "build/Demo/Barkeep.app" 2>/dev/null || true
+  open /Applications/Barkeep.app 2>/dev/null || true
+  exit 0
+fi
+
+echo "› Building"
+xcodegen generate --quiet
+xcodebuild -project Barkeep.xcodeproj -scheme Barkeep -configuration Release \
+  -derivedDataPath build/Release build -quiet
+
+echo "› Making the demo copy"
+rm -rf build/Demo && mkdir -p build/Demo
+cp -R build/Release/Build/Products/Release/Barkeep.app "$demo"
+plutil -replace CFBundleIdentifier -string "$domain" "$demo/Contents/Info.plist"
+codesign --force --deep --sign - "$demo" 2>/dev/null
+
+echo "› Preparing demo settings and files"
+mkdir -p "/tmp/Barkeep Demo"
+for f in "Project Brief.pdf" "Roadmap.key" "Screenshot.png"; do : > "/tmp/Barkeep Demo/$f"; done
+defaults delete "$domain" 2>/dev/null || true
+python3 - "$domain" "${1:-}" <<'PY'
+import json, plistlib, subprocess, sys, uuid
+domain, mode = sys.argv[1], sys.argv[2]
+group = str(uuid.UUID("0D3E0000-0000-4000-8000-00000000C0DE"))
+settings = {
+    "BarkeepDemo": True,
+    "hasShownWelcome": mode != "setup",
+    "alwaysHiddenEnabled": True,
+    "appliedDefaultLayout": True,
+    "placedKeepAwakeIcon": True,
+    "hiddenIconsDisplay": "barkeepBar",
+    "keepAwakeRules": json.dumps([
+        {"id": "0D3E0000-0000-4000-8000-0000000001A1", "conditions": [{"onPower": {}}, {"externalDisplay": {}}],
+         "isEnabled": True, "allowDisplaySleep": False},
+        {"id": "0D3E0000-0000-4000-8000-0000000001A2", "conditions": [{"microphoneInUse": {}}],
+         "isEnabled": True, "allowDisplaySleep": False},
+        {"id": "0D3E0000-0000-4000-8000-0000000001A3",
+         "conditions": [{"schedule": {"weekdays": [2, 3, 4, 5, 6], "startMinute": 480, "endMinute": 1020}}],
+         "isEnabled": False, "allowDisplaySleep": True},
+    ]).encode(),
+    "groups": json.dumps([{"id": group, "name": "Work", "symbol": "briefcase.fill",
+                           "memberKeys": ["demo/VPN", "demo/Mail", "demo/Chat"]}]).encode(),
+    # Barkeep's own icons right of the divider (smaller is further right).
+    "NSStatusItem Preferred Position BarkeepToggle": 0.0,
+    "NSStatusItem Preferred Position BarkeepKeepAwake": 0.3,
+    "NSStatusItem Preferred Position BarkeepGroup-" + group: 0.6,
+    "NSStatusItem Preferred Position BarkeepSeparator": 1.0,
+    "NSStatusItem Preferred Position BarkeepAlwaysHidden": 10000.0,
+}
+subprocess.run(["defaults", "import", domain, "-"], input=plistlib.dumps(settings), check=True)
+PY
+
+echo "› Starting the demo"
+pkill -x Barkeep 2>/dev/null && sleep 1 || true
+open "$demo"
+echo "✓ Demo running. Scripts/demo.sh stop brings your Barkeep back."

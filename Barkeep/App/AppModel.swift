@@ -127,8 +127,8 @@ final class AppModel {
 
     func refreshPermissions() {
         let wasTrusted = accessibilityTrusted
-        accessibilityTrusted = AccessibilityInventory.isTrusted
-        screenRecordingAllowed = ItemImageCache.hasPermission
+        accessibilityTrusted = DemoMode.isOn || AccessibilityInventory.isTrusted
+        screenRecordingAllowed = DemoMode.isOn || ItemImageCache.hasPermission
         if accessibilityTrusted && !wasTrusted { scanner.refresh() }
     }
 

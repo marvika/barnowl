@@ -24,6 +24,7 @@ final class ItemOpener {
     /// Right of the anchor, because "left of" an icon that slides while the
     /// item is lifted lands one slot off.
     func open(_ item: MenuBarItem, near anchor: CGWindowID? = nil) {
+        guard !DemoMode.isOn else { return }
         openTask?.cancel()
         openTask = Task { await self.perform(item, anchor: anchor) }
     }

@@ -68,6 +68,12 @@ final class ClipboardHistory {
     }
 
     init() {
+        // Demo mode never reads or writes the real history.
+        if DemoMode.isOn {
+            entries = DemoMode.clipEntries()
+            shelf = DemoMode.shelfFiles
+            return
+        }
         if let url = Self.storeURL, let data = try? Data(contentsOf: url),
            let store = try? JSONDecoder().decode(Store.self, from: data) {
             entries = Preferences.clipboardRemember ? store.entries : store.entries.filter(\.isPinned)
@@ -85,6 +91,7 @@ final class ClipboardHistory {
     }
 
     private func check() {
+        guard !DemoMode.isOn else { return }
         let pasteboard = NSPasteboard.general
         guard pasteboard.changeCount != changeCount else { return }
         changeCount = pasteboard.changeCount
@@ -203,6 +210,7 @@ final class ClipboardHistory {
     }
 
     private func save() {
+        guard !DemoMode.isOn else { return }
         guard let url = Self.storeURL else { return }
         let kept = Preferences.clipboardRemember ? entries.filter { $0.kind != .image } : entries.filter(\.isPinned)
         try? FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)

@@ -28,7 +28,14 @@ final class ItemScanner {
         self.statusItems = statusItems
     }
 
+    /// Demo mode: a made-up list that's never rescanned.
+    func loadDemo(_ demoItems: [MenuBarItem]) {
+        items = demoItems
+        lastScan = Date()
+    }
+
     func start() {
+        guard !DemoMode.isOn else { return }
         // KVO rather than launch notifications: macOS doesn't post those for
         // LSUIElement apps, and most menu bar apps are one.
         appsObservation = NSWorkspace.shared.observe(\.runningApplications) { [weak self] _, _ in
@@ -53,6 +60,7 @@ final class ItemScanner {
 
     /// Starts a scan, or queues one if a scan is already running.
     func refresh() {
+        guard !DemoMode.isOn else { return }
         guard AccessibilityInventory.isTrusted else { return }
         if scanTask != nil {
             rescanRequested = true
@@ -79,6 +87,7 @@ final class ItemScanner {
     /// Updates frames and sections from the window list only. Cheap, so it can
     /// run right after the dividers move.
     func updateFrames() {
+        guard !DemoMode.isOn else { return }
         let windows = Dictionary(Self.statusWindows().map { ($0.windowID, $0.frame) }, uniquingKeysWith: { a, _ in a })
         items = classify(items.map { item in
             var item = item

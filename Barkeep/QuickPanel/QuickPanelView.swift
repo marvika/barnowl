@@ -18,7 +18,8 @@ struct QuickPanelView: View {
         .padding(14)
         .frame(width: 340)
         .glassEffect(.regular, in: .rect(cornerRadius: 18))
-        .padding(8)
+        .shadow(color: .black.opacity(0.28), radius: 14, y: 6)
+        .padding(FloatingPanel.shadowInset)
     }
 
     private var footer: some View {
