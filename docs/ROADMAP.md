@@ -46,12 +46,18 @@ Electron apps such as Docker Desktop, everything on macOS 27.
 
 Still to verify: display profiles with a real external display.
 
-## v0.5: Extras
+## v0.5: Extras (done)
 
-- Menu bar styling (tint, shapes, borders) and icon spacing
-- Custom icons for other apps' items; per-icon hotkeys
-- Hover or scroll to reveal hidden icons
-- Commands in search ("awake 2h", "dark")
-- Clipboard history and drag-and-drop shelf
-- Shortcuts actions (App Intents) and a CLI
-- App icon, Release build, Sparkle updates, notarization
+- Commands in search ("awake 2h", "dark", "present", "arrange"…)
+- Hover over the arrow or scroll over the menu bar to reveal (optional)
+- Menu bar tint and shapes (optional, off by default) and icon spacing
+- Custom icons for other apps' items (one-icon groups that open directly)
+- Clipboard history (password-manager safe) and a drag-and-drop shelf
+- Shortcuts actions, a `barkeep` command and more `barkeep://` links
+- App icon and `Scripts/install.sh` (Release build in /Applications)
+
+## Later
+
+- Notarization and automatic updates (need a Developer ID certificate)
+- Test on macOS 27 and place Barkeep's own icons there
+- Verify display profiles and closed-lid mode on real hardware

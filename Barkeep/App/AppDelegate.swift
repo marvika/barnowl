@@ -16,6 +16,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var search: SearchPanelController!
     private var groupIcons: GroupController!
     private var pendingURLs: [URL] = []
+    private var gestures: RevealGestures!
+    private var clipboardPanel: ClipboardPanelController!
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         // Unit tests run inside the app; don't touch the real menu bar then.
@@ -58,6 +60,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         quickPanel.syncCupIcon()
         keepAwake.start()
         model.watcher.start()
+        gestures = RevealGestures(statusItems: items, isCollapsed: { [weak self] in
+            self?.sections.state == .collapsed && self?.bar.isOpen == false
+        }, reveal: { [weak self] in self?.revealHiddenIcons() }, hide: { [weak self] in
+            self?.bar.close()
+            self?.sections.collapse()
+        })
+        gestures.start()
+        IntentBridge.model = model
+        IntentBridge.revealHiddenIcons = { [weak self] in self?.revealHiddenIcons() }
+        model.appearance.start()
+        model.clipboard.start()
+        clipboardPanel = ClipboardPanelController(clipboard: model.clipboard)
+        model.showClipboard = { [weak self] in self?.clipboardPanel.show() }
+        KeyboardShortcuts.onKeyUp(for: .clipboard) { [weak self] in self?.clipboardPanel.toggle() }
         sections.onScreensChanged = { [weak self] in
             Task {
                 // Give macOS a moment to settle the menu bar on the new displays.
@@ -139,7 +155,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     /// barkeep://settings, barkeep://setup, barkeep://search, barkeep://bar,
     /// barkeep://open?app=NAME, barkeep://place?app=NAME&row=hidden, barkeep://watch?app=NAME,
-    /// barkeep://presenter, barkeep://toggle, barkeep://show-all,
+    /// barkeep://icon?app=NAME&label=TEXT, barkeep://presenter, barkeep://toggle, barkeep://show-all,
     /// barkeep://hide, barkeep://keep-awake?minutes=60 (0 or none = indefinitely),
     /// barkeep://keep-awake/stop. For Shortcuts, Raycast and scripts.
     func application(_ application: NSApplication, open urls: [URL]) {
@@ -156,6 +172,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 let pane = query?.first { $0.name == "pane" }?.value.flatMap(SettingsPane.init(rawValue:))
                 model.showSettings(pane)
             case ("search", _): search.show()
+            case ("clipboard", _): clipboardPanel.show()
             case ("presenter", _):
                 // barkeep://presenter (toggle), ?on=1 or ?on=0
                 let on = query?.first { $0.name == "on" }?.value
@@ -171,6 +188,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     if let item = items.first(where: { $0.bundleIdentifier?.lowercased() == app })
                         ?? items.first(where: { $0.appName.lowercased() == app || $0.name.lowercased() == app }) {
                         await model.layout.place(item.key, in: row)
+                    }
+                }
+            case ("icon", _):
+                // barkeep://icon?app=Zscaler&label=VPN (or &symbol=lock.fill), &reset=1 to restore the original
+                guard let app = query?.first(where: { $0.name == "app" })?.value?.lowercased() else { break }
+                let value = { (name: String) in query?.first { $0.name == name }?.value }
+                Task {
+                    let items = await scanner.freshItems()
+                    guard let item = items.first(where: { $0.bundleIdentifier?.lowercased() == app })
+                        ?? items.first(where: { $0.appName.lowercased() == app || $0.name.lowercased() == app })
+                    else { return }
+                    if value("reset") == "1" {
+                        if let group = model.groups.group(containing: item.key), group.opensDirectly {
+                            await model.deleteGroup(group.id)
+                        }
+                    } else {
+                        await model.setCustomIcon(for: item, symbol: value("symbol") ?? "star.fill", label: value("label"))
                     }
                 }
             case ("watch", _):

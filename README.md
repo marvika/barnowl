@@ -28,7 +28,18 @@ Open source (MIT), for macOS 26 Tahoe and macOS 27.
 - **Barkeep Bar.** On a notched MacBook there's only room for a few icons.
   The Barkeep Bar shows hidden icons, and any stuck behind the notch, in a
   strip under the menu bar. Click one and its menu opens right there.
-- **Search.** Press ⌃⌥⌘M and type to find and open any menu bar icon.
+- **Search and commands.** Press ⌃⌥⌘M and type to find and open any menu bar
+  icon, or type a command: "awake 2h", "dark", "present", "mute", "arrange".
+- **Custom icons.** Right-click an icon and choose "Replace Icon…" to show a
+  symbol, text or emoji instead (say "VPN" for Zscaler); it opens the real
+  icon's menu.
+- **Clipboard history and shelf.** ⌃⌥⌘V shows what you copied; Return pastes
+  it into the app you were using. Password-manager copies are never recorded.
+  The shelf holds files you drop on it until you drag them out.
+- **Appearance.** Optional menu bar tint (off by default; full width, rounded
+  or split around the notch) and icon spacing, so more icons fit beside the
+  notch.
+- **Hover or scroll to reveal** hidden icons (optional).
 - **Keep awake.** Everything most people use Amphetamine for: for a set time,
   until a time, while an app runs, until downloads finish, or by rules (on
   power with an external display, during calls, on a schedule…). Stops below
@@ -48,19 +59,38 @@ Open source (MIT), for macOS 26 Tahoe and macOS 27.
 | Keep awake and toggles | Click the cup, or right-click the arrow |
 | Start or stop keep awake | Option-click the cup |
 | Arrange icons and groups | Settings → Layout, or ⌘-drag in the menu bar |
+| Clipboard history | ⌃⌥⌘V |
 
-### URL scheme
+### Shortcuts, Terminal and links
 
-For Shortcuts, Raycast or scripts:
+Barkeep adds Shortcuts actions: Keep Mac Awake, Stop Keeping Mac Awake, Set
+Presenter Mode, Show or Hide Menu Bar Icons, Open Menu Bar Icon and Show
+Clipboard History.
+
+`Scripts/install.sh` also installs a `barkeep` command:
 
 ```
-barkeep://toggle            barkeep://show-all          barkeep://hide
-barkeep://bar               barkeep://search            barkeep://open?app=OneDrive
-barkeep://place?app=Zscaler&row=hidden      barkeep://settings?pane=layout
-barkeep://watch?app=Zscaler     barkeep://presenter?on=1
-barkeep://keep-awake?minutes=60    barkeep://keep-awake/stop
-barkeep://settings          barkeep://setup
+barkeep awake 90          barkeep awake stop        barkeep present on
+barkeep open zscaler      barkeep place zscaler hidden
+barkeep icon zscaler VPN  barkeep watch onedrive    barkeep clipboard
 ```
+
+Everything is also available as `barkeep://` links (`barkeep://keep-awake?minutes=60`,
+`barkeep://open?app=OneDrive`, `barkeep://settings?pane=layout`…), for Raycast
+and the like.
+
+## Installing
+
+```bash
+brew install xcodegen
+Scripts/install.sh
+```
+
+This builds a Release copy, installs it in /Applications, puts the `barkeep`
+command on your PATH and starts Barkeep. Run it again to update.
+
+Barkeep isn't notarized (that needs a paid Developer ID certificate), so
+it's meant to be built on the Mac that runs it.
 
 ## Building
 

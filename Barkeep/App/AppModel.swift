@@ -15,11 +15,18 @@ final class AppModel {
     let layout: LayoutController
     let watcher: ChangeWatcher
     let presenter: PresenterMode
+    let appearance = MenuBarAppearance()
+    let clipboard = ClipboardHistory()
     @ObservationIgnored var showSetup: () -> Void = {}
     @ObservationIgnored var openSettingsWindow: () -> Void = {}
     @ObservationIgnored var showSearch: () -> Void = {}
     @ObservationIgnored var syncGroupIcons: () -> Void = {}
     @ObservationIgnored var groupIconWindow: (UUID) -> CGWindowID? = { _ in nil }
+
+    /// The icon whose "Replace Icon…" sheet is open in Settings → Layout.
+    var iconToReplace: MenuBarItem? {
+        didSet { if iconToReplace != nil { showSettings(.layout) } }
+    }
 
     /// The Settings pane showing; set before opening the window to jump to one.
     var settingsPane: SettingsPane? = .general
@@ -50,14 +57,50 @@ final class AppModel {
         watcher.isPaused = { [presenter] in presenter.isPresenting || presenter.isChanging }
     }
 
+    @ObservationIgnored var showClipboard: () -> Void = {}
+
+    func perform(_ command: BarkeepCommand) {
+        switch command {
+        case .keepAwake(let minutes): keepAwake.start(minutes: minutes)
+        case .stopKeepAwake: keepAwake.stop()
+        case .presenter: Task { await presenter.toggle() }
+        case .darkMode: QuickToggles.toggleDarkMode()
+        case .microphone: QuickToggles.toggleMicrophone()
+        case .desktopIcons: QuickToggles.toggleDesktopIcons()
+        case .hiddenFiles: QuickToggles.toggleHiddenFiles()
+        case .sleepDisplay: QuickToggles.sleepDisplay()
+        case .clipboard: showClipboard()
+        case .showAllIcons: sections.showAll()
+        case .settings(let pane): showSettings(SettingsPane(rawValue: pane.rawValue))
+        }
+    }
+
     func showSettings(_ pane: SettingsPane? = nil) {
         if let pane { settingsPane = pane }
         openSettingsWindow()
     }
 
+    /// Replaces an app's icon with one of your choosing: a one-icon group that
+    /// opens the real icon's menu directly.
+    func setCustomIcon(for item: MenuBarItem, symbol: String, label: String?) async {
+        let label = label?.trimmingCharacters(in: .whitespaces)
+        if let existing = groups.group(containing: item.key), existing.opensDirectly {
+            var changed = existing
+            changed.symbol = symbol
+            changed.label = (label?.isEmpty ?? true) ? nil : label
+            groups.update(changed)
+            return
+        }
+        let group = await createGroup(name: item.name, symbol: symbol,
+                                      label: (label?.isEmpty ?? true) ? nil : label, opensDirectly: true)
+        await layout.place(item.key, in: .group(group.id))
+    }
+
     /// Adds the group and puts its icon in the menu bar, next to the arrow.
-    func createGroup(name: String, symbol: String) async {
-        let group = groups.create(name: name, symbol: symbol)
+    @discardableResult
+    func createGroup(name: String, symbol: String, label: String? = nil, opensDirectly: Bool = false) async
+        -> MenuBarGroup {
+        let group = groups.create(name: name, symbol: symbol, label: label, opensDirectly: opensDirectly)
         syncGroupIcons()
         // A new status item appears at the far left, usually in a hidden
         // section; bring it next to the arrow.
@@ -65,6 +108,7 @@ final class AppModel {
         if let window = groupIconWindow(group.id), let divider = StatusItems.windowID(of: sections.items.separator) {
             await mover.move(window, to: .rightOf(divider))
         }
+        return group
     }
 
     /// Removes the group; its icons go back to the hidden section.

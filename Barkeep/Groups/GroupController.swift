@@ -26,9 +26,16 @@ final class GroupController {
         for group in groups {
             let item = statusItems[group.id] ?? makeItem(for: group)
             statusItems[group.id] = item
-            item.button?.image = NSImage(systemSymbolName: group.symbol, accessibilityDescription: group.name)?
-                .withSymbolConfiguration(.init(pointSize: 13, weight: .medium))
+            if let label = group.label, !label.isEmpty {
+                item.button?.image = nil
+                item.button?.title = label
+            } else {
+                item.button?.title = ""
+                item.button?.image = NSImage(systemSymbolName: group.symbol, accessibilityDescription: group.name)?
+                    .withSymbolConfiguration(.init(pointSize: 13, weight: .medium))
+            }
             item.button?.toolTip = group.name
+            item.button?.setAccessibilityLabel(group.name)
         }
     }
 
@@ -52,6 +59,14 @@ final class GroupController {
         guard let raw = sender.identifier?.rawValue, let id = UUID(uuidString: raw) else { return }
         if NSApp.currentEvent?.type == .rightMouseUp {
             model.showSettings(.layout)
+            return
+        }
+        // A custom icon opens its one icon's menu right away.
+        if let group = model.groups.groups.first(where: { $0.id == id }), group.opensDirectly,
+           group.memberKeys.count == 1,
+           let member = model.scanner.items.first(where: { $0.key == group.memberKeys[0] }) {
+            close()
+            model.opener.open(member, near: windowID(of: id))
             return
         }
         if openGroup == id, panel?.isVisible == true {

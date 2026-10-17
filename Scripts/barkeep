@@ -1,0 +1,45 @@
+#!/bin/zsh
+# barkeep: control Barkeep from the Terminal. Barkeep must be installed.
+#
+#   barkeep show | hide | toggle | all       hidden icons
+#   barkeep bar | search | clipboard         panels
+#   barkeep awake [minutes|stop]             keep awake (no minutes = until stopped)
+#   barkeep present [on|off]                 presenter mode (no argument = toggle)
+#   barkeep open <app>                       open an app's menu bar icon
+#   barkeep place <app> visible|hidden|alwaysHidden
+#   barkeep watch <app> [off]                show the icon when it changes
+#   barkeep icon <app> <text>|reset          replace an app's icon with text or an emoji
+#   barkeep settings [layout|general|menuBar|appearance|keepAwake|toggles|clipboard|shortcuts]
+
+set -e
+encode() { python3 -c 'import sys, urllib.parse; print(urllib.parse.quote(sys.argv[1]))' "$1"; }
+go() { open -g "barkeep://$1"; }
+
+case "${1:-help}" in
+  show|toggle) go toggle ;;
+  hide) go hide ;;
+  all) go show-all ;;
+  bar) go bar ;;
+  search) go search ;;
+  clipboard) go clipboard ;;
+  awake)
+    case "${2:-}" in
+      stop|off) go keep-awake/stop ;;
+      "") go "keep-awake?minutes=0" ;;
+      *) go "keep-awake?minutes=$2" ;;
+    esac ;;
+  present|presenter)
+    case "${2:-}" in
+      on) go "presenter?on=1" ;;
+      off) go "presenter?on=0" ;;
+      *) go presenter ;;
+    esac ;;
+  open) go "open?app=$(encode "$2")" ;;
+  place) go "place?app=$(encode "$2")&row=${3:-hidden}" ;;
+  watch) go "watch?app=$(encode "$2")&on=$([[ "${3:-}" == off ]] && echo 0 || echo 1)" ;;
+  icon)
+    if [[ "${3:-}" == reset ]]; then go "icon?app=$(encode "$2")&reset=1"
+    else go "icon?app=$(encode "$2")&label=$(encode "${3:-★}")"; fi ;;
+  settings) go "settings${2:+?pane=$2}" ;;
+  *) sed -n '2,13p' "$0" | sed 's/^# \{0,1\}//' ;;
+esac

@@ -209,6 +209,7 @@ struct ItemContextMenu: View {
                 }
             }
             Divider()
+            Button("Replace Icon…") { model.iconToReplace = item }
             Toggle("Show When It Changes", isOn: Binding(
                 get: { model.watcher.isWatching(item.key) },
                 set: { model.watcher.setWatching(item.key, $0) }))
@@ -232,6 +233,9 @@ private struct GroupEditorSheet: View {
             TextField("Name, for example Work", text: $group.name)
                 .textFieldStyle(.roundedBorder)
             Text("Icon").font(.headline)
+            TextField("Or show text or an emoji instead", text: Binding(
+                get: { group.label ?? "" }, set: { group.label = $0.isEmpty ? nil : $0 }))
+                .textFieldStyle(.roundedBorder)
             LazyVGrid(columns: Array(repeating: GridItem(.fixed(40)), count: 6), spacing: 8) {
                 ForEach(MenuBarGroup.symbolChoices, id: \.self) { symbol in
                     Button {
@@ -248,6 +252,9 @@ private struct GroupEditorSheet: View {
                     .buttonStyle(.plain)
                     .accessibilityLabel(symbol)
                 }
+            }
+            if !isNew && group.memberKeys.count == 1 {
+                Toggle("Clicking opens the icon's menu directly", isOn: $group.opensDirectly)
             }
             if isNew {
                 Text("The group gets its own icon in the menu bar. Drag icons into its row to add them.")
@@ -267,7 +274,7 @@ private struct GroupEditorSheet: View {
                     let name = group.name.trimmingCharacters(in: .whitespaces)
                     group.name = name.isEmpty ? "Group" : name
                     if isNew {
-                        Task { await model.createGroup(name: group.name, symbol: group.symbol) }
+                        Task { await model.createGroup(name: group.name, symbol: group.symbol, label: group.label) }
                     } else {
                         model.groups.update(group)
                     }
@@ -279,5 +286,65 @@ private struct GroupEditorSheet: View {
         }
         .padding(24)
         .frame(width: 380)
+    }
+}
+
+/// Pick a symbol, text or emoji to show instead of an app's own icon.
+struct CustomIconSheet: View {
+    let model: AppModel
+    let item: MenuBarItem
+    @State private var symbol = "star.fill"
+    @State private var label = ""
+    @Environment(\.dismiss) private var dismiss
+
+    private static let symbols = MenuBarGroup.symbolChoices + [
+        "lock.shield.fill", "network.badge.shield.half.filled", "icloud.fill", "externaldrive.fill",
+        "camera.fill", "mic.fill", "envelope.fill", "calendar", "terminal.fill", "shippingbox.fill",
+        "person.crop.circle", "globe",
+    ]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(spacing: 10) {
+                ItemImage(item: item, image: model.images.image(for: item), maxWidth: 40)
+                    .padding(4)
+                    .background(.black.opacity(0.55), in: .rect(cornerRadius: 7))
+                VStack(alignment: .leading) {
+                    Text("Replace \(item.name)'s icon").font(.title3.bold())
+                    Text("Your icon opens \(item.name)'s menu; the original stays hidden.")
+                        .font(.callout).foregroundStyle(.secondary)
+                }
+            }
+            LazyVGrid(columns: Array(repeating: GridItem(.fixed(40)), count: 8), spacing: 8) {
+                ForEach(Self.symbols, id: \.self) { name in
+                    Button {
+                        symbol = name
+                        label = ""
+                    } label: {
+                        Image(systemName: name)
+                            .font(.system(size: 16))
+                            .frame(width: 36, height: 36)
+                            .background(symbol == name && label.isEmpty ? Color.accentColor.opacity(0.3) : .clear,
+                                        in: .rect(cornerRadius: 8))
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(name)
+                }
+            }
+            TextField("Or type text or an emoji, like VPN or 🛡️", text: $label)
+                .textFieldStyle(.roundedBorder)
+            HStack {
+                Spacer()
+                Button("Cancel") { dismiss() }.keyboardShortcut(.cancelAction)
+                Button("Replace Icon") {
+                    Task { await model.setCustomIcon(for: item, symbol: symbol, label: label) }
+                    dismiss()
+                }
+                .buttonStyle(.borderedProminent)
+                .keyboardShortcut(.defaultAction)
+            }
+        }
+        .padding(24)
+        .frame(width: 420)
     }
 }

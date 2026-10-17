@@ -4,7 +4,7 @@ import SwiftUI
 /// Settings laid out like System Settings: a sidebar of panes, each a
 /// grouped form.
 enum SettingsPane: String, CaseIterable, Identifiable {
-    case layout, general, menuBar, keepAwake, toggles, shortcuts, about
+    case layout, general, menuBar, appearance, keepAwake, toggles, clipboard, shortcuts, about
     var id: Self { self }
 
     var title: String {
@@ -12,6 +12,8 @@ enum SettingsPane: String, CaseIterable, Identifiable {
         case .layout: "Layout"
         case .general: "General"
         case .menuBar: "Menu Bar"
+        case .appearance: "Appearance"
+        case .clipboard: "Clipboard"
         case .keepAwake: "Keep Awake"
         case .toggles: "Toggles"
         case .shortcuts: "Shortcuts"
@@ -24,6 +26,8 @@ enum SettingsPane: String, CaseIterable, Identifiable {
         case .layout: "square.grid.3x1.below.line.grid.1x2"
         case .general: "gearshape.fill"
         case .menuBar: "menubar.rectangle"
+        case .appearance: "paintpalette.fill"
+        case .clipboard: "doc.on.clipboard.fill"
         case .keepAwake: "cup.and.heat.waves.fill"
         case .toggles: "switch.2"
         case .shortcuts: "keyboard.fill"
@@ -36,6 +40,8 @@ enum SettingsPane: String, CaseIterable, Identifiable {
         case .layout: .indigo
         case .general: .gray
         case .menuBar: .blue
+        case .appearance: .pink
+        case .clipboard: .teal
         case .keepAwake: .orange
         case .toggles: .green
         case .shortcuts: .purple
@@ -67,6 +73,8 @@ struct SettingsView: View {
                 case .layout: LayoutPane(model: model)
                 case .general: GeneralPane(model: model)
                 case .menuBar: MenuBarPane(model: model)
+                case .appearance: AppearancePane(appearance: model.appearance)
+                case .clipboard: ClipboardPane(model: model)
                 case .keepAwake: KeepAwakePane(model: model)
                 case .toggles: TogglesPane()
                 case .shortcuts: ShortcutsPane()
@@ -83,7 +91,7 @@ struct SettingsView: View {
 // MARK: - Layout
 
 private struct LayoutPane: View {
-    let model: AppModel
+    @Bindable var model: AppModel
     @AppStorage(PrefKey.displayProfiles) private var displayProfiles = false
 
     var body: some View {
@@ -111,6 +119,153 @@ private struct LayoutPane: View {
             }
             .padding(20)
         }
+        .sheet(item: $model.iconToReplace) { item in
+            CustomIconSheet(model: model, item: item)
+        }
+    }
+}
+
+// MARK: - Clipboard
+
+private struct ClipboardPane: View {
+    let model: AppModel
+    @AppStorage(PrefKey.clipboardEnabled) private var enabled = true
+    @AppStorage(PrefKey.clipboardLimit) private var limit = 50
+    @AppStorage(PrefKey.clipboardRemember) private var remember = true
+
+    var body: some View {
+        Form {
+            Section {
+                Toggle(isOn: $enabled) {
+                    BadgeLabel(title: "Keep a clipboard history",
+                               subtitle: "Press ⌃⌥⌘V to see it. Return pastes into the app you were using.",
+                               symbol: "doc.on.clipboard.fill", color: .teal)
+                }
+                Picker(selection: $limit) {
+                    ForEach([20, 50, 100, 200], id: \.self) { Text("\($0) items").tag($0) }
+                } label: {
+                    BadgeLabel(title: "Remember up to", symbol: "list.number", color: .blue)
+                }
+                Toggle(isOn: $remember) {
+                    BadgeLabel(title: "Keep history after restarting",
+                               subtitle: "Text and files only; images stay in memory.",
+                               symbol: "externaldrive.fill", color: .gray)
+                }
+                LabeledContent("Shortcut") { KeyboardShortcuts.Recorder(for: .clipboard) }
+            } footer: {
+                Text("Copies from password managers are never recorded: they mark them as private, and Barkeep skips 1Password, Bitwarden, Passwords and Keychain Access.")
+            }
+            Section {
+                LabeledContent("\(model.clipboard.entries.count) items, \(model.clipboard.shelf.count) on the shelf") {
+                    HStack {
+                        Button("Open") { model.showClipboard() }
+                        Button("Clear History", role: .destructive) { model.clipboard.clear() }
+                    }
+                }
+            }
+        }
+    }
+}
+
+// MARK: - Appearance
+
+private struct AppearancePane: View {
+    @Bindable var appearance: MenuBarAppearance
+    @State private var spacing = Double(IconSpacing.current)
+    @State private var spacingChanged = false
+
+    var body: some View {
+        Form {
+            Section {
+                ZStack {
+                    LinearGradient(colors: [.blue.opacity(0.7), .purple.opacity(0.6)], startPoint: .topLeading,
+                                   endPoint: .bottomTrailing)
+                    if appearance.style.isEnabled {
+                        MenuBarBackdrop(style: appearance.style)
+                    }
+                    HStack(spacing: 10) {
+                        Image(systemName: "apple.logo")
+                        Text("Finder").bold()
+                        Text("File   Edit   View").foregroundStyle(.secondary)
+                        Spacer()
+                        ForEach(["cup.and.heat.waves.fill", "wifi", "chevron.left", "battery.75percent"], id: \.self) {
+                            Image(systemName: $0)
+                        }
+                        Text("Fri 9:41")
+                    }
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 14)
+                }
+                .frame(height: 30)
+                .clipShape(.rect(cornerRadius: 8))
+                .listRowInsets(EdgeInsets(top: 12, leading: 12, bottom: 12, trailing: 12))
+                .accessibilityLabel("Preview of the menu bar")
+
+                Toggle(isOn: $appearance.style.isEnabled) {
+                    BadgeLabel(title: "Tint the menu bar", subtitle: "Drawn behind the icons; menus aren't affected.",
+                               symbol: "paintbrush.fill", color: .pink)
+                }
+            }
+            if appearance.style.isEnabled {
+                Section("Style") {
+                    Picker("Shape", selection: $appearance.style.shape) {
+                        Text("Full width").tag(MenuBarStyle.Shape.full)
+                        Text("Rounded").tag(MenuBarStyle.Shape.rounded)
+                        Text("Split").tag(MenuBarStyle.Shape.split)
+                    }
+                    .pickerStyle(.segmented)
+                    ColorPicker("Colour", selection: color(\.tint), supportsOpacity: true)
+                    Toggle("Gradient", isOn: $appearance.style.usesGradient)
+                    if appearance.style.usesGradient {
+                        ColorPicker("Second colour", selection: color(\.gradientEnd), supportsOpacity: true)
+                    }
+                    Toggle("Border", isOn: $appearance.style.hasBorder)
+                    if appearance.style.hasBorder {
+                        ColorPicker("Border colour", selection: color(\.border), supportsOpacity: true)
+                    }
+                    Toggle("Shadow", isOn: $appearance.style.hasShadow)
+                }
+            }
+            Section {
+                LabeledContent {
+                    HStack {
+                        Slider(value: $spacing, in: 4...20, step: 1) { editing in
+                            if !editing {
+                                IconSpacing.set(Int(spacing))
+                                spacingChanged = true
+                            }
+                        }
+                        Text("\(Int(spacing))").monospacedDigit().foregroundStyle(.secondary).frame(width: 24)
+                    }
+                    .frame(width: 240)
+                } label: {
+                    BadgeLabel(title: "Space between icons",
+                               subtitle: "Less space fits more icons beside the notch. macOS's default is 16.",
+                               symbol: "arrow.left.and.right", color: .indigo)
+                }
+                if spacingChanged {
+                    HStack {
+                        Text("Apps use the new spacing when they next start; log out and back in to apply it everywhere.")
+                            .font(.caption).foregroundStyle(.secondary)
+                        Spacer()
+                        Button("Apply to System Icons") { IconSpacing.restartSystemMenuBar() }
+                    }
+                }
+                Button("Reset to Default") {
+                    IconSpacing.set(nil)
+                    spacing = Double(IconSpacing.defaultSpacing)
+                    spacingChanged = true
+                }
+            } header: {
+                Text("Icon spacing")
+            }
+        }
+    }
+
+    private func color(_ keyPath: WritableKeyPath<MenuBarStyle, StoredColor>) -> Binding<Color> {
+        Binding(get: { appearance.style[keyPath: keyPath].color },
+                set: { appearance.style[keyPath: keyPath] = StoredColor($0) })
     }
 }
 
@@ -169,6 +324,8 @@ private struct MenuBarPane: View {
     @AppStorage(PrefKey.presenterAutomatic) private var presenterAutomatic = true
     @AppStorage(PrefKey.presenterKeepAwake) private var presenterKeepAwake = true
     @AppStorage(PrefKey.presenterHideDesktopIcons) private var presenterHideDesktop = false
+    @AppStorage(PrefKey.revealOnHover) private var revealOnHover = false
+    @AppStorage(PrefKey.revealOnScroll) private var revealOnScroll = false
 
     var body: some View {
         Form {
@@ -240,6 +397,15 @@ private struct MenuBarPane: View {
                 } label: {
                     BadgeLabel(title: "New icons go", subtitle: "When an app adds an icon Barkeep hasn't seen before.",
                                symbol: "sparkle", color: .teal)
+                }
+                Toggle(isOn: $revealOnHover) {
+                    BadgeLabel(title: "Show hidden icons when hovering over the arrow", symbol: "cursorarrow.motionlines",
+                               color: .blue)
+                }
+                Toggle(isOn: $revealOnScroll) {
+                    BadgeLabel(title: "Scroll over the menu bar to show or hide",
+                               subtitle: "Scroll down to show hidden icons, up to hide them.",
+                               symbol: "arrow.up.and.down", color: .blue)
                 }
                 Toggle(isOn: $autoRehide) {
                     BadgeLabel(title: "Hide icons again automatically", symbol: "timer", color: .blue)
@@ -649,6 +815,7 @@ private struct ShortcutsPane: View {
                 recorder("Show every icon", "eye.fill", .purple, .showAllItems)
                 recorder("Toggle keep awake", "cup.and.heat.waves.fill", .orange, .toggleKeepAwake)
                 recorder("Presenter mode", "rectangle.on.rectangle", .purple, .togglePresenter)
+                recorder("Clipboard history", "doc.on.clipboard", .teal, .clipboard)
             } footer: {
                 Text("Click a shortcut field and press the keys you want. Press Delete to clear it.")
             }

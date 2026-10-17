@@ -9,6 +9,32 @@ struct MenuBarGroup: Codable, Identifiable, Hashable, Sendable {
     var symbol: String
     /// `MenuBarItem.key`s, in display order.
     var memberKeys: [String] = []
+    /// Text or an emoji to show instead of the symbol.
+    var label: String?
+    /// A custom icon for one app: clicking opens that icon's menu directly
+    /// instead of a strip.
+    var opensDirectly = false
+
+    init(id: UUID = UUID(), name: String, symbol: String, memberKeys: [String] = [], label: String? = nil,
+         opensDirectly: Bool = false) {
+        self.id = id
+        self.name = name
+        self.symbol = symbol
+        self.memberKeys = memberKeys
+        self.label = label
+        self.opensDirectly = opensDirectly
+    }
+
+    /// Groups saved by older versions lack the newer fields.
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(UUID.self, forKey: .id)
+        name = try container.decode(String.self, forKey: .name)
+        symbol = try container.decode(String.self, forKey: .symbol)
+        memberKeys = try container.decodeIfPresent([String].self, forKey: .memberKeys) ?? []
+        label = try container.decodeIfPresent(String.self, forKey: .label)
+        opensDirectly = try container.decodeIfPresent(Bool.self, forKey: .opensDirectly) ?? false
+    }
 
     static let symbolChoices = [
         "briefcase.fill", "hammer.fill", "shield.lefthalf.filled", "network", "cloud.fill", "folder.fill",
@@ -40,8 +66,8 @@ final class GroupStore {
     var allMemberKeys: Set<String> { Set(groups.flatMap(\.memberKeys)) }
 
     @discardableResult
-    func create(name: String, symbol: String) -> MenuBarGroup {
-        let group = MenuBarGroup(name: name, symbol: symbol)
+    func create(name: String, symbol: String, label: String? = nil, opensDirectly: Bool = false) -> MenuBarGroup {
+        let group = MenuBarGroup(name: name, symbol: symbol, label: label, opensDirectly: opensDirectly)
         groups.append(group)
         save()
         return group

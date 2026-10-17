@@ -19,8 +19,10 @@ final class ItemOpener {
         self.mover = mover
     }
 
-    /// `anchor` is the window to open the item left of (a group icon); if nil,
-    /// the item opens at the start of the visible section, near the arrow.
+    /// `anchor` is the window to open the item next to (a group or custom
+    /// icon); if nil, the item opens at the start of the visible section.
+    /// Right of the anchor, because "left of" an icon that slides while the
+    /// item is lifted lands one slot off.
     func open(_ item: MenuBarItem, near anchor: CGWindowID? = nil) {
         openTask?.cancel()
         openTask = Task { await self.perform(item, anchor: anchor) }
@@ -31,7 +33,7 @@ final class ItemOpener {
             await press(item)
             return
         }
-        let destination: MoveDestination? = anchor.map { .leftOf($0) }
+        let destination: MoveDestination? = anchor.map { .rightOf($0) }
             ?? StatusItems.windowID(of: sections.items.separator).map { .rightOf($0) }
         if item.isMovable, let destination, await openMovedOut(item, to: destination) {
             return

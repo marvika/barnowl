@@ -27,6 +27,10 @@ struct QuickPanelView: View {
                 close()
                 model.showSearch()
             }
+            QuickFooterButton(symbol: "doc.on.clipboard", help: "Clipboard history") {
+                close()
+                model.showClipboard()
+            }
             QuickFooterButton(symbol: "square.grid.3x1.below.line.grid.1x2", help: "Arrange icons") {
                 close()
                 model.showSettings(.layout)

@@ -26,6 +26,10 @@ final class SearchPanelController {
         let view = SearchView(model: model, open: { [weak self] item in
             self?.close()
             self?.model.opener.open(item)
+        }, run: { [weak self] command in
+            self?.close()
+            NSApp.deactivate()
+            self?.model.perform(command)
         }, close: { [weak self] in self?.close() })
         let panel = FloatingPanel(rootView: view)
         panel.onCancel = { [weak self] in self?.close() }

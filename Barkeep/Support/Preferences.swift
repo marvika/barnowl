@@ -27,6 +27,11 @@ enum PrefKey {
     static let presenterKeepAwake = "presenterKeepAwake"
     static let presenterHideDesktopIcons = "presenterHideDesktopIcons"
     static let displayProfiles = "displayProfiles"
+    static let revealOnHover = "revealOnHover"
+    static let revealOnScroll = "revealOnScroll"
+    static let clipboardEnabled = "clipboardEnabled"
+    static let clipboardLimit = "clipboardLimit"
+    static let clipboardRemember = "clipboardRemember"
 }
 
 enum Preferences {
@@ -55,6 +60,11 @@ enum Preferences {
             PrefKey.presenterKeepAwake: true,
             PrefKey.presenterHideDesktopIcons: false,
             PrefKey.displayProfiles: false,
+            PrefKey.revealOnHover: false,
+            PrefKey.revealOnScroll: false,
+            PrefKey.clipboardEnabled: true,
+            PrefKey.clipboardLimit: 50,
+            PrefKey.clipboardRemember: true,
         ])
     }
 
@@ -97,6 +107,12 @@ enum Preferences {
     static var presenterHideDesktopIcons: Bool { defaults.bool(forKey: PrefKey.presenterHideDesktopIcons) }
     /// A separate layout while an external display is connected.
     static var displayProfiles: Bool { defaults.bool(forKey: PrefKey.displayProfiles) }
+    static var revealOnHover: Bool { defaults.bool(forKey: PrefKey.revealOnHover) }
+    static var revealOnScroll: Bool { defaults.bool(forKey: PrefKey.revealOnScroll) }
+    static var clipboardEnabled: Bool { defaults.bool(forKey: PrefKey.clipboardEnabled) }
+    static var clipboardLimit: Int { max(5, defaults.integer(forKey: PrefKey.clipboardLimit)) }
+    /// Keep text history across restarts (images are never saved to disk).
+    static var clipboardRemember: Bool { defaults.bool(forKey: PrefKey.clipboardRemember) }
     static var hasShownWelcome: Bool {
         get { defaults.bool(forKey: PrefKey.hasShownWelcome) }
         set { defaults.set(newValue, forKey: PrefKey.hasShownWelcome) }

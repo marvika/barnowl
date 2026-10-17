@@ -4,23 +4,38 @@ import SwiftUI
 struct SearchView: View {
     let model: AppModel
     let open: (MenuBarItem) -> Void
+    let run: (BarkeepCommand) -> Void
     let close: () -> Void
 
     @State private var query = ""
     @State private var selection = 0
     @FocusState private var focused: Bool
 
-    /// Hidden icons first (they're the ones you can't see), nearest the arrow first.
-    private var results: [MenuBarItem] {
+    private enum Result: Identifiable {
+        case command(BarkeepCommand)
+        case item(MenuBarItem)
+
+        var id: String {
+            switch self {
+            case .command(let command): "command-\(command.title)"
+            case .item(let item): "item-\(item.windowID)"
+            }
+        }
+    }
+
+    /// Commands first, then icons: hidden ones first (they're the ones you
+    /// can't see), nearest the arrow first.
+    private var results: [Result] {
+        let commands = CommandParser.commands(for: query).prefix(5).map(Result.command)
         let ordered = model.scanner.items.reversed().sorted { ($0.section == .visible ? 1 : 0) < ($1.section == .visible ? 1 : 0) }
-        return ItemSearch.filter(ordered, query: query)
+        return commands + ItemSearch.filter(ordered, query: query).map(Result.item)
     }
 
     var body: some View {
         VStack(spacing: 0) {
             HStack(spacing: 10) {
                 Image(systemName: "magnifyingglass").font(.title2).foregroundStyle(.secondary)
-                TextField("Search the menu bar", text: $query)
+                TextField("Search icons, or type a command like “awake 2h”", text: $query)
                     .textFieldStyle(.plain)
                     .font(.title2)
                     .focused($focused)
@@ -42,10 +57,15 @@ struct SearchView: View {
                 ScrollViewReader { proxy in
                     ScrollView {
                         VStack(spacing: 2) {
-                            ForEach(Array(results.enumerated()), id: \.element.id) { index, item in
-                                row(item, selected: index == selection)
-                                    .id(item.id)
-                                    .onTapGesture { open(item) }
+                            ForEach(Array(results.enumerated()), id: \.element.id) { index, result in
+                                Group {
+                                    switch result {
+                                    case .command(let command): commandRow(command, selected: index == selection)
+                                    case .item(let item): row(item, selected: index == selection)
+                                    }
+                                }
+                                .id(result.id)
+                                .onTapGesture { perform(result) }
                             }
                         }
                         .padding(6)
@@ -57,7 +77,7 @@ struct SearchView: View {
                 }
             } else if !query.isEmpty {
                 Divider()
-                Text("No menu bar icon matches “\(query)”")
+                Text("Nothing matches “\(query)”")
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity)
                     .padding(16)
@@ -97,6 +117,31 @@ struct SearchView: View {
         .contentShape(.rect)
     }
 
+    private func commandRow(_ command: BarkeepCommand, selected: Bool) -> some View {
+        HStack(spacing: 10) {
+            IconBadge(symbol: command.symbol, color: .orange, size: 28)
+                .frame(width: 48)
+            Text(command.title).fontWeight(.medium)
+            Spacer()
+            Text("Command")
+                .font(.caption2.weight(.medium))
+                .foregroundStyle(.secondary)
+                .padding(.horizontal, 6).padding(.vertical, 2)
+                .background(.quaternary, in: .capsule)
+        }
+        .padding(.horizontal, 8)
+        .frame(height: 38)
+        .background(selected ? Color.accentColor.opacity(0.25) : .clear, in: .rect(cornerRadius: 8))
+        .contentShape(.rect)
+    }
+
+    private func perform(_ result: Result) {
+        switch result {
+        case .command(let command): run(command)
+        case .item(let item): open(item)
+        }
+    }
+
     private func badge(for item: MenuBarItem) -> String {
         if item.isBehindNotch { return "Behind notch" }
         switch item.section {
@@ -113,6 +158,6 @@ struct SearchView: View {
 
     private func openSelection() {
         guard results.indices.contains(selection) else { return }
-        open(results[selection])
+        perform(results[selection])
     }
 }
