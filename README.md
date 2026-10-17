@@ -81,7 +81,28 @@ Everything is also available as `barkeep://` links (`barkeep://keep-awake?minute
 `barkeep://open?app=OneDrive`, `barkeep://settings?pane=layout`…), for Raycast
 and the like.
 
-## Installing
+## Download
+
+Requires macOS 26 Tahoe on a Mac with Apple silicon or Intel.
+
+1. Download `Barkeep-x.y.z.zip` from the latest
+   [release](https://github.com/marvika/macos-menubar/releases) and open it.
+2. Drag **Barkeep** into your Applications folder.
+3. Open it. Barkeep isn't notarized by Apple yet, so the first time macOS says
+   it can't verify the app. Click **Done**, then open **System Settings →
+   Privacy & Security**, scroll down and click **Open Anyway** next to the
+   Barkeep message. Confirm with **Open**. You only do this once.
+4. The setup guide walks you through the rest, including allowing
+   **Accessibility** and **Screen Recording** in System Settings.
+
+Optional: to use the `barkeep` command in Terminal, download `barkeep` from
+the same release and run:
+
+```bash
+chmod +x ~/Downloads/barkeep && mv ~/Downloads/barkeep /opt/homebrew/bin/
+```
+
+## Installing from source
 
 ```bash
 brew install xcodegen
@@ -91,8 +112,8 @@ Scripts/install.sh
 This builds a Release copy, installs it in /Applications, puts the `barkeep`
 command on your PATH and starts Barkeep. Run it again to update.
 
-Barkeep isn't notarized (that needs a paid Developer ID certificate), so
-it's meant to be built on the Mac that runs it.
+Building it yourself avoids the "can't verify" step, since macOS trusts apps
+built on the same Mac.
 
 ## Building
 
