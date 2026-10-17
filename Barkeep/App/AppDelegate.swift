@@ -10,6 +10,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var model: AppModel!
     private var settingsWindow: SettingsWindowController!
     private var onboardingWindow: OnboardingWindowController!
+    private var scanner: ItemScanner!
+    private let images = ItemImageCache()
+    private var bar: BarkeepBarController!
+    private var search: SearchPanelController!
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         Preferences.registerDefaults()
@@ -17,16 +21,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         items = StatusItems()
         sections = SectionController(items: items, engine: HidingEngineFactory.make(items: items))
         Log.app.info("Using hiding engine: \(self.sections.engine.displayName)")
-        model = AppModel(sections: sections, keepAwake: keepAwake)
+        scanner = ItemScanner(statusItems: items)
+        model = AppModel(sections: sections, keepAwake: keepAwake, scanner: scanner, images: images,
+                         opener: ItemOpener(sections: sections, scanner: scanner))
+        bar = BarkeepBarController(model: model) { [weak self] in self?.items.toggle.button?.window?.frame }
+        search = SearchPanelController(model: model)
+        model.showSearch = { [weak self] in self?.search.show() }
         settingsWindow = SettingsWindowController(model: model)
         onboardingWindow = OnboardingWindowController(model: model)
         onboardingWindow.onFinish = { [weak self] in
             Preferences.hasShownWelcome = true
-            self?.sections.collapse()
+            Task {
+                guard let self else { return }
+                await self.images.capture(await self.scanner.freshItems())
+                self.sections.collapse()
+            }
         }
         model.showSetup = { [weak self] in self?.onboardingWindow.show() }
+        model.showSettings = { [weak self] in self?.settingsWindow.show() }
         menuBuilder = MenuBuilder(sections: sections, keepAwake: keepAwake, openSettings: { [weak self] in
             self?.settingsWindow.show()
+        }, openSearch: { [weak self] in
+            self?.search.show()
         })
 
         if let button = items.toggle.button {
@@ -37,11 +53,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         sections.onStateChange = { [weak self] state in
             self?.model.sectionState = state
             self?.updateToggleIcon()
+            self?.sectionsMoved(revealed: state != .collapsed)
         }
         keepAwake.onChange = { [weak self] in self?.updateToggleIcon() }
         updateToggleIcon()
 
-        KeyboardShortcuts.onKeyUp(for: .toggleHiddenItems) { [weak self] in self?.sections.toggle() }
+        KeyboardShortcuts.onKeyUp(for: .toggleHiddenItems) { [weak self] in self?.revealHiddenIcons() }
+        KeyboardShortcuts.onKeyUp(for: .searchItems) { [weak self] in self?.search.toggle() }
         KeyboardShortcuts.onKeyUp(for: .showAllItems) { [weak self] in self?.sections.showAll() }
         KeyboardShortcuts.onKeyUp(for: .toggleKeepAwake) { [weak self] in
             guard let self else { return }
@@ -58,18 +76,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         if Preferences.hasShownWelcome {
-            // Give the status items a moment to get their windows before
-            // checking the arrangement.
+            // Everything is showing right after launch: list the items and take
+            // their pictures before hiding, so the Barkeep Bar has them.
             Task {
                 try? await Task.sleep(for: .milliseconds(500))
+                let items = await self.scanner.freshItems()
+                await self.images.capture(items)
                 self.sections.collapse()
+                self.scanner.start()
             }
         } else {
+            scanner.start()
             onboardingWindow.show()
         }
     }
 
-    /// barkeep://settings, barkeep://setup, barkeep://toggle, barkeep://show-all,
+    /// barkeep://settings, barkeep://setup, barkeep://search, barkeep://bar,
+    /// barkeep://open?app=NAME, barkeep://toggle, barkeep://show-all,
     /// barkeep://hide, barkeep://keep-awake?minutes=60 (0 or none = indefinitely),
     /// barkeep://keep-awake/stop. For Shortcuts, Raycast and scripts.
     func application(_ application: NSApplication, open urls: [URL]) {
@@ -77,6 +100,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let query = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems
             switch (url.host() ?? "", url.path()) {
             case ("settings", _): settingsWindow.show()
+            case ("search", _): search.show()
+            case ("bar", _): bar.toggle()
+            case ("open", _):
+                // barkeep://open?app=OneDrive (app name or bundle ID) opens that app's menu bar item.
+                guard let app = query?.first(where: { $0.name == "app" })?.value?.lowercased() else { break }
+                Task {
+                    let items = await scanner.freshItems()
+                    if let item = items.first(where: { $0.bundleIdentifier?.lowercased() == app })
+                        ?? items.first(where: { $0.appName.lowercased() == app }) {
+                        model.opener.open(item)
+                    } else {
+                        Log.app.error("No menu bar item for \(app)")
+                    }
+                }
             case ("setup", _): onboardingWindow.show()
             case ("toggle", _): sections.toggle()
             case ("show-all", _): sections.showAll()
@@ -103,11 +140,37 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         let flags = event.modifierFlags
         if event.type == .rightMouseUp || flags.contains(.control) {
+            bar.close()
             showMenu()
         } else if flags.contains(.option) {
+            bar.close()
             sections.showAll()
         } else {
+            revealHiddenIcons()
+        }
+    }
+
+    /// The arrow and its hotkey: hide what's showing, otherwise reveal the
+    /// hidden icons in the menu bar or in the Barkeep Bar.
+    private func revealHiddenIcons() {
+        if bar.isOpen {
+            bar.close()
+        } else if sections.state != .collapsed {
+            sections.collapse()
+        } else if model.hiddenIconsUseBar {
+            bar.show()
+        } else {
             sections.toggle()
+        }
+    }
+
+    /// After the dividers move: update where items are, and photograph the
+    /// ones that just came into view.
+    private func sectionsMoved(revealed: Bool) {
+        Task {
+            try? await Task.sleep(for: .milliseconds(350))
+            scanner.updateFrames()
+            if revealed { await images.capture(scanner.items) }
         }
     }
 

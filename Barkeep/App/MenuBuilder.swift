@@ -9,11 +9,14 @@ final class MenuBuilder: NSObject {
     private let sections: SectionController
     private let keepAwake: KeepAwakeController
     private let openSettings: () -> Void
+    private let openSearch: () -> Void
 
-    init(sections: SectionController, keepAwake: KeepAwakeController, openSettings: @escaping () -> Void) {
+    init(sections: SectionController, keepAwake: KeepAwakeController, openSettings: @escaping () -> Void,
+         openSearch: @escaping () -> Void) {
         self.sections = sections
         self.keepAwake = keepAwake
         self.openSettings = openSettings
+        self.openSearch = openSearch
     }
 
     func makeMenu() -> NSMenu {
@@ -60,6 +63,7 @@ final class MenuBuilder: NSObject {
         menu.addItem(item(sections.state == .collapsed ? "Show Hidden Icons" : "Hide Icons",
                           symbol: "chevron.left.2", #selector(toggleSections)))
         menu.addItem(item("Show All Icons", symbol: "eye.circle", #selector(showAll)))
+        menu.addItem(item("Search Menu Bar…", symbol: "magnifyingglass", #selector(search)))
         menu.addItem(.separator())
         let settings = item("Settings…", #selector(showSettings))
         settings.keyEquivalent = ","
@@ -108,6 +112,7 @@ final class MenuBuilder: NSObject {
     @objc private func toggleSections() { sections.toggle() }
     @objc private func showAll() { sections.showAll() }
     @objc private func showSettings() { openSettings() }
+    @objc private func search() { openSearch() }
 
     // MARK: Helpers
 

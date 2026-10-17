@@ -123,8 +123,8 @@ private struct MenuBarPane: View {
     @AppStorage(PrefKey.autoRehide) private var autoRehide = true
     @AppStorage(PrefKey.autoRehideDelay) private var autoRehideDelay = 10.0
     @AppStorage(PrefKey.alwaysHiddenEnabled) private var alwaysHiddenEnabled = false
+    @AppStorage(PrefKey.hiddenIconsDisplay) private var display = HiddenIconsDisplay.automatic
     @State private var isArranging = false
-    @State private var accessibilityTrusted = AccessibilityInventory.isTrusted
 
     var body: some View {
         Form {
@@ -144,6 +144,12 @@ private struct MenuBarPane: View {
                                    : "Shows every icon so you can ⌘-drag them where you want.",
                                symbol: "hand.draw.fill", color: .blue)
                 }
+            }
+            Section {
+                HiddenIconsDisplayPicker(selection: $display)
+                    .listRowInsets(EdgeInsets(top: 10, leading: 10, bottom: 10, trailing: 10))
+            } header: {
+                Text("Hidden icons appear")
             }
             Section("Hiding") {
                 Toggle(isOn: $autoRehide) {
@@ -168,17 +174,13 @@ private struct MenuBarPane: View {
                                symbol: "eye.slash.fill", color: .indigo)
                 }
             }
-            Section("Engine") {
-                LabeledContent("Hiding method", value: model.engineName)
-                if model.engineNeedsAccessibility {
-                    LabeledContent("Accessibility") {
-                        if accessibilityTrusted {
-                            Label("Allowed", systemImage: "checkmark.circle.fill").foregroundStyle(.green)
-                        } else {
-                            Button("Allow…") { AccessibilityInventory.requestTrust() }
-                        }
-                    }
-                }
+            Section {
+                PermissionRow(permission: .accessibility, model: model)
+                PermissionRow(permission: .screenRecording, model: model)
+            } header: {
+                Text("Permissions")
+            } footer: {
+                Text("Hiding method: \(model.engineName)")
             }
         }
         .onDisappear {
@@ -300,6 +302,7 @@ private struct ShortcutsPane: View {
         Form {
             Section {
                 recorder("Show or hide icons", "chevron.left.2", .blue, .toggleHiddenItems)
+                recorder("Search the menu bar", "magnifyingglass", .teal, .searchItems)
                 recorder("Show every icon", "eye.fill", .purple, .showAllItems)
                 recorder("Toggle keep awake", "cup.and.heat.waves.fill", .orange, .toggleKeepAwake)
             } footer: {

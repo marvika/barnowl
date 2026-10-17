@@ -40,6 +40,28 @@ enum AccessibilityInventory {
         }
     }
 
+    /// Every menu bar item of one app, with what's needed to name and press it.
+    nonisolated static func entries(for app: AppRef) -> [AXMenuBarEntry] {
+        let element = AXUIElementCreateApplication(app.pid)
+        AXUIElementSetMessagingTimeout(element, 0.1)
+        guard let bar: AXUIElement = attribute(element, "AXExtrasMenuBar"),
+              let children: [AXUIElement] = attribute(bar, kAXChildrenAttribute) else { return [] }
+        return children.compactMap { child in
+            guard let frame = frame(of: child) else { return nil }
+            let title: String? = attribute(child, kAXTitleAttribute)
+            let description: String? = attribute(child, kAXDescriptionAttribute)
+            let name = [title, description].compactMap { $0 }.first { !$0.isEmpty }
+            return AXMenuBarEntry(pid: app.pid, bundleIdentifier: app.bundle, appName: app.name,
+                                  title: name.map(cleaned), frame: frame, element: AXElement(raw: child))
+        }
+    }
+
+    /// Accessibility titles sometimes span lines ("OneDrive\nBacked up and synced").
+    private nonisolated static func cleaned(_ title: String) -> String {
+        title.split(whereSeparator: \.isNewline).map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.isEmpty }.joined(separator: " · ")
+    }
+
     private nonisolated static func attribute<T>(_ element: AXUIElement, _ name: String) -> T? {
         var value: CFTypeRef?
         guard AXUIElementCopyAttributeValue(element, name as CFString, &value) == .success else { return nil }
@@ -48,7 +70,7 @@ enum AccessibilityInventory {
 
     /// Accessibility uses a top-left origin and AppKit a bottom-left one; only
     /// x is used for sections and it's the same in both.
-    private nonisolated static func frame(of element: AXUIElement) -> CGRect? {
+    nonisolated static func frame(of element: AXUIElement) -> CGRect? {
         var positionValue: CFTypeRef?
         var sizeValue: CFTypeRef?
         guard AXUIElementCopyAttributeValue(element, kAXPositionAttribute as CFString, &positionValue) == .success,

@@ -8,18 +8,28 @@
 - Quick toggles: dark mode, desktop icons, hidden files
 - Guided setup, sidebar Settings, launch at login, `barkeep://` URL scheme
 
-## v0.2: See and reach every icon
+## v0.2: See and reach every icon (done)
 
-- Inventory of all items (Accessibility, matched to windows on macOS 26,
-  where Control Center owns every item window)
-- **Barkeep Bar**: a dropdown panel under the menu bar with images of hidden
-  icons (Screen Recording), click-through to the real item
-- **Notch overflow**: detect icons stuck behind the notch and show them in the
-  Barkeep Bar automatically
-- **Search**: hotkey palette over every menu bar item
+- Item inventory: Accessibility items matched to windows (Control Center owns
+  every item window on macOS 26)
+- Barkeep Bar: hidden and behind-the-notch icons in a strip under the menu
+  bar, with real pictures (Screen Recording) and click-through
+- Notch detection, plus an Automatic / In the menu bar / In the Barkeep Bar
+  setting
+- Search palette (⌃⌥⌘M)
+- `barkeep://open?app=…`, `barkeep://bar` and `barkeep://search`
+- Setup step and Settings rows for where icons appear and for permissions
+
+Still to do from v0.2:
+
+- Verify the click fallback for apps that ignore Accessibility presses
+  (often Electron apps, such as Docker Desktop)
 - Layout editor in Settings: drag icons between sections instead of ⌘-dragging
 - macOS 27: place Barkeep's own items with a ⌘-drag of its own icon on first
-  run (27 ignores Preferred Position)
+  run (27 ignores Preferred Position), and test the native engine and the
+  Barkeep Bar there
+- Disk cache for item pictures, so they survive a relaunch without one
+  expansion
 
 ## v0.3: Context
 

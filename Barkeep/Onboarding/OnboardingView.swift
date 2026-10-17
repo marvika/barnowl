@@ -5,7 +5,7 @@ import SwiftUI
 /// First-run setup: five short steps, each with one thing to do.
 struct OnboardingView: View {
     enum Step: Int, CaseIterable {
-        case welcome, arrange, shortcuts, preferences, done
+        case welcome, arrange, display, shortcuts, preferences, done
     }
 
     let model: AppModel
@@ -14,7 +14,6 @@ struct OnboardingView: View {
     @State private var step: Step = .welcome
     @State private var demoCollapsed = true
     @State private var isArranging = false
-    @State private var accessibilityTrusted = AccessibilityInventory.isTrusted
 
     var body: some View {
         VStack(spacing: 0) {
@@ -22,6 +21,7 @@ struct OnboardingView: View {
                 switch step {
                 case .welcome: welcome
                 case .arrange: arrange
+                case .display: DisplayStep(model: model)
                 case .shortcuts: shortcuts
                 case .preferences: preferences
                 case .done: done
@@ -37,7 +37,7 @@ struct OnboardingView: View {
 
             footer
         }
-        .frame(width: 600, height: 500)
+        .frame(width: 620, height: 540)
         .animation(.smooth(duration: 0.35), value: step)
         .onChange(of: step) { _, newStep in
             if newStep != .arrange, isArranging {
@@ -97,9 +97,6 @@ struct OnboardingView: View {
                         .font(.callout).foregroundStyle(.secondary)
                 }
             }
-            if model.engineNeedsAccessibility {
-                accessibilityRow
-            }
         }
     }
 
@@ -112,6 +109,9 @@ struct OnboardingView: View {
                 }
                 CardRow(title: "Toggle keep awake", symbol: "cup.and.heat.waves.fill", color: .orange) {
                     KeyboardShortcuts.Recorder(for: .toggleKeepAwake)
+                }
+                CardRow(title: "Search the menu bar", symbol: "magnifyingglass", color: .teal) {
+                    KeyboardShortcuts.Recorder(for: .searchItems)
                 }
                 CardRow(title: "Show every icon", symbol: "eye", color: .purple) {
                     KeyboardShortcuts.Recorder(for: .showAllItems)
@@ -199,22 +199,23 @@ struct OnboardingView: View {
         }
     }
 
-    private var accessibilityRow: some View {
-        HStack {
-            BadgeLabel(title: "Accessibility access",
-                       subtitle: "macOS 27 needs it to tell which icons you put where.",
-                       symbol: "accessibility", color: .blue)
-            Spacer()
-            if accessibilityTrusted {
-                Label("Allowed", systemImage: "checkmark.circle.fill").foregroundStyle(.green)
-            } else {
-                Button("Allow…") { AccessibilityInventory.requestTrust() }
+}
+
+private struct DisplayStep: View {
+    let model: AppModel
+    @AppStorage(PrefKey.hiddenIconsDisplay) private var display = HiddenIconsDisplay.automatic
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Where hidden icons appear").font(.title.bold())
+                Text("Your Mac's notch only leaves room for a few icons. The Barkeep Bar shows the rest, including any stuck behind the notch.")
+                    .foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             }
-        }
-        .task {
-            while !Task.isCancelled && !accessibilityTrusted {
-                try? await Task.sleep(for: .seconds(1))
-                accessibilityTrusted = AccessibilityInventory.isTrusted
+            HiddenIconsDisplayPicker(selection: $display)
+            Card {
+                PermissionRow(permission: .accessibility, model: model)
+                PermissionRow(permission: .screenRecording, model: model)
             }
         }
     }

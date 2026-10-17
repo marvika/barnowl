@@ -6,6 +6,11 @@ Open source (MIT), for macOS 26 Tahoe and macOS 27.
 - **Hide the clutter.** An arrow and a `|` divider split your menu bar. Icons
   left of the divider are hidden until you click the arrow, and hide again
   after a few seconds. An optional `⋮` divider adds an always-hidden section.
+- **Barkeep Bar.** On a notched MacBook there's only room for a few icons.
+  The Barkeep Bar shows hidden icons, and any stuck behind the notch, in a
+  strip under the menu bar. Click one to open its menu. Choose Automatic, In
+  the menu bar, or In the Barkeep Bar.
+- **Search.** Press ⌃⌥⌘M and type to find and open any menu bar icon.
 - **Keep awake.** For a set time, indefinitely, or while an app is running,
   with or without letting the display sleep. Replaces Amphetamine for the
   common cases.
@@ -17,7 +22,8 @@ Open source (MIT), for macOS 26 Tahoe and macOS 27.
 
 | Action | How |
 |---|---|
-| Show or hide icons | Click the arrow, or press ⌃⌥⌘B |
+| Show hidden icons | Click the arrow, or press ⌃⌥⌘B |
+| Search the menu bar | ⌃⌥⌘M |
 | Show every icon | Option-click the arrow |
 | Menu (Keep Awake, toggles, Settings) | Right-click or control-click the arrow |
 | Choose what's hidden | Hold ⌘ and drag icons across the `\|` divider |
@@ -28,6 +34,7 @@ For Shortcuts, Raycast or scripts:
 
 ```
 barkeep://toggle            barkeep://show-all          barkeep://hide
+barkeep://bar               barkeep://search            barkeep://open?app=OneDrive
 barkeep://keep-awake?minutes=60    barkeep://keep-awake/stop
 barkeep://settings          barkeep://setup
 ```
@@ -53,6 +60,15 @@ Run the tests with:
 xcodebuild -project Barkeep.xcodeproj -scheme Barkeep test
 ```
 
+## Permissions
+
+- **Accessibility** lets Barkeep list menu bar icons and open them from the
+  Barkeep Bar and search.
+- **Screen Recording** lets the Barkeep Bar show real pictures of hidden icons
+  instead of app icons. macOS applies it after Barkeep relaunches.
+
+Hiding itself needs neither on macOS 26.
+
 ## How it works
 
 Barkeep isn't sandboxed and can't be on the App Store: reading other apps'
@@ -68,6 +84,16 @@ menu bar items needs Accessibility, and macOS 27 hiding uses a private API.
   show only the rest, through MenuBarClientCore's assessment-mode restriction
   (`NativeVisibilityEngine`). Hiding is per app there, and system items always
   stay. **Not yet tested on macOS 27.**
+- **Finding items:** on macOS 26 every menu bar item window belongs to
+  Control Center, so Barkeep reads each app's `AXExtrasMenuBar` items and
+  matches them to windows by position (`ItemScanner`).
+- **Pictures:** macOS 26 won't capture off-screen windows (ScreenCaptureKit
+  fails, and the old CGWindowList calls return nothing), so Barkeep takes one
+  ScreenCaptureKit shot of the menu bar strip whenever icons are showing and
+  keeps the crops (`ItemImageCache`).
+- **Opening a hidden item:** a hidden item ignores presses, so Barkeep reveals
+  its section, presses it through Accessibility (falling back to a real
+  click), and hides again once its menu closes (`ItemOpener`).
 - **Keep awake** holds an `IOPMAssertion`, like `caffeinate` and Amphetamine.
 
 Both engines sit behind the `HidingEngine` protocol, so a future macOS only

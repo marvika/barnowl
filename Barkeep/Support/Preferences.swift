@@ -12,6 +12,7 @@ enum PrefKey {
     static let menuShowsDarkMode = "menuShowsDarkMode"
     static let menuShowsDesktopIcons = "menuShowsDesktopIcons"
     static let menuShowsHiddenFiles = "menuShowsHiddenFiles"
+    static let hiddenIconsDisplay = "hiddenIconsDisplay"
 }
 
 enum Preferences {
@@ -26,6 +27,7 @@ enum Preferences {
             PrefKey.menuShowsDarkMode: true,
             PrefKey.menuShowsDesktopIcons: true,
             PrefKey.menuShowsHiddenFiles: true,
+            PrefKey.hiddenIconsDisplay: HiddenIconsDisplay.automatic.rawValue,
         ])
     }
 
@@ -43,6 +45,9 @@ enum Preferences {
     static var menuShowsDarkMode: Bool { defaults.bool(forKey: PrefKey.menuShowsDarkMode) }
     static var menuShowsDesktopIcons: Bool { defaults.bool(forKey: PrefKey.menuShowsDesktopIcons) }
     static var menuShowsHiddenFiles: Bool { defaults.bool(forKey: PrefKey.menuShowsHiddenFiles) }
+    static var hiddenIconsDisplay: HiddenIconsDisplay {
+        HiddenIconsDisplay(rawValue: defaults.string(forKey: PrefKey.hiddenIconsDisplay) ?? "") ?? .automatic
+    }
     static var hasShownWelcome: Bool {
         get { defaults.bool(forKey: PrefKey.hasShownWelcome) }
         set { defaults.set(newValue, forKey: PrefKey.hasShownWelcome) }
