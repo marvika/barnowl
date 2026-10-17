@@ -282,6 +282,7 @@ private struct GeneralPane: View {
                     BadgeLabel(title: "Open at login", subtitle: "Start Barkeep when you log in.",
                                symbol: "power", color: .gray)
                 }
+                .accessibilityLabel("Open at login")
                 .onChange(of: launchAtLogin) { _, enabled in LaunchAtLogin.set(enabled) { launchAtLogin = $0 } }
             }
             Section {
