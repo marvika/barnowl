@@ -195,3 +195,55 @@ struct GroupStoreTests {
         #expect(GroupStore(defaults: defaults).groups.count == 2)  // saved
     }
 }
+
+struct LayoutKeeperTests {
+    private typealias Item = (key: String, windowID: CGWindowID, row: LayoutRow, movable: Bool)
+    private let work = UUID()
+
+    private func run(_ items: [Item], remembered: [String: LayoutRow] = [:], last: [String: CGWindowID] = [:],
+                     baseline: Bool = true, newIcons: NewIconPlacement = .hidden,
+                     groups: [String: UUID] = [:]) -> (moves: [LayoutKeeper.Decision], remembered: [String: LayoutRow]) {
+        LayoutKeeper.reconcile(items: items, groupOf: { groups[$0] }, remembered: remembered, lastWindowIDs: last,
+                               hasBaseline: baseline, newIcons: newIcons)
+    }
+
+    @Test func firstScanOnlyRecords() {
+        let result = run([("a", 1, .visible, true), ("b", 2, .hidden, true)], baseline: false)
+        #expect(result.moves.isEmpty)
+        #expect(result.remembered == ["a": .visible, "b": .hidden])
+    }
+
+    @Test func relaunchedIconGoesBackToItsRow() {
+        // Same key, new window, wrong row: the app re-added it.
+        let result = run([("a", 7, .visible, true)], remembered: ["a": .hidden], last: ["a": 1])
+        #expect(result.moves == [.init(key: "a", row: .hidden)])
+    }
+
+    @Test func userDragIsRespected() {
+        // Same window, different row: the user moved it with ⌘-drag.
+        let result = run([("a", 1, .visible, true)], remembered: ["a": .hidden], last: ["a": 1])
+        #expect(result.moves.isEmpty)
+        #expect(result.remembered["a"] == .visible)
+    }
+
+    @Test func newIconsFollowThePreference() {
+        #expect(run([("new", 9, .visible, true)]).moves == [.init(key: "new", row: .hidden)])
+        #expect(run([("new", 9, .visible, true)], newIcons: .visible).moves.isEmpty)
+    }
+
+    @Test func groupMembersStayAlwaysHidden() {
+        let result = run([("z", 3, .visible, true)], groups: ["z": work])
+        #expect(result.moves == [.init(key: "z", row: .group(work))])
+        #expect(run([("z", 3, .alwaysHidden, true)], groups: ["z": work]).moves.isEmpty)
+    }
+
+    @Test func immovableIconsAreLeftAlone() {
+        #expect(run([("clock", 5, .visible, false)]).moves.isEmpty)
+    }
+
+    @Test func rowsRoundTripThroughStorage() {
+        for row in [LayoutRow.visible, .hidden, .alwaysHidden, .group(work)] {
+            #expect(LayoutRow(storageValue: row.storageValue) == row)
+        }
+    }
+}

@@ -16,6 +16,10 @@ final class ItemScanner {
     @ObservationIgnored private var scanTask: Task<Void, Never>?
     @ObservationIgnored private var rescanRequested = false
     @ObservationIgnored private var appsObservation: NSKeyValueObservation?
+    @ObservationIgnored private var watchTask: Task<Void, Never>?
+    @ObservationIgnored private var publishedWindowIDs: Set<CGWindowID> = []
+    /// Called after each full scan.
+    @ObservationIgnored var onScan: (() -> Void)?
 
     init(statusItems: StatusItems) {
         self.statusItems = statusItems
@@ -28,6 +32,17 @@ final class ItemScanner {
             Task { @MainActor in
                 try? await Task.sleep(for: .seconds(1.5))
                 self?.refresh()
+            }
+        }
+        // Apps also add and remove icons without launching or quitting (an
+        // icon that blinks for unread messages is re-added each time). A cheap
+        // window-list check notices that.
+        watchTask = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(3))
+                guard let self else { return }
+                let windows = Set(Self.statusWindows().map(\.windowID))
+                if windows != self.publishedWindowIDs { self.refresh() }
             }
         }
         refresh()
@@ -102,7 +117,9 @@ final class ItemScanner {
         }
         let keyed = ItemKey.assign(scanned.sorted { $0.frame.minX > $1.frame.minX })
         items = classify(keyed).sorted { $0.frame.minX < $1.frame.minX }
+        publishedWindowIDs = Set(windows.map(\.windowID))
         lastScan = Date()
+        onScan?()
         Log.menuBar.info("Scanned \(self.items.count) menu bar items from \(windows.count) windows")
     }
 

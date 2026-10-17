@@ -18,6 +18,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var pendingURLs: [URL] = []
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        // Unit tests run inside the app; don't touch the real menu bar then.
+        guard ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] == nil else { return }
         Preferences.registerDefaults()
 
         items = StatusItems()
@@ -32,6 +34,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         model.syncGroupIcons = { [weak self] in self?.groupIcons.sync() }
         model.groupIconWindow = { [weak self] id in self?.groupIcons.windowID(of: id) }
         groupIcons.sync()
+        scanner.onScan = { [weak self] in
+            Task { await self?.model.layout.reconcile() }
+        }
         bar = BarkeepBarController(model: model) { [weak self] in self?.items.toggle.button?.window?.frame }
         search = SearchPanelController(model: model)
         model.showSearch = { [weak self] in self?.search.show() }
@@ -108,7 +113,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     /// barkeep://settings, barkeep://setup, barkeep://search, barkeep://bar,
-    /// barkeep://open?app=NAME, barkeep://toggle, barkeep://show-all,
+    /// barkeep://open?app=NAME, barkeep://place?app=NAME&row=hidden, barkeep://toggle, barkeep://show-all,
     /// barkeep://hide, barkeep://keep-awake?minutes=60 (0 or none = indefinitely),
     /// barkeep://keep-awake/stop. For Shortcuts, Raycast and scripts.
     func application(_ application: NSApplication, open urls: [URL]) {
@@ -126,6 +131,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 model.showSettings(pane)
             case ("search", _): search.show()
             case ("bar", _): bar.toggle()
+            case ("place", _):
+                // barkeep://place?app=Claude&row=hidden (visible, hidden or alwaysHidden)
+                guard let app = query?.first(where: { $0.name == "app" })?.value?.lowercased(),
+                      let row = query?.first(where: { $0.name == "row" })?.value.flatMap(LayoutRow.init(storageValue:))
+                else { break }
+                Task {
+                    let items = await scanner.freshItems()
+                    if let item = items.first(where: { $0.bundleIdentifier?.lowercased() == app })
+                        ?? items.first(where: { $0.appName.lowercased() == app || $0.name.lowercased() == app }) {
+                        await model.layout.place(item.key, in: row)
+                    }
+                }
             case ("open", _):
                 // barkeep://open?app=OneDrive (app name or bundle ID) opens that app's menu bar item.
                 guard let app = query?.first(where: { $0.name == "app" })?.value?.lowercased() else { break }

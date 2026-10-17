@@ -147,6 +147,7 @@ private struct MenuBarPane: View {
     @AppStorage(PrefKey.autoRehideDelay) private var autoRehideDelay = 10.0
     @AppStorage(PrefKey.alwaysHiddenEnabled) private var alwaysHiddenEnabled = false
     @AppStorage(PrefKey.hiddenIconsDisplay) private var display = HiddenIconsDisplay.automatic
+    @AppStorage(PrefKey.newIconPlacement) private var newIcons = NewIconPlacement.hidden
 
     var body: some View {
         Form {
@@ -169,6 +170,13 @@ private struct MenuBarPane: View {
                 Text("Hidden icons appear")
             }
             Section("Hiding") {
+                Picker(selection: $newIcons) {
+                    Text("Hidden").tag(NewIconPlacement.hidden)
+                    Text("In the menu bar").tag(NewIconPlacement.visible)
+                } label: {
+                    BadgeLabel(title: "New icons go", subtitle: "When an app adds an icon Barkeep hasn't seen before.",
+                               symbol: "sparkle", color: .teal)
+                }
                 Toggle(isOn: $autoRehide) {
                     BadgeLabel(title: "Hide icons again automatically", symbol: "timer", color: .blue)
                 }

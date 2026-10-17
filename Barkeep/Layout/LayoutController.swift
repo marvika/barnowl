@@ -6,6 +6,96 @@ enum LayoutRow: Hashable, Sendable {
     case hidden
     case alwaysHidden
     case group(UUID)
+
+    /// For saving: "visible", "hidden", "alwaysHidden" or "group:<id>".
+    var storageValue: String {
+        switch self {
+        case .visible: "visible"
+        case .hidden: "hidden"
+        case .alwaysHidden: "alwaysHidden"
+        case .group(let id): "group:\(id.uuidString)"
+        }
+    }
+
+    init?(storageValue: String) {
+        switch storageValue {
+        case "visible": self = .visible
+        case "hidden": self = .hidden
+        case "alwaysHidden": self = .alwaysHidden
+        default:
+            guard storageValue.hasPrefix("group:"), let id = UUID(uuidString: String(storageValue.dropFirst(6)))
+            else { return nil }
+            self = .group(id)
+        }
+    }
+
+    init(_ section: MenuBarSection) {
+        switch section {
+        case .visible: self = .visible
+        case .hidden: self = .hidden
+        case .alwaysHidden: self = .alwaysHidden
+        }
+    }
+}
+
+/// Where new icons go when an app adds one Barkeep hasn't seen before.
+enum NewIconPlacement: String, CaseIterable, Identifiable, Sendable {
+    case hidden
+    case visible
+    var id: Self { self }
+}
+
+/// Decides what to do with each icon after a scan, so icons stay where the
+/// user put them. Pure, so it can be tested.
+enum LayoutKeeper {
+    struct Decision: Equatable {
+        let key: String
+        let row: LayoutRow
+    }
+
+    /// - `remembered`: each key's saved row.
+    /// - `lastWindowIDs`: each key's window at the previous scan; a different
+    ///   window means the app re-added the icon (often after a relaunch), and
+    ///   macOS put it wherever it liked.
+    /// - `hasBaseline`: false on the very first scan, which only records.
+    ///
+    /// Returns the moves to make and the updated memory.
+    static func reconcile(items: [(key: String, windowID: CGWindowID, row: LayoutRow, movable: Bool)],
+                          groupOf: (String) -> UUID?,
+                          remembered: [String: LayoutRow], lastWindowIDs: [String: CGWindowID],
+                          hasBaseline: Bool, newIcons: NewIconPlacement)
+        -> (moves: [Decision], remembered: [String: LayoutRow]) {
+        var memory = remembered
+        var moves: [Decision] = []
+        for item in items where item.movable {
+            if let group = groupOf(item.key) {
+                // Grouped icons wait in the always-hidden section.
+                if item.row != .alwaysHidden { moves.append(Decision(key: item.key, row: .group(group))) }
+                memory[item.key] = .group(group)
+                continue
+            }
+            let isNewWindow = lastWindowIDs[item.key] != item.windowID
+            if let saved = memory[item.key], saved != item.row {
+                if case .group = saved {
+                    // Its group is gone: it stays where it is.
+                    memory[item.key] = item.row
+                } else if isNewWindow {
+                    moves.append(Decision(key: item.key, row: saved))
+                } else {
+                    // Same window, new place: the user ⌘-dragged it. Keep that.
+                    memory[item.key] = item.row
+                }
+            } else if memory[item.key] == nil {
+                if hasBaseline, isNewWindow, newIcons == .hidden, item.row == .visible {
+                    moves.append(Decision(key: item.key, row: .hidden))
+                    memory[item.key] = .hidden
+                } else {
+                    memory[item.key] = item.row
+                }
+            }
+        }
+        return (moves, memory)
+    }
 }
 
 /// Turns "put this icon there" into ⌘-drags, for the layout editor, the
@@ -21,6 +111,20 @@ final class LayoutController {
     @ObservationIgnored private let statusItems: StatusItems
     @ObservationIgnored private let sections: SectionController
     @ObservationIgnored private let groups: GroupStore
+    @ObservationIgnored private var lastWindowIDs: [String: CGWindowID] = [:]
+    @ObservationIgnored private var hasBaseline = false
+    @ObservationIgnored private var isReconciling = false
+    @ObservationIgnored private let memoryKey = "itemRows"
+
+    private var remembered: [String: LayoutRow] {
+        get {
+            let raw = UserDefaults.standard.dictionary(forKey: memoryKey) as? [String: String] ?? [:]
+            return raw.compactMapValues(LayoutRow.init(storageValue:))
+        }
+        set {
+            UserDefaults.standard.set(newValue.mapValues(\.storageValue), forKey: memoryKey)
+        }
+    }
 
     init(scanner: ItemScanner, mover: ItemMover, statusItems: StatusItems, sections: SectionController,
          groups: GroupStore) {
@@ -77,6 +181,7 @@ final class LayoutController {
         } else {
             groups.removeFromGroups(key)
         }
+        remembered[key] = row
         guard let destination = await destination(for: row, before: beforeKey, moving: item) else {
             lastError = "Couldn't find where to put \(item.name)."
             return
@@ -103,6 +208,29 @@ final class LayoutController {
         case .visible: return StatusItems.windowID(of: statusItems.separator).map { .rightOf($0) }
         case .hidden: return StatusItems.windowID(of: statusItems.separator).map { .leftOf($0) }
         case .alwaysHidden, .group: return StatusItems.windowID(of: statusItems.alwaysHidden).map { .leftOf($0) }
+        }
+    }
+
+    /// After a scan: put back icons that reappeared in the wrong place, send
+    /// new icons where the user wants them, and learn from the user's own
+    /// ⌘-drags. Skipped while Barkeep itself is moving things.
+    func reconcile() async {
+        guard !isBusy, !isReconciling, !sections.holdOpen, sections.state == .collapsed,
+              !scanner.items.isEmpty else { return }
+        isReconciling = true
+        defer { isReconciling = false }
+        let snapshot = scanner.items.map {
+            (key: $0.key, windowID: $0.windowID, row: LayoutRow($0.section), movable: $0.isMovable)
+        }
+        let result = LayoutKeeper.reconcile(items: snapshot, groupOf: { self.groups.group(containing: $0)?.id },
+                                            remembered: remembered, lastWindowIDs: lastWindowIDs,
+                                            hasBaseline: hasBaseline, newIcons: Preferences.newIconPlacement)
+        remembered = result.remembered
+        lastWindowIDs = Dictionary(snapshot.map { ($0.key, $0.windowID) }, uniquingKeysWith: { a, _ in a })
+        hasBaseline = true
+        for move in result.moves {
+            Log.menuBar.info("Keeping \(move.key) in \(move.row.storageValue)")
+            await place(move.key, in: move.row)
         }
     }
 

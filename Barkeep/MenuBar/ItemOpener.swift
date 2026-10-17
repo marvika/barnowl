@@ -67,8 +67,13 @@ final class ItemOpener {
     /// Presses through Accessibility; some apps (often Electron ones) accept
     /// the press but show nothing, and a real click works for those.
     private func press(_ item: MenuBarItem) async {
-        let pressed = AXUIElementPerformAction(item.element.raw, kAXPressAction as CFString) == .success
-        if pressed, await menuAppears(for: item.pid) { return }
+        // An app running its menu often can't answer in time and reports
+        // "cannot complete" although the menu opened. Keep the wait short and
+        // look for the menu either way; clicking now would close it again.
+        AXUIElementSetMessagingTimeout(item.element.raw, 0.25)
+        let result = AXUIElementPerformAction(item.element.raw, kAXPressAction as CFString)
+        let mayHaveOpened = result == .success || result == .cannotComplete
+        if mayHaveOpened, await menuAppears(for: item.pid) { return }
         Log.menuBar.info("Press didn't open \(item.appName); clicking instead")
         let frame = ItemMover.frames()[item.windowID] ?? item.frame
         Self.click(at: CGPoint(x: frame.midX, y: frame.midY))

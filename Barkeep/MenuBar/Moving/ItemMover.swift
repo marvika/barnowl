@@ -50,8 +50,7 @@ final class ItemMover {
     private let statusItems: StatusItems
     private var tail: Task<Bool, Never>?
 
-    /// Bumped while a move is posting, so Barkeep can ignore the arrow's own
-    /// press highlight and other side effects.
+    /// True while a move is in progress.
     private(set) var isMoving = false
 
     init(statusItems: StatusItems) {
@@ -73,7 +72,17 @@ final class ItemMover {
 
     private func perform(_ itemID: CGWindowID, _ destination: MoveDestination) async -> Bool {
         isMoving = true
-        defer { isMoving = false }
+        // The drag's mouse-down lands on the arrow; without this its tooltip
+        // pops up after every move.
+        let toolTip = statusItems.toggle.button?.toolTip
+        statusItems.toggle.button?.toolTip = nil
+        defer {
+            isMoving = false
+            Task { @MainActor [statusItems] in
+                try? await Task.sleep(for: .seconds(2))
+                if statusItems.toggle.button?.toolTip == nil { statusItems.toggle.button?.toolTip = toolTip }
+            }
+        }
         for attempt in 1...3 {
             await Self.waitForMouseButtonsReleased()
             let frames = Self.frames()
