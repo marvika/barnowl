@@ -14,7 +14,7 @@
   every item window on macOS 26)
 - Perch: hidden and behind-the-notch icons in a strip under the menu
   bar, with real pictures (Screen Recording) and click-through
-- Notch detection, plus an Automatic / In the menu bar / In the Perch
+- Notch detection, plus an Automatic / In the menu bar / On the Perch
   setting
 - Search palette (⌃⌥⌘M)
 - `barnowl://open?app=…`, `barnowl://bar` and `barnowl://search`

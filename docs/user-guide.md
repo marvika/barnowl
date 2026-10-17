@@ -48,13 +48,13 @@ Barn Owl adds an **arrow** to your menu bar, next to Control Center, and a
 
 Choose in Settings → Menu Bar:
 
-- **In the Perch:** a strip under the menu bar. Click an icon and
+- **On the Perch:** a strip under the menu bar. Click an icon and
   Barn Owl brings it next to the arrow and opens its menu, then puts it back.
 - **In the menu bar:** hidden icons slide back into the menu bar itself.
-- **Automatic** (the default): the menu bar when there's room, the Barn Owl
-  Bar when there isn't. On a notched MacBook that's usually the Perch,
+- **Automatic** (the default): the menu bar when there's room, the Perch
+  when there isn't. On a notched MacBook that's usually the Perch,
   because only a few icons fit beside the notch. Icons that end up behind
-  the notch always show in the Perch.
+  the notch always show on the Perch.
 
 ### Other options (Settings → Menu Bar)
 
@@ -143,8 +143,8 @@ macOS's own camera and screen-recording indicator.
 - Optionally it also **hides desktop icons**. That restarts Finder, so the
   screen flickers once.
 
-While presenting, the arrow shows an eye-slash. Clicking it opens the Barn Owl
-Bar, so your hidden icons only appear if you choose to show them.
+While presenting, the arrow shows an eye-slash. Clicking it opens the
+Perch, so your hidden icons only appear if you choose to show them.
 
 ## A separate layout at your desk
 

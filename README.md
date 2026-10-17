@@ -32,7 +32,7 @@ toggles, clipboard history and a drop tray for files.
 
 Barn Owl adds an arrow to your menu bar. Everything you don't need right now
 waits behind it. Click the arrow, press **⌃⌥⌘B**, hover or scroll, and your
-hidden icons appear in the **Perch**, a strip under the menu bar. Click
+hidden icons appear on the **Perch**, a strip under the menu bar. Click
 any icon there and its menu opens as usual. On a notched MacBook this is also
 where icons that would otherwise sit behind the notch end up.
 
