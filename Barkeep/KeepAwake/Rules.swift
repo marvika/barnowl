@@ -12,17 +12,22 @@ enum RuleCondition: Codable, Hashable, Sendable {
     /// minutes are from midnight.
     case schedule(weekdays: Set<Int>, startMinute: Int, endMinute: Int)
 
-    var title: String {
+    /// Lower-case, to join into a sentence: "on power adapter and an
+    /// external display is connected".
+    var phrase: String {
         switch self {
         case .appRunning(_, let name): "\(name) is running"
-        case .externalDisplay: "An external display is connected"
-        case .onPower: "On power adapter"
-        case .microphoneInUse: "The microphone is in use (calls)"
-        case .downloading: "Files are downloading"
+        case .externalDisplay: "an external display is connected"
+        case .onPower: "on power adapter"
+        case .microphoneInUse: "the microphone is in use (calls)"
+        case .downloading: "files are downloading"
         case .schedule(let days, let start, let end):
-            "\(Self.dayList(days)) \(Self.time(start))–\(Self.time(end))"
+            "\(Self.dayList(days).lowercased()) \(Self.time(start))–\(Self.time(end))"
         }
     }
+
+    /// The phrase as a label on its own.
+    var title: String { phrase.prefix(1).uppercased() + phrase.dropFirst() }
 
     var symbol: String {
         switch self {
@@ -85,9 +90,11 @@ struct KeepAwakeRule: Codable, Identifiable, Hashable, Sendable {
     var isEnabled = true
     var allowDisplaySleep = false
 
-    var title: String {
-        conditions.map(\.title).joined(separator: " and ")
+    var phrase: String {
+        conditions.map(\.phrase).joined(separator: " and ")
     }
+
+    var title: String { phrase.prefix(1).uppercased() + phrase.dropFirst() }
 
     func holds(in snapshot: ConditionSnapshot) -> Bool {
         isEnabled && !conditions.isEmpty && conditions.allSatisfy { $0.holds(in: snapshot) }

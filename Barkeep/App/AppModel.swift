@@ -38,6 +38,7 @@ final class AppModel {
         opener = ItemOpener(sections: sections, mover: mover)
         layout = LayoutController(scanner: scanner, mover: mover, statusItems: sections.items, sections: sections,
                                   groups: groups)
+        layout.images = images
     }
 
     func showSettings(_ pane: SettingsPane? = nil) {

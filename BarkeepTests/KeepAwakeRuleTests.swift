@@ -43,7 +43,8 @@ struct KeepAwakeRuleTests {
 
     @Test func titlesReadNaturally() {
         #expect(KeepAwakeRule(conditions: [.onPower, .externalDisplay]).title
-                == "On power adapter and An external display is connected")
+                == "On power adapter and an external display is connected")
+        #expect(RuleCondition.externalDisplay.title == "An external display is connected")
         let schedule = RuleCondition.schedule(weekdays: [2, 3, 4, 5, 6], startMinute: 8 * 60, endMinute: 17 * 60 + 30)
         #expect(schedule.title == "Weekdays 08:00–17:30")
     }

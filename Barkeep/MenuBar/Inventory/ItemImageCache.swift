@@ -14,6 +14,17 @@ import ScreenCaptureKit
 @Observable
 final class ItemImageCache {
     private(set) var images: [CGWindowID: NSImage] = [:]
+    /// Pictures from earlier runs, by item key; filled from disk on demand.
+    @ObservationIgnored private var saved: [String: NSImage] = [:]
+
+    /// ~/Library/Application Support/Barkeep/Icons
+    private static let folder: URL? = {
+        guard let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
+        else { return nil }
+        let folder = support.appending(path: "Barkeep/Icons", directoryHint: .isDirectory)
+        try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        return folder
+    }()
 
     static var hasPermission: Bool { CGPreflightScreenCaptureAccess() }
 
@@ -24,20 +35,55 @@ final class ItemImageCache {
         }
     }
 
-    func image(for item: MenuBarItem) -> NSImage? { images[item.windowID] }
+    /// This run's capture, else the last one saved for the same icon.
+    func image(for item: MenuBarItem) -> NSImage? {
+        if let image = images[item.windowID] { return image }
+        if let image = saved[item.key] { return image }
+        guard let url = Self.file(for: item.key), let image = NSImage(contentsOf: url) else { return nil }
+        image.size = item.frame.size
+        saved[item.key] = image
+        return image
+    }
+
+    func hasFreshImage(for item: MenuBarItem) -> Bool { images[item.windowID] != nil }
+
+    /// One file per icon and menu bar appearance (glyphs differ in light and dark).
+    private static func file(for key: String) -> URL? {
+        let dark = NSApp.effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+        let safe = key.map { $0.isLetter || $0.isNumber || $0 == "." || $0 == "-" ? $0 : "_" }
+        return folder?.appending(path: String(safe) + (dark ? "-dark" : "-light") + ".png")
+    }
+
+    private func save(_ image: CGImage, key: String) {
+        guard let url = Self.file(for: key),
+              let data = NSBitmapImageRep(cgImage: image).representation(using: .png, properties: [:]) else { return }
+        try? data.write(to: url, options: .atomic)
+    }
 
     /// Captures every item that's on screen now. Items still hidden keep
-    /// their last picture.
-    func capture(_ items: [MenuBarItem]) async {
+    /// their last picture. With `pruning`, `items` is the full list and
+    /// pictures of windows not in it are dropped.
+    func capture(_ items: [MenuBarItem], pruning: Bool = true) async {
         guard Self.hasPermission, let screen = NSScreen.screens.first else { return }
-        let onScreen = items.filter { $0.frame.minX >= screen.frame.minX && $0.frame.maxX <= screen.frame.maxX }
+        // The clock's window runs a couple of points past the screen edge.
+        let onScreen = items.filter { $0.frame.minX >= screen.frame.minX && $0.frame.maxX <= screen.frame.maxX + 4 }
         guard !onScreen.isEmpty, let captured = await Self.capture(onScreen, screen: screen) else { return }
         // Drop pictures of windows that no longer exist.
         let live = Set(items.map(\.windowID))
-        images = images.filter { live.contains($0.key) }.merging(captured) { _, new in new }
+        images = images.filter { !pruning || live.contains($0.key) }.merging(captured.mapValues(\.image)) { _, new in new }
+        for item in onScreen {
+            guard let piece = captured[item.windowID] else { continue }
+            saved[item.key] = piece.image
+            save(piece.cgImage, key: item.key)
+        }
     }
 
-    private static func capture(_ items: [MenuBarItem], screen: NSScreen) async -> [CGWindowID: NSImage]? {
+    private struct Piece {
+        let cgImage: CGImage
+        let image: NSImage
+    }
+
+    private static func capture(_ items: [MenuBarItem], screen: NSScreen) async -> [CGWindowID: Piece]? {
         do {
             let content = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true)
             let screenNumber = screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? CGDirectDisplayID
@@ -60,12 +106,13 @@ final class ItemImageCache {
             let filter = SCContentFilter(display: display, including: windows)
             let image = try await SCScreenshotManager.captureImage(contentFilter: filter, configuration: config)
 
-            var result: [CGWindowID: NSImage] = [:]
+            var result: [CGWindowID: Piece] = [:]
             for item in items {
                 let crop = CGRect(x: (item.frame.minX - display.frame.minX) * scale, y: item.frame.minY * scale,
                                   width: item.frame.width * scale, height: item.frame.height * scale).integral
+                    .intersection(CGRect(x: 0, y: 0, width: image.width, height: image.height))
                 guard let piece = image.cropping(to: crop), piece.hasVisiblePixels else { continue }
-                result[item.windowID] = NSImage(cgImage: piece, size: item.frame.size)
+                result[item.windowID] = Piece(cgImage: piece, image: NSImage(cgImage: piece, size: item.frame.size))
             }
             return result
         } catch {

@@ -111,6 +111,7 @@ final class LayoutController {
     @ObservationIgnored private let statusItems: StatusItems
     @ObservationIgnored private let sections: SectionController
     @ObservationIgnored private let groups: GroupStore
+    @ObservationIgnored var images: ItemImageCache?
     @ObservationIgnored private var lastWindowIDs: [String: CGWindowID] = [:]
     @ObservationIgnored private var hasBaseline = false
     @ObservationIgnored private var isReconciling = false
@@ -232,6 +233,34 @@ final class LayoutController {
             Log.menuBar.info("Keeping \(move.key) in \(move.row.storageValue)")
             await place(move.key, in: move.row)
         }
+    }
+
+    /// Icons hidden behind the notch or off screen can't be photographed. This
+    /// moves each one without a picture into view for a moment, captures it
+    /// and puts it back.
+    func refreshMissingPictures() async {
+        guard let images, ItemImageCache.hasPermission, !isBusy,
+              let divider = StatusItems.windowID(of: statusItems.separator) else { return }
+        let missing = scanner.items.filter { $0.isMovable && !images.hasFreshImage(for: $0) }
+        guard !missing.isEmpty else { return }
+        isBusy = true
+        defer {
+            isBusy = false
+            scanner.updateFrames()
+        }
+        for item in missing {
+            let frames = ItemMover.frames()
+            let start = frames[item.windowID] ?? item.frame
+            let neighbor = frames.filter { $0.key != item.windowID && $0.value.minX >= start.maxX - 1 }
+                .min { $0.value.minX < $1.value.minX }?.key
+            guard await mover.move(item.windowID, to: .rightOf(divider)) else { continue }
+            scanner.updateFrames()
+            if let moved = scanner.items.first(where: { $0.windowID == item.windowID }) {
+                await images.capture([moved], pruning: false)
+            }
+            if let neighbor { await mover.move(item.windowID, to: .leftOf(neighbor)) }
+        }
+        Log.menuBar.info("Refreshed pictures of \(missing.count) icons")
     }
 
     private func ensureAlwaysHiddenSection() async {

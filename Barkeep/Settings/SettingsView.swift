@@ -88,9 +88,15 @@ private struct LayoutPane: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 12) {
-                Text("Drag icons between rows. Your menu bar changes right away. Right-click an icon for more options.")
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
+                HStack(alignment: .top) {
+                    Text("Drag icons between rows. Your menu bar changes right away. Right-click an icon for more options.")
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Spacer()
+                    Button("Refresh Pictures") { Task { await model.layout.refreshMissingPictures() } }
+                        .help("Briefly brings icons without a picture into view to photograph them.")
+                        .disabled(model.layout.isBusy || !model.screenRecordingAllowed)
+                }
                 LayoutEditorView(model: model)
             }
             .padding(20)
@@ -124,7 +130,7 @@ private struct GeneralPane: View {
             Section("How to use Barkeep") {
                 hint("cursorarrow.click", "Click the arrow to show or hide icons.")
                 hint("option", "Option-click the arrow to show every icon, including always-hidden ones.")
-                hint("cursorarrow.click.2", "Right-click the arrow for Keep Awake, quick toggles and Settings.")
+                hint("cup.and.saucer", "Click the cup (or right-click the arrow) for Keep Awake and quick toggles.")
                 hint("command", "Hold ⌘ and drag icons across the | divider to hide or show them.")
             }
         }
@@ -365,6 +371,20 @@ private struct KeepAwakePane: View {
     }
 }
 
+/// A condition's icon and name, with icons in a fixed-width column so the
+/// names line up.
+private struct ConditionLabel: View {
+    let title: String
+    let symbol: String
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Image(systemName: symbol).frame(width: 18).foregroundStyle(.secondary)
+            Text(title)
+        }
+    }
+}
+
 /// Builds a rule from conditions that must all hold.
 private struct RuleEditorSheet: View {
     let rules: RuleStore
@@ -418,7 +438,7 @@ private struct RuleEditorSheet: View {
             rule.conditions.removeAll { $0 == condition }
             if on { rule.conditions.append(condition) }
         })) {
-            Label(condition.title, systemImage: condition.symbol)
+            ConditionLabel(title: condition.title, symbol: condition.symbol)
         }
         .toggleStyle(.checkbox)
     }
@@ -432,7 +452,7 @@ private struct RuleEditorSheet: View {
                     rule.conditions.append(.appRunning(bundleIdentifier: appBundle, name: app.localizedName ?? "App"))
                 }
             })) {
-                Label("An app is running:", systemImage: "app.badge.checkmark")
+                ConditionLabel(title: "An app is running:", symbol: "app.badge.checkmark")
             }
             .toggleStyle(.checkbox)
             Picker("", selection: Binding(get: { appBundle }, set: { bundle in
@@ -456,7 +476,7 @@ private struct RuleEditorSheet: View {
             Toggle(isOn: Binding(get: { currentSchedule != nil }, set: { on in
                 setSchedule(on)
             })) {
-                Label("During these hours:", systemImage: "calendar")
+                ConditionLabel(title: "During these hours:", symbol: "calendar")
             }
             .toggleStyle(.checkbox)
             HStack(spacing: 4) {

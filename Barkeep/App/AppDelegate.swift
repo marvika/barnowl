@@ -49,6 +49,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 await self.images.capture(await self.scanner.freshItems())
                 self.sections.collapse()
                 await self.model.layout.applyFirstRunDefaults()
+                await self.model.layout.refreshMissingPictures()
             }
         }
         model.showSetup = { [weak self] in self?.onboardingWindow.show() }
@@ -108,7 +109,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 await self.model.layout.applyFirstRunDefaults()
             }
         } else {
-            scanner.start()
+            // Setup's layout step shows the real icons, so take their pictures
+            // while everything is still showing.
+            Task {
+                let items = await self.scanner.freshItems()
+                await self.images.capture(items)
+                self.scanner.start()
+            }
             onboardingWindow.show()
         }
     }

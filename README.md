@@ -4,18 +4,28 @@ A tidier macOS menu bar, and a Mac that stays awake when you need it to.
 Open source (MIT), for macOS 26 Tahoe and macOS 27.
 
 - **Hide the clutter.** An arrow and a `|` divider split your menu bar. Icons
-  left of the divider are hidden until you click the arrow, and hide again
-  after a few seconds. An optional `⋮` divider adds an always-hidden section.
+  left of the divider are hidden until you click the arrow. An optional `⋮`
+  divider adds an always-hidden section.
+- **Arrange without fiddling.** Settings → Layout shows every icon with its
+  real picture. Drag icons between Menu bar, Hidden, Always hidden and your
+  groups, and Barkeep moves the real icons. Right-click any icon for "Always
+  Show in Menu Bar", "Hide" and more.
+- **Groups.** A group is one icon in the menu bar, for example a briefcase for
+  "Work", that opens a strip with its icons.
+- **Icons stay put.** Barkeep remembers where each icon belongs and puts it
+  back when an app relaunches. New icons go to Hidden (or the menu bar, if
+  you prefer).
 - **Barkeep Bar.** On a notched MacBook there's only room for a few icons.
   The Barkeep Bar shows hidden icons, and any stuck behind the notch, in a
-  strip under the menu bar. Click one to open its menu. Choose Automatic, In
-  the menu bar, or In the Barkeep Bar.
+  strip under the menu bar. Click one and its menu opens right there.
 - **Search.** Press ⌃⌥⌘M and type to find and open any menu bar icon.
-- **Keep awake.** For a set time, indefinitely, or while an app is running,
-  with or without letting the display sleep. Replaces Amphetamine for the
-  common cases.
-- **Quick toggles.** Dark mode, desktop icons and Finder hidden files from the
-  arrow's right-click menu.
+- **Keep awake.** Everything most people use Amphetamine for: for a set time,
+  until a time, while an app runs, until downloads finish, or by rules (on
+  power with an external display, during calls, on a schedule…). Stops below
+  a battery level, can keep Teams and Slack from showing you as Away, and has
+  an optional closed-lid mode.
+- **Quick panel.** Click the cup icon for keep awake and toggles: dark mode,
+  microphone mute, hide desktop icons, hidden files, sleep display.
 - **Guided setup and a System Settings–style Settings window.**
 
 ## Using it
@@ -25,8 +35,9 @@ Open source (MIT), for macOS 26 Tahoe and macOS 27.
 | Show hidden icons | Click the arrow, or press ⌃⌥⌘B |
 | Search the menu bar | ⌃⌥⌘M |
 | Show every icon | Option-click the arrow |
-| Menu (Keep Awake, toggles, Settings) | Right-click or control-click the arrow |
-| Choose what's hidden | Hold ⌘ and drag icons across the `\|` divider |
+| Keep awake and toggles | Click the cup, or right-click the arrow |
+| Start or stop keep awake | Option-click the cup |
+| Arrange icons and groups | Settings → Layout, or ⌘-drag in the menu bar |
 
 ### URL scheme
 
@@ -35,6 +46,7 @@ For Shortcuts, Raycast or scripts:
 ```
 barkeep://toggle            barkeep://show-all          barkeep://hide
 barkeep://bar               barkeep://search            barkeep://open?app=OneDrive
+barkeep://place?app=Zscaler&row=hidden      barkeep://settings?pane=layout
 barkeep://keep-awake?minutes=60    barkeep://keep-awake/stop
 barkeep://settings          barkeep://setup
 ```
@@ -91,9 +103,15 @@ menu bar items needs Accessibility, and macOS 27 hiding uses a private API.
   fails, and the old CGWindowList calls return nothing), so Barkeep takes one
   ScreenCaptureKit shot of the menu bar strip whenever icons are showing and
   keeps the crops (`ItemImageCache`).
-- **Opening a hidden item:** a hidden item ignores presses, so Barkeep reveals
-  its section, presses it through Accessibility (falling back to a real
-  click), and hides again once its menu closes (`ItemOpener`).
+- **Moving icons:** a synthetic ⌘-drag whose mouse-down lands on Barkeep's own
+  arrow and is routed to the target icon by event field `0x33`, so even
+  off-screen icons can be moved and no other app's icon is ever clicked
+  (`ItemMover`, Frost's technique).
+- **Opening a hidden item:** a hidden item ignores presses, so Barkeep moves it
+  next to the icon you clicked, presses it through Accessibility (falling back
+  to a real click), and moves it back once its menu closes (`ItemOpener`).
+- **Pictures** are kept in `~/Library/Application Support/Barkeep/Icons`, so
+  they survive relaunches.
 - **Keep awake** holds an `IOPMAssertion`, like `caffeinate` and Amphetamine.
 
 Both engines sit behind the `HidingEngine` protocol, so a future macOS only

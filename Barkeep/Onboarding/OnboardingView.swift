@@ -48,9 +48,9 @@ struct OnboardingView: View {
             Text("A tidier menu bar, and a Mac that stays awake when you need it to.")
                 .font(.title3).foregroundStyle(.secondary).multilineTextAlignment(.center)
             VStack(alignment: .leading, spacing: 14) {
-                BadgeLabel(title: "Hide the clutter", subtitle: "Keep only the icons you use in sight.",
+                BadgeLabel(title: "Hide the clutter", subtitle: "Arrange, hide and group your menu bar icons.",
                            symbol: "rectangle.compress.vertical", color: .blue)
-                BadgeLabel(title: "Keep awake", subtitle: "For an hour, indefinitely, or while an app runs.",
+                BadgeLabel(title: "Keep awake", subtitle: "For an hour, while an app runs, or automatically by rules.",
                            symbol: "cup.and.heat.waves.fill", color: .orange)
                 BadgeLabel(title: "Quick toggles", subtitle: "Dark mode, desktop icons and more in one click.",
                            symbol: "switch.2", color: .green)
@@ -105,7 +105,7 @@ struct OnboardingView: View {
                 .foregroundStyle(.white, .green)
                 .symbolEffect(.bounce, value: step)
             Text("You're all set").font(.largeTitle.bold())
-            Text("Right-click the arrow any time for Keep Awake, quick toggles and Settings.")
+            Text("Click the cup for Keep Awake and quick toggles. Click the arrow for your hidden icons, or press ⌃⌥⌘M to search them.")
                 .font(.title3).foregroundStyle(.secondary).multilineTextAlignment(.center)
             MenuBarDiagram(collapsed: true).frame(maxWidth: 420).padding(.top, 8)
         }

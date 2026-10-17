@@ -20,32 +20,36 @@
 - `barkeep://open?app=…`, `barkeep://bar` and `barkeep://search`
 - Setup step and Settings rows for where icons appear and for permissions
 
-Still to do from v0.2:
+## v0.3: Arrange, groups and keep awake (done)
 
-- Verify the click fallback for apps that ignore Accessibility presses
-  (often Electron apps, such as Docker Desktop)
-- Layout editor in Settings: drag icons between sections instead of ⌘-dragging
-- macOS 27: place Barkeep's own items with a ⌘-drag of its own icon on first
-  run (27 ignores Preferred Position), and test the native engine and the
-  Barkeep Bar there
-- Disk cache for item pictures, so they survive a relaunch without one
-  expansion
+- Layout editor with drag and drop; programmatic icon moves
+- Groups with their own menu bar icon and dropdown
+- Layout memory: icons go back where they belong after relaunches; new-icon
+  placement setting; Battery and Wi‑Fi visible by default
+- Pictures saved to disk, and a refresh for icons behind the notch
+- Keep awake: sessions until a time / while downloading, rules (power,
+  external display, microphone, downloads, apps, schedule), battery stop,
+  keep me available, notifications, closed-lid mode
+- Quick panel with toggle tiles (dark mode, microphone, desktop, hidden
+  files, sleep display) from a cup icon
 
-## v0.3: Context
+Still to verify: closed-lid mode (needs an admin password), click fallback for
+Electron apps such as Docker Desktop, everything on macOS 27.
+
+## v0.4: Context
 
 - **Show on change**: surface a hidden icon for a while when its image changes
   (VPN drops, sync errors, security agent alerts)
-- **Groups**: one icon that opens a small group, e.g. "Work" (VPN, security
-  agents, device management) and "Dev" (Docker, Claude)
 - **Profiles by display**: tight layout on the laptop screen, roomier with an
   external display
 - **Presenter mode**: hide everything while screen sharing or on camera
 
-## v0.4: Keep awake rules and extras
+## v0.5: Extras
 
-- Rules: on power with an external display; during calls; while downloading or
-  copying; while a process (build, Docker) runs; battery threshold to stop
-- **Closed-lid mode** via a privileged helper (`pmset disablesleep`), with
-  battery and temperature safeguards
+- Menu bar styling (tint, shapes, borders) and icon spacing
+- Custom icons for other apps' items; per-icon hotkeys
+- Hover or scroll to reveal hidden icons
+- Commands in search ("awake 2h", "dark")
 - Clipboard history and drag-and-drop shelf
 - Shortcuts actions (App Intents) and a CLI
+- App icon, Release build, Sparkle updates, notarization

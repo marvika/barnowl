@@ -247,7 +247,7 @@ enum KeepAwakeFormatter {
     @MainActor
     static func status(of controller: KeepAwakeController) -> String {
         if let session = controller.session { return status(for: session) }
-        if let rule = controller.activeRule { return "Awake because: \(rule.title.lowercased())" }
+        if let rule = controller.activeRule { return "Awake because \(rule.phrase)" }
         if controller.stoppedForBattery { return "Stopped: battery low" }
         return "Off. Your Mac sleeps as usual."
     }
