@@ -32,6 +32,8 @@ enum PrefKey {
     static let clipboardEnabled = "clipboardEnabled"
     static let clipboardLimit = "clipboardLimit"
     static let clipboardRemember = "clipboardRemember"
+    static let dropTrayEnabled = "dropTrayEnabled"
+    static let dropTrayTab = "dropTrayTab"
 }
 
 enum Preferences {
@@ -65,6 +67,8 @@ enum Preferences {
             PrefKey.clipboardEnabled: true,
             PrefKey.clipboardLimit: 50,
             PrefKey.clipboardRemember: true,
+            PrefKey.dropTrayEnabled: true,
+            PrefKey.dropTrayTab: true,
         ])
     }
 
@@ -113,6 +117,10 @@ enum Preferences {
     static var clipboardLimit: Int { max(5, defaults.integer(forKey: PrefKey.clipboardLimit)) }
     /// Keep text history across restarts (images are never saved to disk).
     static var clipboardRemember: Bool { defaults.bool(forKey: PrefKey.clipboardRemember) }
+    /// Show the drop tray under the notch while dragging files.
+    static var dropTrayEnabled: Bool { defaults.bool(forKey: PrefKey.dropTrayEnabled) }
+    /// Keep a small tab under the notch while the shelf holds files.
+    static var dropTrayTab: Bool { defaults.bool(forKey: PrefKey.dropTrayTab) }
     static var hasShownWelcome: Bool {
         get { defaults.bool(forKey: PrefKey.hasShownWelcome) }
         set { defaults.set(newValue, forKey: PrefKey.hasShownWelcome) }

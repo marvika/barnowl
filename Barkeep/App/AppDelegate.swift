@@ -18,6 +18,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var pendingURLs: [URL] = []
     private var gestures: RevealGestures!
     private var clipboardPanel: ClipboardPanelController!
+    private var dropTray: DropTray!
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         // Unit tests run inside the app; don't touch the real menu bar then.
@@ -81,6 +82,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         model.appearance.start()
         model.clipboard.start()
         clipboardPanel = ClipboardPanelController(clipboard: model.clipboard)
+        dropTray = DropTray(clipboard: model.clipboard)
+        dropTray.start()
         model.showClipboard = { [weak self] in self?.clipboardPanel.show() }
         KeyboardShortcuts.onKeyUp(for: .clipboard) { [weak self] in self?.clipboardPanel.toggle() }
         sections.onScreensChanged = { [weak self] in
@@ -335,6 +338,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             quickPanel.syncCupIcon()
             updateToggleIcon()
         }
+        dropTray?.refresh()
         if Preferences.keepAwakeNotify, !askedForNotifications {
             askedForNotifications = true
             KeepAwakeController.requestNotificationPermission()

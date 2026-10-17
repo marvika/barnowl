@@ -132,6 +132,8 @@ private struct ClipboardPane: View {
     @AppStorage(PrefKey.clipboardEnabled) private var enabled = true
     @AppStorage(PrefKey.clipboardLimit) private var limit = 50
     @AppStorage(PrefKey.clipboardRemember) private var remember = true
+    @AppStorage(PrefKey.dropTrayEnabled) private var dropTray = true
+    @AppStorage(PrefKey.dropTrayTab) private var dropTrayTab = true
 
     var body: some View {
         Form {
@@ -154,6 +156,21 @@ private struct ClipboardPane: View {
                 LabeledContent("Shortcut") { KeyboardShortcuts.Recorder(for: .clipboard) }
             } footer: {
                 Text("Copies from password managers are never recorded: they mark them as private, and Barkeep skips 1Password, Bitwarden, Passwords and Keychain Access.")
+            }
+            Section {
+                Toggle(isOn: $dropTray) {
+                    BadgeLabel(title: "Show a drop tray when dragging files",
+                               subtitle: "It appears under the notch. Drop files to hold them, then drag them out later.",
+                               symbol: "tray.and.arrow.down.fill", color: .orange)
+                }
+                Toggle(isOn: $dropTrayTab) {
+                    BadgeLabel(title: "Keep a tab under the notch while it holds files",
+                               subtitle: "Hover or click it to drag the files out.",
+                               symbol: "tray.full.fill", color: .orange)
+                }
+                .disabled(!dropTray)
+            } header: {
+                Text("Shelf")
             }
             Section {
                 LabeledContent("\(model.clipboard.entries.count) items, \(model.clipboard.shelf.count) on the shelf") {

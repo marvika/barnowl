@@ -172,7 +172,7 @@ private struct ClipRow: View {
     }
 }
 
-private struct ShelfTile: View {
+struct ShelfTile: View {
     let url: URL
     let remove: () -> Void
     @State private var hovering = false

@@ -35,7 +35,9 @@ Open source (MIT), for macOS 26 Tahoe and macOS 27.
   icon's menu.
 - **Clipboard history and shelf.** ⌃⌥⌘V shows what you copied; Return pastes
   it into the app you were using. Password-manager copies are never recorded.
-  The shelf holds files you drop on it until you drag them out.
+  Start dragging files and a drop tray slides out under the notch: drop them
+  there to hold them, and drag them out again whenever you need them (a small
+  tab under the notch shows what's held).
 - **Appearance.** Optional menu bar tint (off by default; full width, rounded
   or split around the notch) and icon spacing, so more icons fit beside the
   notch.
