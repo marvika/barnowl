@@ -590,22 +590,36 @@ private struct BubbleTail: Shape {
 private struct Snore: View {
     var body: some View {
         GeometryReader { proxy in
-            let w = proxy.size.width, h = proxy.size.height
             TimelineView(.animation(minimumInterval: 1 / 20)) { context in
                 let time = context.date.timeIntervalSinceReferenceDate
                 ZStack {
                     ForEach(0..<3, id: \.self) { index in
-                        let phase = (time / 2.8 + Double(index) / 3).truncatingRemainder(dividingBy: 1)
-                        Text("z")
-                            .font(.system(size: max(7, w * (0.13 + 0.09 * phase)), weight: .heavy, design: .rounded))
-                            .foregroundStyle(Brand.lavender)
-                            .opacity(phase < 0.15 ? phase / 0.15 : (1 - phase) * 1.15)
-                            .position(x: w * (0.78 + 0.22 * phase) + sin(phase * 8) * w * 0.03,
-                                      y: h * (0.2 - 0.38 * phase))
+                        SnoreZ(phase: (time / 2.8 + Double(index) / 3).truncatingRemainder(dividingBy: 1),
+                               size: proxy.size)
                     }
                 }
             }
         }
         .allowsHitTesting(false)
+    }
+}
+
+/// One z, `phase` (0…1) of the way through its drift up and away.
+private struct SnoreZ: View {
+    let phase: Double
+    let size: CGSize
+
+    var body: some View {
+        let w: CGFloat = size.width, h: CGFloat = size.height
+        let p = CGFloat(phase)
+        let fontSize: CGFloat = max(7, w * (0.13 + 0.09 * p))
+        let opacity: Double = phase < 0.15 ? phase / 0.15 : (1 - phase) * 1.15
+        let x: CGFloat = w * (0.78 + 0.22 * p) + CGFloat(sin(phase * 8)) * w * 0.03
+        let y: CGFloat = h * (0.2 - 0.38 * p)
+        return Text("z")
+            .font(.system(size: fontSize, weight: .heavy, design: .rounded))
+            .foregroundStyle(Brand.lavender)
+            .opacity(opacity)
+            .position(x: x, y: y)
     }
 }
