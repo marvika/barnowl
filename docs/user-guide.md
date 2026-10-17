@@ -142,8 +142,9 @@ macOS's own camera and screen-recording indicator.
   indicator. Turn it off in Settings → Menu Bar → Presenter mode.
 - Start or stop it yourself with the **Presenting** tile in the quick panel,
   a shortcut, `barnowl present on`, or the Shortcuts action.
-- Optionally it also **hides desktop icons**. That restarts Finder, so the
-  screen flickers once.
+- Optionally it also **hides desktop icons**, behind a picture of your
+  wallpaper. Finder isn't touched, so the icons come back exactly where they
+  were.
 
 While presenting, the arrow shows an eye-slash. Clicking it opens the
 Perch, so your hidden icons only appear if you choose to show them.
@@ -206,8 +207,8 @@ Besides keep awake, the quick panel has one-click toggles:
 | Presenting | Presenter mode on or off |
 | Dark Mode | Switches the system appearance (asks once for permission to control System Events) |
 | Microphone | Mutes or unmutes the default microphone for every app |
-| Hide Desktop | Hides the icons on your desktop (restarts Finder) |
-| Hidden Files | Shows or hides dotfiles in Finder (restarts Finder) |
+| Hide Desktop | Covers the icons on your desktop with your wallpaper; they come back where they were |
+| Hidden Files | Shows or hides dotfiles in Finder (Finder quits and reopens, keeping its windows) |
 | Sleep Display | Turns the screen off right away |
 
 Choose which toggles appear in Settings → Toggles.

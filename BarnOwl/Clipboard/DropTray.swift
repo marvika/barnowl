@@ -38,7 +38,8 @@ final class DropTray {
         // Drags happen in other apps, so global monitors: a mouse-down marks
         // the drag pasteboard's state, and a drag that changes it with file
         // URLs is a file drag.
-        if let down = NSEvent.addGlobalMonitorForEvents(matching: .leftMouseDown, handler: { [weak self] _ in
+        if let down = NSEvent.addGlobalMonitorForEvents(matching: .leftMouseDown, handler: { [weak self] event in
+            guard !SyntheticEvents.isMarked(event) else { return }
             MainActor.assumeIsolated { self?.mouseDown() }
         }) { monitors.append(down) }
         if let dragged = NSEvent.addGlobalMonitorForEvents(matching: .leftMouseDragged, handler: { [weak self] _ in

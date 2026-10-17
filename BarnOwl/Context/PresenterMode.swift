@@ -110,7 +110,7 @@ final class PresenterMode {
         guard Preferences.presenterAutomatic else { return }
         // Barn Owl's own icon pictures light up the same indicator for a few
         // seconds; ignore it then, and require it to stay on for two checks.
-        let ownCaptureRecently = Date().timeIntervalSince(images.lastCapture) < 10
+        let ownCaptureRecently = Date().timeIntervalSince(max(images.lastCapture, OwnCaptures.last)) < 10
         let indicator = !ownCaptureRecently && Self.isScreenBeingShared
         sharingChecks = indicator ? sharingChecks + 1 : 0
         let sharing = sharingChecks >= 2

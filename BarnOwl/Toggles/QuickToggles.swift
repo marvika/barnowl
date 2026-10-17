@@ -88,12 +88,21 @@ enum QuickToggles {
 
     // MARK: Finder settings
 
+    /// Hidden by Barn Owl's cover, or by Finder's own setting (how earlier
+    /// versions hid them).
     static var desktopIconsHidden: Bool {
-        !finderBool("CreateDesktop", default: true)
+        DesktopCover.shared.isShown || !finderBool("CreateDesktop", default: true)
     }
 
     static func toggleDesktopIcons() {
-        setFinderBool("CreateDesktop", desktopIconsHidden)
+        if !finderBool("CreateDesktop", default: true) {
+            // Hidden the old way: give Finder its desktop back.
+            setFinderBool("CreateDesktop", true)
+        } else if DesktopCover.shared.isShown {
+            DesktopCover.shared.hide()
+        } else {
+            DesktopCover.shared.show()
+        }
     }
 
     static var hiddenFilesShown: Bool {
@@ -116,7 +125,30 @@ enum QuickToggles {
     /// Finder, which only reads these settings at launch.
     private static func setFinderBool(_ key: String, _ value: Bool) {
         run("/usr/bin/defaults", ["write", "com.apple.finder", key, "-bool", value ? "true" : "false"])
-        run("/usr/bin/killall", ["Finder"])
+        restartFinder()
+    }
+
+    /// Asks Finder to quit, so it saves its windows and where the desktop
+    /// icons are, and only forces it after a few seconds. Then opens it again.
+    private static func restartFinder() {
+        guard let finder = NSRunningApplication.runningApplications(withBundleIdentifier: "com.apple.finder").first
+        else { return openFinder() }
+        finder.terminate()
+        Task {
+            for _ in 0..<30 where !finder.isTerminated {
+                try? await Task.sleep(for: .milliseconds(100))
+            }
+            if !finder.isTerminated { finder.forceTerminate() }
+            try? await Task.sleep(for: .milliseconds(300))
+            openFinder()
+        }
+    }
+
+    private static func openFinder() {
+        guard let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: "com.apple.finder") else { return }
+        let configuration = NSWorkspace.OpenConfiguration()
+        configuration.activates = false
+        NSWorkspace.shared.openApplication(at: url, configuration: configuration)
     }
 
     private static func run(_ path: String, _ arguments: [String]) {

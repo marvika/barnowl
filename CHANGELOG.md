@@ -3,6 +3,18 @@
 All notable changes to Barn Owl. Versions follow [semantic versioning](https://semver.org);
 before 1.0, a minor version can change behaviour.
 
+## Unreleased
+
+- **Hide Desktop** now covers the desktop with a picture of your wallpaper
+  instead of restarting Finder, so icons come back exactly where they were
+  and Finder windows stay open.
+- **Hidden Files** lets Finder quit properly before reopening it, so it keeps
+  its windows and icon positions.
+- The quick panel no longer closes when Barn Owl moves icons, for example
+  when you start presenting.
+- When presenting starts, the owl says "Incognito!" instead of "Wide awake!".
+- The docs say macOS 26 *and later*: Barn Owl runs on macOS 27 too.
+
 ## 0.8.0
 
 - Barn Owl can update itself. On the second launch it asks whether to check

@@ -64,7 +64,10 @@ final class OutsideClickMonitor {
 
     func start(_ handler: @escaping @MainActor () -> Void) {
         stop()
-        monitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { _ in
+        monitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { event in
+            // Barn Owl's own clicks, when it moves or opens icons, aren't you
+            // clicking elsewhere.
+            guard !SyntheticEvents.isMarked(event) else { return }
             MainActor.assumeIsolated { handler() }
         }
     }

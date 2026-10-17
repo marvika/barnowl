@@ -159,6 +159,7 @@ final class ItemMover {
                                 mouseButton: .left)
             event?.flags = .maskCommand
             event?.setIntegerValueField(windowIDField, value: Int64(itemID))
+            SyntheticEvents.mark(event)
             return event
         }
         let savedCursor = CGEvent(source: nil)?.location
@@ -184,5 +185,19 @@ final class ItemMover {
         event(.leftMouseUp, destination.dropPoint(targetFrame: target))?.post(tap: .cgSessionEventTap)
         usleep(20_000)
         return liftedSnapshots >= 3
+    }
+}
+
+/// Marks the mouse events Barn Owl posts itself, so its own monitors can tell
+/// them apart from real clicks.
+enum SyntheticEvents {
+    nonisolated static let tag: Int64 = 0x0B4E_0A71
+
+    nonisolated static func mark(_ event: CGEvent?) {
+        event?.setIntegerValueField(.eventSourceUserData, value: tag)
+    }
+
+    nonisolated static func isMarked(_ event: NSEvent) -> Bool {
+        event.cgEvent?.getIntegerValueField(.eventSourceUserData) == tag
     }
 }

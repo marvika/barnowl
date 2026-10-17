@@ -173,7 +173,8 @@ struct WatchingOwl: View {
         guard !reduceMotion else { return }
         dozing = false
         stunned = true
-        say("Wide awake!", for: 1.4)
+        // Presenting keeps the Mac awake too, but then it's the shades that matter.
+        say(accessory == .sunglasses ? "Incognito!" : "Wide awake!", for: 1.4)
         burst(.sparkles)
         Task {
             withAnimation(.spring(duration: 0.35, bounce: 0.4)) { wingLift = 1.3; squash = 1.08 }

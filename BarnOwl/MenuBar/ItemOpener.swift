@@ -126,8 +126,9 @@ final class ItemOpener {
         let original = CGEvent(source: nil)?.location
         let source = CGEventSource(stateID: .hidSystemState)
         for type in [CGEventType.leftMouseDown, .leftMouseUp] {
-            CGEvent(mouseEventSource: source, mouseType: type, mouseCursorPosition: point, mouseButton: .left)?
-                .post(tap: .cghidEventTap)
+            let event = CGEvent(mouseEventSource: source, mouseType: type, mouseCursorPosition: point, mouseButton: .left)
+            SyntheticEvents.mark(event)
+            event?.post(tap: .cghidEventTap)
         }
         if let original { CGWarpMouseCursorPosition(original) }
     }

@@ -4,12 +4,12 @@
 
 <p align="center">
   <b>A tidier menu bar, and a Mac that stays awake when you need it to.</b><br>
-  Free and open source, for macOS 26 Tahoe.
+  Free and open source, for macOS 26 Tahoe and later.
 </p>
 
 <p align="center">
   <a href="https://github.com/marvika/barnowl/actions/workflows/ci.yml"><img src="https://github.com/marvika/barnowl/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
-  <img src="https://img.shields.io/badge/macOS-26%20Tahoe-3D3A8F" alt="macOS 26 Tahoe">
+  <img src="https://img.shields.io/badge/macOS-26%2B-3D3A8F" alt="macOS 26 and later">
   <img src="https://img.shields.io/badge/Swift-6-F05138" alt="Swift 6">
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-F0B04F" alt="MIT License"></a>
 </p>
@@ -142,7 +142,9 @@ Once you've dropped a file somewhere, it leaves the Nest.
 
 ## Download
 
-Requires macOS 26 Tahoe, on Apple silicon or Intel.
+Requires macOS 26 Tahoe or later, on Apple silicon or Intel. On macOS 27,
+hiding works a different way, per app rather than per icon, and has had less
+testing; see [how it works](docs/how-it-works.md#hiding).
 
 With [Homebrew](https://brew.sh):
 

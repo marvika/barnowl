@@ -1,6 +1,6 @@
 # How Barn Owl works
 
-Barn Owl is a Swift app (AppKit plus SwiftUI) for macOS 26. It isn't sandboxed
+Barn Owl is a Swift app (AppKit plus SwiftUI) for macOS 26 and later. It isn't sandboxed
 and can't be on the App Store: reading other apps' menu bar items needs
 Accessibility, and the macOS 27 engine uses a private API.
 
