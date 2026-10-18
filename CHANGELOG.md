@@ -5,6 +5,15 @@ before 1.0, a minor version can change behaviour.
 
 ## Unreleased
 
+- **A fresher look.** Floating panels share one Liquid Glass style with a
+  touch of dusk, and the owl's lavender is the accent everywhere. The quick
+  panel puts the owl and a big countdown first, has one row of time buttons
+  and round Control Center–style toggles. Search groups commands and icons
+  and shows what Return does. Toggles bounce, icons settle onto the Perch,
+  the Nest glows as a file comes near, and the app icon is a layered Liquid
+  Glass icon with dark and tinted versions. Sizes read the same everywhere.
+- Clearing clipboard history or the Nest asks first. New links:
+  `barnowl://quick` and `barnowl://nest`.
 - **The Barn**, for disk space: a storage bar that adds up to the whole
   disk, and Tidy Up, sorted by how safe things are. Safe caches and build
   files go in one click; macOS installers, apps you haven't opened in six

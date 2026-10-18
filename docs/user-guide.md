@@ -160,13 +160,19 @@ display. Arrange your icons while docked to set up the desk layout.
 ## Keep awake
 
 Click the **owl** in the menu bar (or right-click the arrow) for the quick
-panel. Its eyes are open while your Mac is kept awake.
+panel. Its eyes are open while your Mac is kept awake, and during a timed
+session the time left counts down in big numbers beside it.
 
-- **Set:** keep awake for 15 minutes, 1, 2 or 4 hours, or indefinitely (∞).
-- **Add:** during a timed session, add 15 or 30 minutes, 1 or 2 hours.
-- **⋯** for **until a time**, **while an app is running**, or **until
-  downloads finish**.
-- **Option-click the owl** to start or stop without opening the panel.
+- **One click to start:** 15 minutes, 1, 2 or 4 hours, or until you stop it
+  (∞). While a timer runs, the same row adds 15 or 30 minutes, 1 or 2 hours.
+- **⋯** for **until a time**, **while an app is running**, **until downloads
+  finish**, starting over, and the options **Let Display Sleep** and **Keep
+  Me Available**. When an option is on, a small tag under the buttons says so.
+- **Toggles**, round like Control Center's: Presenting, Dark Mode, Mic,
+  Desktop, Hidden Files and Sleep Screen. Pick which show in Settings →
+  Toggles.
+- **Option-click the owl** to start or stop without opening the panel, or use
+  `barnowl://quick` to open the panel from a script.
 
 During a timed session the owl shows the **time left**, for example "42m" or
 "1:05". You can turn that off in Settings → Keep Awake.
@@ -446,7 +452,7 @@ For Raycast, Alfred, scripts and anything that can open a URL:
 | Link | Does |
 |---|---|
 | `barnowl://show`, `barnowl://hide`, `barnowl://toggle`, `barnowl://show-all` | Hidden icons |
-| `barnowl://bar`, `barnowl://search`, `barnowl://clipboard` | Panels |
+| `barnowl://bar`, `barnowl://quick`, `barnowl://search`, `barnowl://clipboard`, `barnowl://nest`, `barnowl://barn` | Panels |
 | `barnowl://keep-awake?minutes=60` (0 = indefinitely) | Keep awake |
 | `barnowl://keep-awake/extend?minutes=30` | Add time |
 | `barnowl://keep-awake/stop` | Stop |
