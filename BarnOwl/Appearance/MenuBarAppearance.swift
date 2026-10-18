@@ -90,7 +90,7 @@ final class MenuBarAppearance {
     /// One click-through window per display, just below the menu bar's own
     /// level, so the icons and menus draw on top of it.
     func apply() {
-        windows.forEach { $0.orderOut(nil) }
+        windows.forEach { $0.orderOut(nil); $0.close() }
         windows = []
         guard style.isEnabled else { return }
         for screen in NSScreen.screens {
@@ -99,6 +99,7 @@ final class MenuBarAppearance {
                                height: height)
             let notch = NotchGeometry.of(screen).map { ($0.minX - screen.frame.minX, $0.maxX - screen.frame.minX) }
             let window = TintWindow(contentRect: frame, styleMask: .borderless, backing: .buffered, defer: false)
+            window.isReleasedWhenClosed = false
             window.isOpaque = false
             window.backgroundColor = .clear
             window.hasShadow = false

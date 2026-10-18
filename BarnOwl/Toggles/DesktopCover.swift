@@ -46,12 +46,12 @@ final class DesktopCover {
             NSWorkspace.shared.notificationCenter.removeObserver($0)
         }
         observers = []
-        windows.values.forEach { $0.orderOut(nil) }
+        windows.values.forEach { $0.orderOut(nil); $0.close() }
         windows = [:]
     }
 
     private func rebuild() {
-        windows.values.forEach { $0.orderOut(nil) }
+        windows.values.forEach { $0.orderOut(nil); $0.close() }
         windows = [:]
         for screen in NSScreen.screens {
             guard let id = screen.displayID else { continue }

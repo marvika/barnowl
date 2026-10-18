@@ -247,7 +247,7 @@ final class QuickPanelController: NSObject {
     func close() {
         outsideClicks.stop()
         OpenPanel.shared.closed(self)
-        panel?.orderOut(nil)
+        panel?.dismiss()
         panel = nil
     }
 }

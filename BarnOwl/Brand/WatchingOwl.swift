@@ -55,6 +55,8 @@ struct WatchingOwl: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @AppStorage(PrefKey.owlPersonality) private var personality = OwlPersonality.lively
     @State private var anchor = ScreenAnchor()
+    @State private var following = false
+    @State private var entered = false
     @State private var tilt: Double = 0
     @State private var turn: Double = 0
     @State private var hop: CGFloat = 0
@@ -94,11 +96,15 @@ struct WatchingOwl: View {
     var body: some View {
         GeometryReader { proxy in
             let side = min(proxy.size.width, proxy.size.height)
-            TimelineView(.animation(minimumInterval: 1 / 30, paused: !moves && !watches)) { context in
-                let look = currentLook
-                let breath = moves ? sin(context.date.timeIntervalSinceReferenceDate * (awake ? 1.9 : 1.1)) : 0
+            // The pointer drives the eyes only when it moves, and breathing
+            // is the only constant motion: big owls only, while on screen.
+            let look = currentLook
+            let breathes = moves && visible && side >= 32
+            TimelineView(.animation(minimumInterval: 1 / 15, paused: !breathes)) { context in
+                let breath = breathes ? sin(context.date.timeIntervalSinceReferenceDate * (awake ? 1.9 : 1.1)) : 0
                 let depth: CGFloat = awake ? 0.012 : 0.024
-                OwlView(eyesOpen: awake, look: look, surprised: surprised || roused || stunned, happy: happy || cheering,
+                OwlView(eyesOpen: awake, look: look, blinks: visible, surprised: surprised || roused || stunned,
+                        happy: happy || cheering,
                         hearts: loving, dizzy: dizzy, lids: lids, wingLift: wingLift, turn: turn, tilt: tilt, yawn: yawn,
                         accessory: outfit, coverEyes: coverEyes, shush: shush, glowEyes: glow, tired: tired,
                         bellyTint: bellyTint, faceDip: faceDip, palette: palette)
@@ -109,7 +115,7 @@ struct WatchingOwl: View {
             .offset(y: hop)
             .frame(width: side, height: side)
             .overlay {
-                if snores && !awake && moves && side >= 30 { Snore() }
+                if snores && !awake && moves && visible && side >= 30 { Snore() }
             }
             .overlay {
                 if dizzy { OrbitingStars(side: side) }
@@ -146,12 +152,27 @@ struct WatchingOwl: View {
         }
         .onChange(of: cue) { _, new in if let new { react(to: new.kind) } }
         .onChange(of: outfit, initial: true) { _, new in meetOutfit(new) }
-        .task(id: idles && awake) { await liveALittle() }
-        .task {
+        .onChange(of: followsPointer, initial: true) { _, follows in setFollowing(follows) }
+        .onDisappear { setFollowing(false) }
+        .task(id: idles && awake && visible) { await liveALittle() }
+        .task(id: visible) {
+            // Its entrance and greetings wait until it's actually seen.
+            guard visible, !entered else { return }
+            entered = true
             await perform(entrance)
             await greetTheDay()
         }
         .accessibilityHidden(true)
+    }
+
+    /// Whether its window is on screen. Hidden owls do nothing at all.
+    private var visible: Bool { anchor.isVisible }
+    private var followsPointer: Bool { watches && lookAt == nil && visible && awake }
+
+    private func setFollowing(_ follows: Bool) {
+        guard follows != following else { return }
+        following = follows
+        follows ? PointerTracker.shared.start() : PointerTracker.shared.stop()
     }
 
     private var currentLook: CGVector {
@@ -162,7 +183,7 @@ struct WatchingOwl: View {
 
     private func direction() -> CGVector {
         guard let centre = anchor.screenCentre else { return .zero }
-        let mouse = NSEvent.mouseLocation
+        let mouse = PointerTracker.shared.location
         // Screen y grows upwards; the owl's eyes look down for positive dy.
         return CGVector(dx: max(-1, min(1, (mouse.x - centre.x) / reach)),
                         dy: max(-1, min(1, (centre.y - mouse.y) / reach)))
@@ -860,5 +881,61 @@ private struct SnoreZ: View {
             .foregroundStyle(Brand.lavender)
             .opacity(opacity)
             .position(x: x, y: y)
+    }
+}
+
+/// Where the pointer is, for owls that watch it. It only listens while at
+/// least one owl on screen is watching, and only updates when the pointer
+/// moves, about 30 times a second at most.
+@MainActor
+@Observable
+final class PointerTracker {
+    static let shared = PointerTracker()
+
+    private(set) var location = NSEvent.mouseLocation
+    @ObservationIgnored private var watchers = 0
+    @ObservationIgnored private var monitors: [Any] = []
+    @ObservationIgnored private var lastUpdate = Date.distantPast
+    @ObservationIgnored private var trailingUpdate: Task<Void, Never>?
+
+    func start() {
+        watchers += 1
+        guard watchers == 1 else { return }
+        location = NSEvent.mouseLocation
+        let events: NSEvent.EventTypeMask = [.mouseMoved, .leftMouseDragged, .rightMouseDragged]
+        if let global = NSEvent.addGlobalMonitorForEvents(matching: events, handler: { _ in
+            MainActor.assumeIsolated { PointerTracker.shared.moved() }
+        }) { monitors.append(global) }
+        if let local = NSEvent.addLocalMonitorForEvents(matching: events, handler: { event in
+            MainActor.assumeIsolated { PointerTracker.shared.moved() }
+            return event
+        }) { monitors.append(local) }
+    }
+
+    func stop() {
+        watchers = max(0, watchers - 1)
+        guard watchers == 0 else { return }
+        monitors.forEach(NSEvent.removeMonitor)
+        monitors = []
+        trailingUpdate?.cancel()
+        trailingUpdate = nil
+    }
+
+    private func moved() {
+        let now = Date()
+        guard now.timeIntervalSince(lastUpdate) >= 1 / 30 else {
+            // Catch the final resting place too.
+            guard trailingUpdate == nil else { return }
+            trailingUpdate = Task { [weak self] in
+                try? await Task.sleep(for: .milliseconds(40))
+                guard let self, !Task.isCancelled else { return }
+                self.trailingUpdate = nil
+                self.lastUpdate = Date()
+                self.location = NSEvent.mouseLocation
+            }
+            return
+        }
+        lastUpdate = now
+        location = NSEvent.mouseLocation
     }
 }

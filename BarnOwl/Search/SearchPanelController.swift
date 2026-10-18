@@ -33,7 +33,7 @@ final class SearchPanelController {
         }, close: { [weak self] in self?.close() })
         let panel = FloatingPanel(rootView: view)
         panel.onCancel = { [weak self] in self?.close() }
-        self.panel?.orderOut(nil)
+        self.panel?.dismiss()
         self.panel = panel
         // Activating lets the field take typing; the panel stays non-activating
         // for clicks.
@@ -61,7 +61,7 @@ final class SearchPanelController {
     func close() {
         outsideClicks.stop()
         OpenPanel.shared.closed(self)
-        panel?.orderOut(nil)
+        panel?.dismiss()
         panel = nil
     }
 }

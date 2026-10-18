@@ -35,7 +35,8 @@ final class PerchController {
     func close() {
         outsideClicks.stop()
         OpenPanel.shared.closed(self)
-        panel?.orderOut(nil)
+        panel?.dismiss()
+        panel = nil
     }
 
     private func makePanel() -> FloatingPanel {

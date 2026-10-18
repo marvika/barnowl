@@ -15,6 +15,7 @@ final class FloatingPanel: NSPanel {
 
     init<Content: View>(rootView: Content) {
         super.init(contentRect: .zero, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: true)
+        isReleasedWhenClosed = false
         level = .popUpMenu
         isOpaque = false
         backgroundColor = .clear
@@ -54,6 +55,18 @@ final class FloatingPanel: NSPanel {
 
     override func cancelOperation(_ sender: Any?) {
         onCancel?()
+    }
+
+    /// Hides the panel for good and tears down its SwiftUI content. Only
+    /// hiding a panel keeps it, its views and their timers alive forever.
+    func dismiss() {
+        orderOut(nil)
+        if let resizeObserver { NotificationCenter.default.removeObserver(resizeObserver) }
+        resizeObserver = nil
+        onResize = nil
+        onCancel = nil
+        contentViewController = nil
+        close()
     }
 }
 

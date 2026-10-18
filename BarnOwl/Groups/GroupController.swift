@@ -100,7 +100,7 @@ final class GroupController {
 
     func close() {
         outsideClicks.stop()
-        panel?.orderOut(nil)
+        panel?.dismiss()
         panel = nil
         openGroup = nil
     }

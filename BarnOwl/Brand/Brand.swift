@@ -78,11 +78,13 @@ struct DuskSky: View {
         (0.48, 0.05, 1.3, 1.6), (0.70, 0.26, 1.2, 2.4),
     ]
 
+    @State private var visible = false
+
     var body: some View {
         ZStack {
             Brand.dusk
             GeometryReader { proxy in
-                TimelineView(.animation(minimumInterval: 1 / 20)) { context in
+                TimelineView(.animation(minimumInterval: 1 / 10, paused: !visible)) { context in
                     let time = context.date.timeIntervalSinceReferenceDate
                     ForEach(Array(Self.stars.enumerated()), id: \.offset) { _, star in
                         Circle()
@@ -99,6 +101,7 @@ struct DuskSky: View {
             }
         }
         .ignoresSafeArea()
+        .background(VisibilityReader { visible = $0 })
         .accessibilityHidden(true)
     }
 }
@@ -872,10 +875,14 @@ private struct PropLayer: View {
     }
 }
 
-/// Knows where a SwiftUI view is on screen, through a plain NSView behind it.
+/// Knows where a SwiftUI view is on screen, and whether its window is
+/// visible, through a plain NSView behind it.
 @MainActor
+@Observable
 final class ScreenAnchor {
-    weak var view: NSView?
+    @ObservationIgnored weak var view: NSView?
+    /// The window is on screen and not completely covered.
+    var isVisible = false
 
     var screenCentre: CGPoint? {
         guard let view, let window = view.window else { return nil }
@@ -899,7 +906,7 @@ struct ScreenAnchorView: NSViewRepresentable {
     let anchor: ScreenAnchor
 
     func makeNSView(context: Context) -> NSView {
-        let view = ClickThroughView()
+        let view = VisibilityTrackingView { [weak anchor] visible in anchor?.isVisible = visible }
         anchor.view = view
         return view
     }
@@ -909,7 +916,54 @@ struct ScreenAnchorView: NSViewRepresentable {
     }
 }
 
-/// A view that's only there to be measured; clicks go to whatever is around it.
-private final class ClickThroughView: NSView {
+/// Calls back with whether a view's window is visible, so animations can
+/// stop when nobody can see them.
+struct VisibilityReader: NSViewRepresentable {
+    let onChange: (Bool) -> Void
+
+    func makeNSView(context: Context) -> VisibilityTrackingView { VisibilityTrackingView(onChange: onChange) }
+    func updateNSView(_ nsView: VisibilityTrackingView, context: Context) {}
+}
+
+/// A view that's only there to be measured and to watch its window; clicks
+/// go to whatever is around it.
+final class VisibilityTrackingView: NSView {
+    private let onChange: (Bool) -> Void
+    private var observers: [NSObjectProtocol] = []
+    private var reported: Bool?
+
+    init(onChange: @escaping (Bool) -> Void) {
+        self.onChange = onChange
+        super.init(frame: .zero)
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) { fatalError("init(coder:) is not used") }
+
     override func hitTest(_ point: NSPoint) -> NSView? { nil }
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        observers.forEach(NotificationCenter.default.removeObserver)
+        observers = []
+        guard let window else { return report(false) }
+        for name in [NSWindow.didChangeOcclusionStateNotification, NSWindow.willCloseNotification] {
+            let closing = name == NSWindow.willCloseNotification
+            observers.append(NotificationCenter.default.addObserver(forName: name, object: window, queue: .main) { [weak self] _ in
+                MainActor.assumeIsolated { self?.update(closing: closing) }
+            })
+        }
+        update(closing: false)
+    }
+
+    private func update(closing: Bool) {
+        report(!closing && (window?.occlusionState.contains(.visible) ?? false))
+    }
+
+    private func report(_ visible: Bool) {
+        guard visible != reported else { return }
+        reported = visible
+        // Not in the middle of a SwiftUI update.
+        DispatchQueue.main.async { [onChange] in onChange(visible) }
+    }
 }

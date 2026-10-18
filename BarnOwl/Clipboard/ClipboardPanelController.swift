@@ -40,7 +40,7 @@ final class ClipboardPanelController {
         }, close: { [weak self] in self?.close() })
         let panel = FloatingPanel(rootView: view)
         panel.onCancel = { [weak self] in self?.close() }
-        self.panel?.orderOut(nil)
+        self.panel?.dismiss()
         self.panel = panel
         NSApp.activate()
         panel.layoutIfNeeded()
@@ -59,7 +59,7 @@ final class ClipboardPanelController {
     func close() {
         outsideClicks.stop()
         OpenPanel.shared.closed(self)
-        panel?.orderOut(nil)
+        panel?.dismiss()
         panel = nil
     }
 }
