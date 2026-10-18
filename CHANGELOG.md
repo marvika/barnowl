@@ -3,6 +3,25 @@
 All notable changes to Barn Owl. Versions follow [semantic versioning](https://semver.org);
 before 1.0, a minor version can change behaviour.
 
+## Unreleased
+
+- The owl's speech bubble stays inside its window and no longer covers the
+  text next to the owl: the step titles in setup, "Keep Awake" in the quick
+  panel, or the edge of the Perch.
+- `barnowl awake 2h` keeps the Mac awake for two hours instead of
+  indefinitely, and search reads "awake 2 h" as two hours.
+- `barnowl show` only shows hidden icons; it no longer hides them when
+  they're already showing.
+- Overnight keep-awake schedules, such as weeknights 22:00–02:00, count
+  from the night they start.
+- Turning presenter mode off during a screen share keeps it off until the
+  share ends.
+- Changing displays while presenting no longer brings hidden icons back.
+- Quitting with closed-lid mode on also clears its setting.
+- Pinned images no longer come back empty after a restart.
+- The clipboard panel keeps the right entry selected when the list changes,
+  and pastes into your app when opened from search or Settings.
+
 ## 0.9.0
 
 - **Hide Desktop** now covers the desktop with a picture of your wallpaper
