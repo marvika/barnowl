@@ -157,6 +157,16 @@ struct StorageBar: View {
 private struct TidyUpView: View {
     let barn: BarnModel
     @State private var picking: BarnModel.Suggestion?
+    /// Asks before anything that can't be undone.
+    @State private var confirming: Confirmation?
+
+    struct Confirmation: Identifiable {
+        let id = UUID()
+        let title: String
+        let message: String
+        let button: String
+        let run: () async -> Void
+    }
 
     var body: some View {
         ScrollView {
@@ -173,8 +183,18 @@ private struct TidyUpView: View {
                                 ForEach(cards) { suggestion in
                                     SuggestionCard(suggestion: suggestion, cleaning: barn.cleaning == suggestion.id,
                                                    busy: barn.cleaning != nil) {
-                                        if suggestion.rule.pickItems { picking = suggestion }
-                                        else { Task { await barn.clean(suggestion) } }
+                                        if suggestion.rule.pickItems {
+                                            picking = suggestion
+                                        } else if suggestion.rule.needsConfirmation {
+                                            confirming = Confirmation(
+                                                title: suggestion.rule.id == "trash" ? "Empty the Trash?" : "Delete \(suggestion.rule.title)?",
+                                                message: "\(Bytes.format(suggestion.size)) will be deleted for good. This can't be undone.",
+                                                button: suggestion.rule.id == "trash" ? "Empty Trash" : "Delete") {
+                                                await barn.clean(suggestion)
+                                            }
+                                        } else {
+                                            Task { await barn.clean(suggestion) }
+                                        }
                                     }
                                 }
                             }
@@ -198,8 +218,24 @@ private struct TidyUpView: View {
         .sheet(item: $picking) { suggestion in
             PickItemsSheet(suggestion: suggestion) { paths in
                 picking = nil
-                Task { await barn.clean(suggestion, items: paths) }
+                if suggestion.rule.needsConfirmation {
+                    let size = suggestion.items.filter { paths.contains($0.path) }.map(\.size).reduce(0, +)
+                    confirming = Confirmation(title: "Delete \(paths.count) \(paths.count == 1 ? "item" : "items")?",
+                                              message: "\(Bytes.format(size)) will be deleted for good. This can't be undone.",
+                                              button: "Delete") {
+                        await barn.clean(suggestion, items: paths)
+                    }
+                } else {
+                    Task { await barn.clean(suggestion, items: paths) }
+                }
             } cancel: { picking = nil }
+        }
+        .alert(confirming?.title ?? "", isPresented: Binding(get: { confirming != nil }, set: { if !$0 { confirming = nil } }),
+               presenting: confirming) { confirmation in
+            Button(confirmation.button, role: .destructive) { Task { await confirmation.run() } }
+            Button("Cancel", role: .cancel) {}
+        } message: { confirmation in
+            Text(confirmation.message)
         }
     }
 
@@ -213,7 +249,14 @@ private struct TidyUpView: View {
             }
             Spacer()
             Button {
-                Task { await barn.cleanAllSafe() }
+                let safe = barn.suggestions.filter { $0.rule.safety == .safe && $0.blockedBy == nil }
+                confirming = Confirmation(
+                    title: "Free up \(Bytes.format(barn.safeTotal))?",
+                    message: "The owl will clean: " + safe.map { "\($0.rule.title) (\(Bytes.format($0.size)))" }
+                        .joined(separator: ", ") + ". Apps and tools make these again when they need them.",
+                    button: "Free Up") {
+                    await barn.cleanAllSafe()
+                }
             } label: {
                 if barn.cleaning == "all" {
                     ProgressView().controlSize(.small).frame(width: 120)
@@ -256,6 +299,8 @@ private struct SuggestionCard: View {
                     .font(.title3.weight(.semibold)).monospacedDigit()
             }
             Text(rule.detail).font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+            Label(rule.methodSummary, systemImage: methodSymbol)
+                .font(.caption).foregroundStyle(.tertiary).lineLimit(1)
             Spacer(minLength: 0)
             HStack {
                 if let blocked = suggestion.blockedBy {
@@ -285,6 +330,15 @@ private struct SuggestionCard: View {
                 if cleaning { ProgressView().controlSize(.small) } else { Text(rule.pickItems ? "Choose…" : "Clean") }
             }
             .disabled(busy || suggestion.blockedBy != nil)
+        }
+    }
+
+    private var methodSymbol: String {
+        switch rule.method {
+        case .delete: "xmark.bin"
+        case .trash: "trash"
+        case .command: "terminal"
+        case .none: "eye"
         }
     }
 

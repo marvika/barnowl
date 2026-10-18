@@ -134,24 +134,40 @@ final class BarnModel {
         return suggestion
     }
 
-    /// The things inside a rule's folders, biggest first.
-    nonisolated private static func items(for rule: CleanupRule) async -> [Item] {
+    /// The things inside a rule's folders, biggest first: only what the
+    /// rule allows, and never what the safety gate would refuse.
+    nonisolated static func items(for rule: CleanupRule, home: String = CleanupRule.realHome) async -> [Item] {
         var items: [Item] = []
         let oldest = rule.olderThanDays.map { Date().addingTimeInterval(-Double($0) * 86_400) }
-        for folder in rule.expandedPaths where FileManager.default.fileExists(atPath: folder) {
-            guard let scan = await DiskScanner().scan(root: folder, workers: 4, progress: { _ in }) else { continue }
-            for child in scan.children(of: 0) {
-                let node = scan.nodes[Int(child)]
-                let path = scan.path(of: child)
-                guard !rule.keep.contains(node.name), !node.name.hasPrefix(".") else { continue }
-                if let extensions = rule.extensions,
-                   !extensions.contains((node.name as NSString).pathExtension.lowercased()) { continue }
-                let modified = (try? FileManager.default.attributesOfItem(atPath: path))?[.modificationDate] as? Date
+        let running = await MainActor.run {
+            Set(NSWorkspace.shared.runningApplications.compactMap { $0.bundleIdentifier?.lowercased() })
+        }
+        let keys: [URLResourceKey] = [.isDirectoryKey, .isSymbolicLinkKey, .contentModificationDateKey,
+                                      .totalFileAllocatedSizeKey]
+        for folder in rule.expandedPaths(home: home) where FileManager.default.fileExists(atPath: folder) {
+            // Everything directly inside, files and folders alike.
+            guard let children = try? FileManager.default.contentsOfDirectory(
+                at: URL(fileURLWithPath: folder), includingPropertiesForKeys: keys) else { continue }
+            for child in children {
+                let name = child.lastPathComponent
+                guard !rule.keep.contains(name), !name.hasPrefix("."),
+                      !(rule.id == "app-caches" && CleanupRule.isSensitiveCache(name)),
+                      !running.contains(name.lowercased()) else { continue }
+                if let extensions = rule.extensions, !extensions.contains(child.pathExtension.lowercased()) { continue }
+                let values = try? child.resourceValues(forKeys: Set(keys))
+                if values?.isSymbolicLink == true { continue }
+                let modified = values?.contentModificationDate
                 if let oldest, let modified, modified > oldest { continue }
-                guard node.reclaimable >= 100_000 else { continue }
-                items.append(Item(path: path, name: node.name, size: node.reclaimable, modified: modified))
+                // Only what the gate would let through.
+                let path = folder + "/" + name
+                guard CleanupGate.check(path, rule: rule, home: home) == nil else { continue }
+                var size = Int64(values?.totalFileAllocatedSize ?? 0)
+                if values?.isDirectory == true {
+                    size = await DiskScanner().scan(root: path, workers: 2, progress: { _ in })?.total.reclaimable ?? 0
+                }
+                guard size >= 100_000 else { continue }
+                items.append(Item(path: path, name: name, size: size, modified: modified))
             }
-            // Loose files folded into the folder itself can't be picked one by one; the rest can.
         }
         return items.sorted { $0.size > $1.size }
     }

@@ -62,7 +62,45 @@ struct CleanupRule: Identifiable, Sendable {
     var tool: String?
     var needsFullDiskAccess = false
 
-    var expandedPaths: [String] { paths.map { ($0 as NSString).expandingTildeInPath } }
+    /// Its folders, with ~ as the given home (a test can use a stand-in).
+    func expandedPaths(home: String = CleanupRule.realHome) -> [String] {
+        paths.map { $0.hasPrefix("~/") ? home + $0.dropFirst() : $0 }
+    }
+
+    var expandedPaths: [String] { expandedPaths() }
+
+    static var realHome: String { FileManager.default.homeDirectoryForCurrentUser.path }
+
+    /// Caches never offered for picking: Apple's own (iCloud, Music, Photos
+    /// keep state there), and those of password managers, VPNs and security
+    /// tools, where removing files can lock you out or trip tamper alarms.
+    static func isSensitiveCache(_ name: String) -> Bool {
+        let lower = name.lowercased()
+        if lower.hasPrefix("com.apple.") || lower.hasPrefix("group.com.apple.") { return true }
+        let words = ["1password", "agilebits", "bitwarden", "lastpass", "dashlane", "keeper", "keepass", "enpass",
+                     "vpn", "tunnelblick", "wireguard", "tailscale", "zscaler", "globalprotect", "anyconnect",
+                     "crowdstrike", "falcon", "sentinel", "jamf", "kandji", "mosyle", "intune", "defender",
+                     "littlesnitch", "lulu", "keychain", "cloudkit", "familycircle", "mobile documents"]
+        return words.contains { lower.contains($0) }
+    }
+
+    /// Cleaning it can't be undone, so it asks first: emptying the Trash, and
+    /// deleting things you picked.
+    var needsConfirmation: Bool {
+        if id == "trash" { return true }
+        if case .delete = method { return safety != .safe }
+        return false
+    }
+
+    /// What happens when it's cleaned, in a few words.
+    var methodSummary: String {
+        switch method {
+        case .delete: id == "trash" ? "Emptied for good" : safety == .safe ? "Deleted; rebuilt when needed" : "Deleted for good"
+        case .trash: "Moved to the Trash"
+        case .command(let command): "Runs \(command)"
+        case .none: "Only shown"
+        }
+    }
 }
 
 extension CleanupRule {
@@ -193,16 +231,13 @@ enum CleanupGate {
         case notAbsolute, notFound, symlink, outsideAllowedFolders, protected, isAllowedFolderItself, appRunning(String)
     }
 
-    private static var home: String { FileManager.default.homeDirectoryForCurrentUser.path }
-
-    /// The only folders anything may be removed from.
-    static var allowedRoots: [String] {
-        let rules = CleanupRule.all.filter { $0.safety != .yourCall }.flatMap(\.expandedPaths)
-        return Array(Set(rules)).sorted()
+    /// Every folder anything may ever be removed from, across all rules.
+    static func allowedRoots(home: String = CleanupRule.realHome) -> [String] {
+        Array(Set(CleanupRule.all.filter { $0.safety != .yourCall }.flatMap { $0.expandedPaths(home: home) })).sorted()
     }
 
     /// Never touched, even inside an allowed folder.
-    static var protectedPaths: [String] {
+    static func protectedPaths(home: String = CleanupRule.realHome) -> [String] {
         ["/System", "/usr", "/bin", "/sbin", "/private/var/db", "/Library", "/Applications",
          home + "/Library/Mobile Documents", home + "/Library/Keychains", home + "/Library/Application Support",
          home + "/Library/Mail", home + "/Library/Messages", home + "/Documents", home + "/Desktop",
@@ -210,10 +245,12 @@ enum CleanupGate {
          home + "/.local"]
     }
 
-    /// Whether `path` may be removed. `allowedRoot` is the rule folder it
-    /// came from; removing that folder itself is only allowed when the rule
-    /// says so (DerivedData can go as a whole, ~/Library/Caches can't).
-    static func check(_ path: String, wholeFolderAllowed: Bool = false, ownerApps: [String] = []) -> Refusal? {
+    /// Whether `path` may be removed by `rule`: it must be inside one of that
+    /// rule's own folders. The folder itself may only go when the rule takes
+    /// it whole (DerivedData can go as a whole, ~/Library/Caches can't).
+    static func check(_ path: String, rule: CleanupRule, home: String = CleanupRule.realHome,
+                      wholeFolderAllowed: Bool = false) -> Refusal? {
+        guard rule.safety != .yourCall else { return .outsideAllowedFolders }
         guard path.hasPrefix("/") else { return .notAbsolute }
         let standard = (path as NSString).standardizingPath
         guard standard == path, !path.contains("/../"), !path.hasSuffix("/..") else { return .notAbsolute }
@@ -223,19 +260,29 @@ enum CleanupGate {
         // Follow symlinked parent folders, then check where it really is.
         let parent = (path as NSString).deletingLastPathComponent
         let real = URL(fileURLWithPath: parent).resolvingSymlinksInPath().path + "/" + (path as NSString).lastPathComponent
-        for candidate in Set([path, real]) {
-            guard let root = allowedRoots.first(where: { candidate == $0 || candidate.hasPrefix($0 + "/") }) else {
+        let roots = rule.expandedPaths(home: home)
+        let realRoots = roots.map { URL(fileURLWithPath: $0).resolvingSymlinksInPath().path }
+        let protected = protectedPaths(home: home)
+        for (candidate, allowed) in [(path, roots), (real, realRoots)] {
+            guard let root = allowed.first(where: { candidate == $0 || candidate.hasPrefix($0 + "/") }) else {
                 return .outsideAllowedFolders
             }
             if candidate == root && !wholeFolderAllowed { return .isAllowedFolderItself }
             // An allowed folder can sit inside a protected one (Caches inside
             // Library); protection only applies outside allowed folders.
-            if protectedPaths.contains(where: { candidate == $0 || (candidate.hasPrefix($0 + "/") && !root.hasPrefix($0 + "/")) }) {
+            if protected.contains(where: { candidate == $0 || (candidate.hasPrefix($0 + "/") && !root.hasPrefix($0 + "/")) }) {
                 return .protected
             }
         }
-        if let running = ownerApps.first(where: { !NSRunningApplication.runningApplications(withBundleIdentifier: $0).isEmpty }) {
+        if let running = rule.ownerApps.first(where: { !NSRunningApplication.runningApplications(withBundleIdentifier: $0).isEmpty }) {
             return .appRunning(running)
+        }
+        let name = (path as NSString).lastPathComponent
+        if rule.id == "app-caches", CleanupRule.isSensitiveCache(name) || rule.keep.contains(name) { return .protected }
+        // A cache folder named after a running app (com.example.App) is in use.
+        if rule.pickItems,
+           NSWorkspace.shared.runningApplications.contains(where: { $0.bundleIdentifier?.lowercased() == name.lowercased() }) {
+            return .appRunning(name)
         }
         return nil
     }
@@ -258,7 +305,7 @@ enum CleanupRunner {
 
     /// Cleans `items` (paths inside the rule's folders), or the rule's
     /// folders themselves when `items` is empty.
-    static func run(_ rule: CleanupRule, items: [String]) async -> Outcome {
+    static func run(_ rule: CleanupRule, items: [String], home: String = CleanupRule.realHome) async -> Outcome {
         var outcome = Outcome()
         switch rule.method {
         case .none:
@@ -273,14 +320,14 @@ enum CleanupRunner {
             if status == 0 { outcome.done.append(command) } else { outcome.skipped.append((command, output)) }
             return outcome
         case .delete, .trash:
-            let targets = items.isEmpty ? rule.expandedPaths : items
+            let targets = items.isEmpty ? rule.expandedPaths(home: home) : items
             for path in targets {
                 if rule.keep.contains((path as NSString).lastPathComponent) {
                     outcome.skipped.append((path, "kept"))
                     continue
                 }
-                if let refusal = CleanupGate.check(path, wholeFolderAllowed: items.isEmpty && !rule.pickItems,
-                                                   ownerApps: rule.ownerApps) {
+                if let refusal = CleanupGate.check(path, rule: rule, home: home,
+                                                   wholeFolderAllowed: items.isEmpty && !rule.pickItems) {
                     if refusal != .notFound { outcome.skipped.append((path, "\(refusal)")) }
                     continue
                 }
