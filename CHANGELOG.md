@@ -3,6 +3,12 @@
 All notable changes to Barn Owl. Versions follow [semantic versioning](https://semver.org);
 before 1.0, a minor version can change behaviour.
 
+## Unreleased
+
+- Closed-lid mode stays on through updates, and through restarts when Barn
+  Owl opens at login, instead of switching off (and asking for your password
+  in the middle of shutting down). Quitting Barn Owl still turns it off.
+
 ## 0.10.1
 
 - Lighter on your Mac: Barn Owl no longer hears every pointer movement

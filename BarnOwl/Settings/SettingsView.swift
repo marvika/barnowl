@@ -709,7 +709,7 @@ private struct KeepAwakePane: View {
             } header: {
                 Text("Closed-lid mode")
             } footer: {
-                Text("A closed Mac that keeps running gets warm and uses battery. Don't put it in a bag like this. Barn Owl turns this off again when it quits.")
+                Text("A closed Mac that keeps running gets warm and uses battery. Don't put it in a bag like this. It stays on through updates, and through restarts if Barn Owl opens at login; it turns off when you quit Barn Owl.")
             }
         }
         .sheet(item: $editingRule) { rule in

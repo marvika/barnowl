@@ -204,8 +204,9 @@ Each rule can let the display sleep or keep it on.
 - **Notify me when a session ends.**
 - **Closed-lid mode:** keeps the Mac running with the lid closed, even
   without an external display. It asks for your administrator password each
-  time you switch it, and Barn Owl turns it off again when it quits. A closed
-  Mac that keeps running gets warm, so don't put it in a bag like that.
+  time you switch it. It stays on through updates, and through restarts when
+  Barn Owl opens at login; quitting Barn Owl turns it off. A closed Mac that
+  keeps running gets warm, so don't put it in a bag like that.
 
 ## Quick panel and toggles
 

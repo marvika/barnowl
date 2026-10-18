@@ -6,9 +6,14 @@ import Foundation
 /// administrator password each time it's switched.
 ///
 /// Risky by nature: a running Mac in a bag gets hot and drains its battery.
-/// Off by default, explained in Settings, and switched off again when Barn Owl
-/// quits.
+/// Off by default, explained in Settings, and switched off again when you quit
+/// Barn Owl. It stays on when Barn Owl is only away for a moment: relaunching
+/// for an update, or the Mac restarting or logging out, after which Barn Owl
+/// starts again.
 enum ClosedLidMode {
+    /// Barn Owl is quitting only to come straight back.
+    @MainActor static var keepOnQuit = false
+
     /// Reads the current setting; needs no password.
     static var isEnabled: Bool {
         let process = Process()
