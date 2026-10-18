@@ -41,6 +41,23 @@ struct KeepAwakeRuleTests {
         #expect(!RuleCondition.minute(12 * 60, isWithin: 22 * 60, 2 * 60))
     }
 
+    /// Weeknights 22:00–02:00: Friday night runs into Saturday morning, and
+    /// Sunday night isn't one of them.
+    @Test func overnightSchedulesBelongToTheNightBefore() {
+        let nights = RuleCondition.schedule(weekdays: [2, 3, 4, 5, 6], startMinute: 22 * 60, endMinute: 2 * 60)
+        func at(_ weekday: Int, _ hour: Int) -> ConditionSnapshot {
+            var moment = snapshot
+            moment.weekday = weekday
+            moment.minuteOfDay = hour * 60
+            return moment
+        }
+        #expect(nights.holds(in: at(7, 1)))   // Saturday 01:00
+        #expect(!nights.holds(in: at(2, 1)))  // Monday 01:00
+        #expect(nights.holds(in: at(3, 1)))   // Tuesday 01:00
+        #expect(nights.holds(in: at(2, 23)))  // Monday 23:00
+        #expect(!nights.holds(in: at(1, 23))) // Sunday 23:00
+    }
+
     @Test func titlesReadNaturally() {
         #expect(KeepAwakeRule(conditions: [.onPower, .externalDisplay]).title
                 == "On power adapter and an external display is connected")

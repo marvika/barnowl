@@ -61,8 +61,16 @@ enum RuleCondition: Codable, Hashable, Sendable {
         case .microphoneInUse: snapshot.microphoneInUse
         case .downloading: snapshot.downloading
         case .schedule(let days, let start, let end):
-            days.contains(snapshot.weekday) && Self.minute(snapshot.minuteOfDay, isWithin: start, end)
+            Self.minute(snapshot.minuteOfDay, isWithin: start, end)
+                && days.contains(Self.startDay(of: start, end, at: snapshot.minuteOfDay, on: snapshot.weekday))
         }
+    }
+
+    /// The day a time range began: after midnight in 22:00–02:00 it's still
+    /// the night before, so Friday's 22:00–02:00 covers Saturday 01:00.
+    static func startDay(of start: Int, _ end: Int, at minute: Int, on weekday: Int) -> Int {
+        guard start > end, minute < end else { return weekday }
+        return weekday == 1 ? 7 : weekday - 1
     }
 
     /// Handles ranges past midnight, such as 22:00–02:00.

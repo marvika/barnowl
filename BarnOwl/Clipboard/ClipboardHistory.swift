@@ -154,6 +154,7 @@ final class ClipboardHistory {
 
     /// Puts the entry back on the clipboard.
     func copy(_ entry: ClipEntry) {
+        if entry.kind == .image, entry.image == nil { return }
         let pasteboard = NSPasteboard.general
         pasteboard.clearContents()
         switch entry.kind {
@@ -237,7 +238,8 @@ final class ClipboardHistory {
     private func save() {
         guard !DemoMode.isOn else { return }
         guard let url = Self.storeURL else { return }
-        let kept = Preferences.clipboardRemember ? entries.filter { $0.kind != .image } : entries.filter(\.isPinned)
+        // Images are never written to disk, pinned or not.
+        let kept = entries.filter { $0.kind != .image && (Preferences.clipboardRemember || $0.isPinned) }
         try? FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
         if let data = try? JSONEncoder().encode(Store(entries: kept, shelf: shelf)) {
             try? data.write(to: url, options: [.atomic, .completeFileProtection])

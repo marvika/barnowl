@@ -367,6 +367,9 @@ final class LayoutController {
             defaults.set(defaults.dictionary(forKey: previous.storageKey) ?? [:], forKey: next.storageKey)
         }
         Log.menuBar.info("Display profile: \(next.rawValue)")
+        // While presenting, icons stay hidden; presenting ends with a reconcile
+        // that puts them where this profile wants them.
+        guard !isPaused() else { return }
         await applyRemembered()
     }
 
