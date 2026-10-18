@@ -564,6 +564,8 @@ enum CleanupRunner {
     }
 
     static func log(_ line: String) {
+        // Test runs clean a stand-in home; they don't belong in your log.
+        guard ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] == nil else { return }
         let folder = logURL.deletingLastPathComponent()
         try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         let stamp = ISO8601DateFormatter().string(from: Date())

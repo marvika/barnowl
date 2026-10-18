@@ -121,7 +121,10 @@ final class BarnModel {
     }
 
     private static func ordered(_ suggestions: [Suggestion]) -> [Suggestion] {
-        suggestions.sorted { ($0.rule.safety, -$0.size) < ($1.rule.safety, -$1.size) }
+        // Safest first, then what you can clean now, then biggest.
+        suggestions.sorted {
+            ($0.rule.safety.rawValue, $0.blockedBy == nil ? 0 : 1, -$0.size) < ($1.rule.safety.rawValue, $1.blockedBy == nil ? 0 : 1, -$1.size)
+        }
     }
 
     /// How much one rule would free, or nil if it doesn't apply here.

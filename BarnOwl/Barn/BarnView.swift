@@ -186,7 +186,7 @@ private struct TidyUpView: View {
                     let rows = barn.suggestions.filter { $0.rule.safety == safety }
                     if !rows.isEmpty {
                         VStack(alignment: .leading, spacing: 8) {
-                            SectionHeading(safety: safety, total: rows.map(\.size).reduce(0, +))
+                            SectionHeading(safety: safety, total: rows.filter { $0.blockedBy == nil }.map(\.size).reduce(0, +))
                             VStack(spacing: 0) {
                                 ForEach(Array(rows.enumerated()), id: \.element.id) { position, suggestion in
                                     if position > 0 { Divider().padding(.leading, 58) }
@@ -418,14 +418,23 @@ private struct PickItemsSheet: View {
     let clean: ([String]) -> Void
     let cancel: () -> Void
     @State private var picked: Set<String> = []
+    @State private var search = ""
 
     private var total: Int64 { suggestion.items.filter { picked.contains($0.path) }.map(\.size).reduce(0, +) }
+
+    private var shown: [BarnModel.Item] {
+        search.isEmpty ? suggestion.items : suggestion.items.filter { $0.name.localizedCaseInsensitiveContains(search) }
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text(suggestion.rule.title).font(.title2.bold())
             Text(suggestion.rule.detail).foregroundStyle(.secondary)
-            List(suggestion.items) { item in
+            if suggestion.items.count > 10 {
+                TextField("Search \(suggestion.items.count) items", text: $search)
+                    .textFieldStyle(.roundedBorder)
+            }
+            List(shown) { item in
                 Toggle(isOn: Binding(get: { picked.contains(item.path) },
                                      set: { if $0 { picked.insert(item.path) } else { picked.remove(item.path) } })) {
                     HStack {
@@ -443,8 +452,12 @@ private struct PickItemsSheet: View {
             }
             .frame(minHeight: 280)
             HStack {
-                Button(picked.count == suggestion.items.count ? "Select None" : "Select All") {
-                    picked = picked.count == suggestion.items.count ? [] : Set(suggestion.items.map(\.path))
+                let all = Set(shown.map(\.path))
+                Button(all.isSubset(of: picked) ? "Select None" : "Select All") {
+                    if all.isSubset(of: picked) { picked.subtract(all) } else { picked.formUnion(all) }
+                }
+                if !picked.isEmpty {
+                    Text("\(picked.count) picked").foregroundStyle(.secondary)
                 }
                 Spacer()
                 Button("Cancel", role: .cancel, action: cancel).keyboardShortcut(.cancelAction)
@@ -543,7 +556,9 @@ private struct ReportBanner: View {
             Button("Remove", role: .destructive, action: emptyTrashed)
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("Only the \(report.trashed.count == 1 ? "item" : "\(report.trashed.count) items") just moved there (\(Bytes.format(report.trashedSize))) are removed for good. The rest of your Trash stays. This can't be undone.")
+            Text(report.trashed.count == 1
+                 ? "Only what was just moved there (\(Bytes.format(report.trashedSize))) is removed for good. The rest of your Trash stays. This can't be undone."
+                 : "Only the \(report.trashed.count) items just moved there (\(Bytes.format(report.trashedSize))) are removed for good. The rest of your Trash stays. This can't be undone.")
         }
         .padding(14)
         .frame(maxWidth: 640)

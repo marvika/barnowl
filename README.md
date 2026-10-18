@@ -131,22 +131,29 @@ and press Return to open it. You can also type a command:
 
 ## The Barn: free up disk space
 
-<img src="docs/images/barn-tidy.png" alt="The Barn: a storage bar and cards for Xcode build files, Homebrew, simulator caches and more, with a button to free up 19 GB" width="760">
+<img src="docs/images/barn-tidy.png" alt="The Barn: a storage bar, a button to free up 22 GB, and what's safe to clean, listed biggest first" width="760">
 
 Click the disk row in the quick panel, or search for "disk", and the owl
 shows you how your disk is used and what it can safely clean:
 
-- **Tidy up:** Xcode build files, simulator caches, Homebrew, npm, pnpm, pip
-  and other caches, browser caches, old installers in Downloads and the
-  Trash. Each card says how safe it is and how much you'll get back. Clean
-  everything safe in one click, or pick what goes. Barn Owl uses each tool's
-  own clean-up command where there is one, and moves anything you might want
-  back to the Trash, with undo.
-- **Yours to decide:** iPhone backups, Xcode archives, simulators and Docker
-  are shown but never cleaned for you.
-- **Explore:** a map of the whole disk, about three million files in half a
-  minute, as rings to click through. Find the biggest files, preview them
-  with Quick Look, and drop what you don't need in a basket for the Trash.
+- **Tidy up**, sorted by how safe it is:
+  - **Safe to clean:** browser and app caches, Xcode build files, iPhone
+    update files, npm, pip and other tool caches. Free them all in one click.
+  - **Check first:** macOS installers left behind, apps you haven't opened
+    in six months, big old downloads, other apps' caches and logs, Homebrew's
+    old versions. You pick what goes, it goes to the Trash, and Undo puts it
+    back.
+  - **Only you know:** iPhone backups, the Photos library, Xcode archives,
+    Docker. Shown with advice, never cleaned for you.
+- **Safe by design:** each clean-up can only touch its own folders, links
+  are followed and checked, nothing is cleaned while its app or a build is
+  running, and anything that can't be undone asks first. Every action is
+  logged.
+- **Explore:** a map of your disk, about three million files in half a
+  minute, as rings to click through. It starts at your home folder, explains
+  the system folders, finds the biggest files by kind, previews with Quick
+  Look, and keeps a basket of what you decide can go. It won't take anything
+  from iCloud Drive or where apps keep your data.
 - **Keeps an eye out:** a gentle warning when the disk is nearly full, and,
   if you like, a weekly look for things to tidy. It never cleans by itself.
 

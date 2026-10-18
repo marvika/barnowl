@@ -83,7 +83,7 @@ private struct ExploreResults: View {
         VStack(spacing: 0) {
             HStack(alignment: .top, spacing: 20) {
                 VStack(spacing: 10) {
-                    RingMap(scan: scan, focus: focus, hovered: $hovered) { index in
+                    RingMap(scan: scan, focus: focus, home: home, hovered: $hovered) { index in
                         if scan.nodes[Int(index)].isFolder, !scan.nodes[Int(index)].children.isEmpty {
                             withAnimation(.spring(duration: 0.4)) { focus = index }
                         } else {
@@ -109,7 +109,7 @@ private struct ExploreResults: View {
                             Picker("", selection: $kind) {
                                 ForEach(FileKind.allCases, id: \.self) { Text($0.rawValue).tag($0) }
                             }
-                            .labelsHidden().fixedSize()
+                            .labelsHidden().frame(width: 210)
                         }
                     }
                     list
@@ -371,6 +371,7 @@ private struct BasketBar: View {
 struct RingMap: View {
     let scan: DiskScan
     let focus: Int32
+    let home: Int32?
     @Binding var hovered: Int32?
     let open: (Int32) -> Void
     let goUp: () -> Void
@@ -392,10 +393,11 @@ struct RingMap: View {
     /// Worked out once per folder, not on every hover.
     private let slices: [Slice]
 
-    init(scan: DiskScan, focus: Int32, hovered: Binding<Int32?>, open: @escaping (Int32) -> Void,
+    init(scan: DiskScan, focus: Int32, home: Int32?, hovered: Binding<Int32?>, open: @escaping (Int32) -> Void,
          goUp: @escaping () -> Void) {
         self.scan = scan
         self.focus = focus
+        self.home = home
         _hovered = hovered
         self.open = open
         self.goUp = goUp
@@ -486,7 +488,7 @@ struct RingMap: View {
     private var centreLabel: some View {
         let shown = scan.nodes[Int(hovered ?? focus)]
         return VStack(spacing: 2) {
-            Text(hovered == nil && focus == 0 ? "Disk" : shown.name)
+            Text(hovered == nil && focus == 0 ? "Whole Disk" : hovered == nil && focus == home ? "Home" : shown.name)
                 .font(.caption.weight(.semibold)).lineLimit(2).multilineTextAlignment(.center)
             Text(Bytes.format(shown.size)).font(.callout.weight(.bold)).monospacedDigit()
             if hovered == nil && focus != 0 {
