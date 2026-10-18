@@ -213,6 +213,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             case ("search", _): search.show()
             case ("clipboard", _): clipboardPanel.show()
             case ("nest", _): dropTray.toggleOpen()
+            case ("stage", _): DemoStage.toggle()
             case ("barn", _): barnWindow.show()
             case ("quick", _):
                 quickPanel.toggle(under: (quickPanel.owlItem ?? items.toggle).button?.window?.frame)
