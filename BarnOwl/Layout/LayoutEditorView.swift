@@ -281,7 +281,7 @@ private struct GroupEditorSheet: View {
                     dismiss()
                 }
                 .keyboardShortcut(.defaultAction)
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(.glassProminent)
             }
         }
         .padding(24)
@@ -340,7 +340,7 @@ struct CustomIconSheet: View {
                     Task { await model.setCustomIcon(for: item, symbol: symbol, label: label) }
                     dismiss()
                 }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(.glassProminent)
                 .keyboardShortcut(.defaultAction)
             }
         }

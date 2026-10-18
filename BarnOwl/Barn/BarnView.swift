@@ -290,7 +290,7 @@ private struct TidyUpView: View {
                     Text("Free Up \(Bytes.format(barn.safeTotal))").frame(minWidth: 120)
                 }
             }
-            .buttonStyle(.borderedProminent)
+            .buttonStyle(.glassProminent)
             .controlSize(.large)
             .disabled(barn.cleaning != nil || barn.isMeasuring)
         }
@@ -462,7 +462,7 @@ private struct PickItemsSheet: View {
                 Spacer()
                 Button("Cancel", role: .cancel, action: cancel).keyboardShortcut(.cancelAction)
                 Button(cleanTitle) { clean(Array(picked)) }
-                    .buttonStyle(.borderedProminent)
+                    .buttonStyle(.glassProminent)
                     .keyboardShortcut(.defaultAction)
                     .disabled(picked.isEmpty)
             }

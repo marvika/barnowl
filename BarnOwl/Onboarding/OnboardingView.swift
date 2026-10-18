@@ -138,7 +138,7 @@ struct OnboardingView: View {
             Button(primaryTitle) {
                 if step == .done { finish() } else { move(1) }
             }
-            .buttonStyle(.borderedProminent)
+            .buttonStyle(.glassProminent)
             .controlSize(.large)
             .keyboardShortcut(.defaultAction)
         }

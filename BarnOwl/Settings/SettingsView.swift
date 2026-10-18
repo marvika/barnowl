@@ -440,7 +440,7 @@ private struct MenuBarPane: View {
                     .listRowInsets(EdgeInsets(top: 12, leading: 12, bottom: 12, trailing: 12))
                 LabeledContent {
                     Button("Open Layout") { model.settingsPane = .layout }
-                        .buttonStyle(.borderedProminent)
+                        .buttonStyle(.glassProminent)
                 } label: {
                     BadgeLabel(title: "Arrange icons and groups",
                                subtitle: "Drag icons between the menu bar, hidden and your groups.",
@@ -603,7 +603,7 @@ private struct KeepAwakePane: View {
                         .labelsHidden()
                         .frame(width: 130)
                         Button("Start") { keepAwake.start(minutes: startMinutes) }
-                            .buttonStyle(.borderedProminent)
+                            .buttonStyle(.glassProminent)
                             .controlSize(.large)
                     }
                 }
@@ -770,7 +770,7 @@ private struct RuleEditorSheet: View {
                     if isNew { rules.add(rule) } else { rules.update(rule) }
                     dismiss()
                 }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(.glassProminent)
                 .keyboardShortcut(.defaultAction)
                 .disabled(rule.conditions.isEmpty)
             }

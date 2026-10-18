@@ -12,6 +12,7 @@ struct ClipboardView: View {
     @State private var tab = Tab.history
     @State private var query = ""
     @State private var selection = 0
+    @State private var confirmingClear = false
     @FocusState private var focused: Bool
 
     private var results: [ClipEntry] {
@@ -33,13 +34,20 @@ struct ClipboardView: View {
                 .labelsHidden()
                 .frame(width: 200)
                 Spacer()
-                if tab == .history, !clipboard.entries.isEmpty {
-                    Button("Clear") { clipboard.clear() }.buttonStyle(.borderless)
-                } else if tab == .shelf, !clipboard.shelf.isEmpty {
-                    Button("Clear") { clipboard.clearShelf() }.buttonStyle(.borderless)
+                if tab == .history ? !clipboard.entries.isEmpty : !clipboard.shelf.isEmpty {
+                    Button("Clear…", systemImage: "trash") { confirmingClear = true }
+                        .buttonStyle(.bordered).controlSize(.small)
                 }
             }
             .padding(12)
+            .confirmationDialog(tab == .history ? "Clear clipboard history?" : "Empty the Nest?",
+                                isPresented: $confirmingClear) {
+                Button(tab == .history ? "Clear History" : "Empty Nest", role: .destructive) {
+                    if tab == .history { clipboard.clear() } else { clipboard.clearShelf() }
+                }
+            } message: {
+                Text(tab == .history ? "Pinned items stay." : "The files themselves stay where they are.")
+            }
             Divider()
             if tab == .history { history } else { shelf }
         }

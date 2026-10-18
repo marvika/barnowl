@@ -144,3 +144,34 @@ struct CardRow<Trailing: View>: View {
         }
     }
 }
+
+/// A button that gives a little under your finger, and springs back.
+struct PressableStyle: ButtonStyle {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .scaleEffect(configuration.isPressed && !reduceMotion ? 0.95 : 1)
+            .animation(.spring(duration: 0.25, bounce: 0.5), value: configuration.isPressed)
+    }
+}
+
+/// Things that arrive one after another, like icons settling on the Perch.
+struct ArrivalEffect: ViewModifier {
+    let delay: Double
+    @State private var arrived = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    func body(content: Content) -> some View {
+        content
+            .scaleEffect(arrived || reduceMotion ? 1 : 0.6)
+            .opacity(arrived || reduceMotion ? 1 : 0)
+            .onAppear {
+                withAnimation(.spring(duration: 0.4, bounce: 0.45).delay(delay)) { arrived = true }
+            }
+    }
+}
+
+extension View {
+    func arrives(after delay: Double) -> some View { modifier(ArrivalEffect(delay: delay)) }
+}

@@ -135,7 +135,7 @@ private struct KeepAwakeCard: View {
                             keepAwake.start(.until(Self.nextOccurrence(of: untilTime)))
                             showingUntil = false
                         }
-                        .buttonStyle(.borderedProminent)
+                        .buttonStyle(.glassProminent)
                         .keyboardShortcut(.defaultAction)
                     }
                     .padding(14)
@@ -297,6 +297,8 @@ private struct ToggleTile: View {
                 Image(systemName: symbol)
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(isOn ? .white : .primary)
+                    .contentTransition(.symbolEffect(.replace))
+                    .symbolEffect(.bounce, value: isOn)
                     .frame(width: 28, height: 28)
                     .background(isOn ? Brand.accent : Color.primary.opacity(0.1), in: .circle)
                 Text(title).font(.callout).lineLimit(1)
@@ -306,7 +308,7 @@ private struct ToggleTile: View {
             .background(Color.primary.opacity(hovering ? 0.12 : 0.06), in: .rect(cornerRadius: Theme.cardRadius))
             .contentShape(.rect)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(PressableStyle())
         .onHover { hovering = $0 }
         .accessibilityLabel(title)
         .accessibilityValue(isOn ? "On" : "Off")
