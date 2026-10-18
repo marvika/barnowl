@@ -184,7 +184,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    /// barnowl://settings, barnowl://setup, barnowl://search, barnowl://bar,
+    /// barnowl://settings, barnowl://setup, barnowl://search, barnowl://bar, barnowl://quick,
     /// barnowl://open?app=NAME, barnowl://place?app=NAME&row=hidden, barnowl://watch?app=NAME,
     /// barnowl://icon?app=NAME&label=TEXT, barnowl://presenter, barnowl://show, barnowl://toggle,
     /// barnowl://show-all, barnowl://hide, barnowl://keep-awake?minutes=60 (also 2h; 0 or none = indefinitely),
@@ -205,6 +205,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             case ("search", _): search.show()
             case ("clipboard", _): clipboardPanel.show()
             case ("barn", _): barnWindow.show()
+            case ("quick", _):
+                quickPanel.toggle(under: (quickPanel.owlItem ?? items.toggle).button?.window?.frame)
             case ("presenter", _):
                 // barnowl://presenter (toggle), ?on=1 or ?on=0
                 let on = query?.first { $0.name == "on" }?.value

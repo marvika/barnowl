@@ -32,7 +32,7 @@ struct QuickPanelView: View {
                 close()
                 model.showClipboard()
             }
-            QuickFooterButton(symbol: "square.grid.3x1.below.line.grid.1x2", help: "Arrange icons") {
+            QuickFooterButton(symbol: "menubar.rectangle", help: "Arrange menu bar icons") {
                 close()
                 model.showSettings(.layout)
             }
@@ -63,18 +63,22 @@ private struct KeepAwakeCard: View {
     private var keepAwake: KeepAwakeController { model.keepAwake }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(spacing: 10) {
-                AwakeOwlBadge(model: model)
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 12) {
+                AwakeOwlBadge(model: model, size: 60)
                     .zIndex(1) // so the owl's speech bubble shows over the title
-                VStack(alignment: .leading, spacing: 1) {
-                    Text("Keep Awake").font(.headline)
-                    TimelineView(.periodic(from: .now, by: 5)) { _ in
-                        Text(KeepAwakeFormatter.status(of: keepAwake))
-                            .font(.caption).foregroundStyle(.secondary).lineLimit(2)
+                TimelineView(.periodic(from: .now, by: 1)) { context in
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text("Keep Awake").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+                        Text(headline(at: context.date))
+                            .font(.title2.weight(.semibold)).monospacedDigit()
+                            .contentTransition(.numericText(countsDown: true))
+                            .animation(.snappy, value: headline(at: context.date))
+                        Text(detail(at: context.date))
+                            .font(.caption).foregroundStyle(.secondary).lineLimit(1)
                     }
                 }
-                Spacer()
+                Spacer(minLength: 0)
                 Toggle("", isOn: Binding(
                     get: { keepAwake.session != nil },
                     set: { $0 ? keepAwake.start(minutes: defaultMinutes) : keepAwake.stop() }))
@@ -82,83 +86,50 @@ private struct KeepAwakeCard: View {
                     .labelsHidden()
                     .accessibilityLabel("Keep awake")
             }
-            if keepAwake.endDate != nil {
-                HStack(spacing: 6) {
-                    Text("Add").font(.callout).foregroundStyle(.secondary)
-                        .frame(width: 26, alignment: .leading)
+            // One row: how long, or while a timer runs, how much longer.
+            HStack(spacing: 6) {
+                if keepAwake.endDate != nil {
                     ForEach(KeepAwakeController.extensions, id: \.self) { minutes in
                         DurationChip(title: "+" + KeepAwakeFormatter.durationLabel(minutes: minutes)) {
                             keepAwake.extend(minutes: minutes)
                         }
                         .help("Keep awake \(KeepAwakeFormatter.durationLabel(minutes: minutes)) longer")
                     }
-                }
-            }
-            HStack(spacing: 6) {
-                if keepAwake.endDate != nil {
-                    // Next to "Add", these start the session over.
-                    Text("Set").font(.callout).foregroundStyle(.secondary)
-                        .frame(width: 26, alignment: .leading)
-                }
-                ForEach([15, 60, 120, 240, 0], id: \.self) { minutes in
-                    DurationChip(title: minutes == 0 ? "∞" : KeepAwakeFormatter.durationLabel(minutes: minutes)) {
-                        keepAwake.start(minutes: minutes)
-                    }
-                    .help(minutes == 0 ? "Until you stop it" : "For \(KeepAwakeFormatter.durationLabel(minutes: minutes))")
-                }
-                Menu {
-                    Button("Until a Time…") { showingUntil = true }
-                    Menu("While an App Is Running") {
-                        ForEach(runningApps, id: \.bundleIdentifier) { app in
-                            Button(app.localizedName ?? "App") {
-                                keepAwake.start(.whileAppRunning(bundleIdentifier: app.bundleIdentifier ?? "",
-                                                                 name: app.localizedName ?? "App"))
-                            }
+                } else {
+                    ForEach([15, 60, 120, 240, 0], id: \.self) { minutes in
+                        DurationChip(title: minutes == 0 ? "∞" : KeepAwakeFormatter.durationLabel(minutes: minutes)) {
+                            keepAwake.start(minutes: minutes)
                         }
+                        .help(minutes == 0 ? "Until you stop it" : "For \(KeepAwakeFormatter.durationLabel(minutes: minutes))")
                     }
-                    Button("Until Downloads Finish") { keepAwake.start(.whileDownloading) }
-                } label: {
-                    Image(systemName: "ellipsis")
                 }
-                .menuStyle(.button)
-                .menuIndicator(.hidden)
-                .buttonStyle(.bordered)
-                .controlSize(.small)
-                .fixedSize()
-                .popover(isPresented: $showingUntil) {
-                    VStack(alignment: .leading, spacing: 10) {
-                        Text("Keep awake until").font(.headline)
-                        DatePicker("", selection: $untilTime, displayedComponents: [.hourAndMinute])
-                            .labelsHidden()
-                            .datePickerStyle(.stepperField)
-                        Button("Start") {
-                            keepAwake.start(.until(Self.nextOccurrence(of: untilTime)))
-                            showingUntil = false
-                        }
-                        .buttonStyle(.glassProminent)
-                        .keyboardShortcut(.defaultAction)
+                Spacer(minLength: 0)
+                moreMenu
+            }
+            if allowDisplaySleep || keepAvailable {
+                HStack(spacing: 6) {
+                    if allowDisplaySleep { OptionTag(title: "Display may sleep", symbol: "moon") }
+                    if keepAvailable {
+                        OptionTag(title: allowDisplaySleep ? "Available (paused)" : "Staying available",
+                                  symbol: "person.wave.2")
+                            .help(allowDisplaySleep ? "Keep me available pauses while the display may sleep." : "")
                     }
-                    .padding(14)
                 }
-            }
-            HStack(spacing: 14) {
-                Toggle("Let display sleep", isOn: $allowDisplaySleep)
-                Toggle("Keep me available", isOn: $keepAvailable)
-                    .help("Nudges the pointer every few idle minutes so Teams and Slack don't show you as Away. Paused while the display may sleep.")
-            }
-            .toggleStyle(.checkbox)
-            .font(.callout)
-            if allowDisplaySleep, keepAvailable {
-                // A nudge counts as you, so it would keep the display on.
-                Text("Keep me available pauses while the display may sleep.")
-                    .font(.caption).foregroundStyle(.secondary)
             }
 
             let rules = keepAwake.rules.rules
             if !rules.isEmpty {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("Rules").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
-                    ForEach(rules.prefix(4)) { rule in
+                    HStack {
+                        Text("Rules").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+                        Spacer()
+                        Button("Edit…") {
+                            close()
+                            model.showSettings(.keepAwake)
+                        }
+                        .buttonStyle(.plain).font(.caption).foregroundStyle(.tint)
+                    }
+                    ForEach(rules.prefix(3)) { rule in
                         RuleRow(rule: rule, isActive: keepAwake.activeRule?.id == rule.id) { enabled in
                             var changed = rule
                             changed.isEnabled = enabled
@@ -166,16 +137,83 @@ private struct KeepAwakeCard: View {
                         }
                     }
                 }
+            } else {
+                Button {
+                    close()
+                    model.showSettings(.keepAwake)
+                } label: {
+                    Label("Keep awake automatically…", systemImage: "wand.and.sparkles").font(.callout)
+                }
+                .buttonStyle(.plain).foregroundStyle(.tint)
             }
-            Button {
-                close()
-                model.showSettings(.keepAwake)
-            } label: {
-                Label(rules.isEmpty ? "Keep awake automatically…" : "Edit rules…", systemImage: "wand.and.sparkles")
-                    .font(.callout)
+        }
+    }
+
+    /// The big line: time left, or simply on or off.
+    private func headline(at date: Date) -> String {
+        if let end = keepAwake.endDate {
+            let left = max(0, Int(end.timeIntervalSince(date)))
+            let hours = left / 3600, minutes = left / 60 % 60, seconds = left % 60
+            return hours > 0 ? String(format: "%d:%02d:%02d", hours, minutes, seconds)
+                             : String(format: "%d:%02d", minutes, seconds)
+        }
+        return keepAwake.isActive ? "Awake" : "Off"
+    }
+
+    private func detail(at date: Date) -> String {
+        if let end = keepAwake.endDate { return "left · ends at \(end.formatted(date: .omitted, time: .shortened))" }
+        if !keepAwake.isActive, !keepAwake.stoppedForBattery { return "Your Mac sleeps as usual" }
+        return KeepAwakeFormatter.status(of: keepAwake)
+    }
+
+    /// Everything else: other ways to stay awake, starting over, and the options.
+    private var moreMenu: some View {
+        Menu {
+            if keepAwake.endDate != nil {
+                Menu("Start Over") {
+                    ForEach([15, 60, 120, 240, 0], id: \.self) { minutes in
+                        Button(minutes == 0 ? "Until I Stop It" : "For \(KeepAwakeFormatter.durationLabel(minutes: minutes))") {
+                            keepAwake.start(minutes: minutes)
+                        }
+                    }
+                }
             }
-            .buttonStyle(.plain)
-            .foregroundStyle(.tint)
+            Button("Until a Time…") { showingUntil = true }
+            Menu("While an App Is Running") {
+                ForEach(runningApps, id: \.bundleIdentifier) { app in
+                    Button(app.localizedName ?? "App") {
+                        keepAwake.start(.whileAppRunning(bundleIdentifier: app.bundleIdentifier ?? "",
+                                                         name: app.localizedName ?? "App"))
+                    }
+                }
+            }
+            Button("Until Downloads Finish") { keepAwake.start(.whileDownloading) }
+            Divider()
+            Toggle("Let Display Sleep", isOn: $allowDisplaySleep)
+            Toggle("Keep Me Available", isOn: $keepAvailable)
+        } label: {
+            Image(systemName: "ellipsis")
+        }
+        .menuStyle(.button)
+        .menuIndicator(.hidden)
+        .buttonStyle(.bordered)
+        .controlSize(.small)
+        .fixedSize()
+        .help("More ways to keep awake, and options")
+        .popover(isPresented: $showingUntil) {
+            VStack(alignment: .leading, spacing: 10) {
+                Text("Keep awake until").font(.headline)
+                DatePicker("", selection: $untilTime, displayedComponents: [.hourAndMinute])
+                    .labelsHidden()
+                    .datePickerStyle(.stepperField)
+                Button("Start") {
+                    keepAwake.start(.until(Self.nextOccurrence(of: untilTime)))
+                    showingUntil = false
+                }
+                .buttonStyle(.glassProminent)
+                .keyboardShortcut(.defaultAction)
+            }
+            .padding(14)
         }
     }
 
@@ -192,6 +230,20 @@ private struct KeepAwakeCard: View {
     }
 }
 
+/// A quiet note that an option is on.
+private struct OptionTag: View {
+    let title: String
+    let symbol: String
+
+    var body: some View {
+        Label(title, systemImage: symbol)
+            .font(.caption)
+            .foregroundStyle(.secondary)
+            .padding(.horizontal, 8).padding(.vertical, 3)
+            .background(Color.primary.opacity(0.06), in: .capsule)
+    }
+}
+
 private struct RuleRow: View {
     let rule: KeepAwakeRule
     let isActive: Bool
@@ -202,7 +254,7 @@ private struct RuleRow: View {
             Image(systemName: rule.conditions.first?.symbol ?? "wand.and.sparkles")
                 .frame(width: 16)
                 .foregroundStyle(isActive ? .orange : .secondary)
-            Text(rule.title).font(.callout).lineLimit(1)
+            Text(rule.title).font(.callout).lineLimit(1).help(rule.title)
             Spacer()
             Toggle("", isOn: Binding(get: { rule.isEnabled }, set: { setEnabled($0) }))
                 .toggleStyle(.switch).controlSize(.mini).labelsHidden()
@@ -235,8 +287,8 @@ struct TogglesGrid: View {
 
     var body: some View {
         let _ = refresh
-        LazyVGrid(columns: [GridItem(.flexible(), spacing: 8), GridItem(.flexible(), spacing: 8)], spacing: 8) {
-            ToggleTile(title: "Presenting", symbol: "rectangle.on.rectangle", isOn: model.presenter.isPresenting) {
+        LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 6), count: 3), spacing: 10) {
+            ToggleTile(title: "Presenting", symbol: model.presenter.isPresenting ? "sunglasses.fill" : "rectangle.on.rectangle", isOn: model.presenter.isPresenting) {
                 Task { await model.presenter.toggle() }
             }
             if showDarkMode {
@@ -246,7 +298,7 @@ struct TogglesGrid: View {
                 }
             }
             if showMicrophone {
-                ToggleTile(title: QuickToggles.isMicrophoneMuted ? "Mic Muted" : "Microphone",
+                ToggleTile(title: QuickToggles.isMicrophoneMuted ? "Muted" : "Mic",
                            symbol: QuickToggles.isMicrophoneMuted ? "mic.slash.fill" : "mic.fill",
                            isOn: QuickToggles.isMicrophoneMuted) {
                     OwlCues.shared.quickPanel(QuickToggles.isMicrophoneMuted ? .listening : .shush)
@@ -254,7 +306,7 @@ struct TogglesGrid: View {
                 }
             }
             if showDesktop {
-                ToggleTile(title: "Hide Desktop", symbol: "menubar.dock.rectangle",
+                ToggleTile(title: "Desktop", symbol: QuickToggles.desktopIconsHidden ? "eye.slash" : "menubar.dock.rectangle",
                            isOn: QuickToggles.desktopIconsHidden) {
                     OwlCues.shared.quickPanel(QuickToggles.desktopIconsHidden ? .backAgain : .peekaboo)
                     run(QuickToggles.toggleDesktopIcons)
@@ -267,7 +319,7 @@ struct TogglesGrid: View {
                 }
             }
             if showSleepDisplay {
-                ToggleTile(title: "Sleep Display", symbol: "moon.fill", isOn: false) {
+                ToggleTile(title: "Sleep Screen", symbol: "moon.fill", isOn: false) {
                     OwlCues.shared.quickPanel(.nightNight)
                     QuickToggles.sleepDisplay()
                 }
@@ -293,23 +345,25 @@ private struct ToggleTile: View {
 
     var body: some View {
         Button(action: action) {
-            HStack(spacing: 8) {
+            VStack(spacing: 5) {
                 Image(systemName: symbol)
-                    .font(.system(size: 13, weight: .semibold))
+                    .font(.system(size: 17, weight: .semibold))
                     .foregroundStyle(isOn ? .white : .primary)
                     .contentTransition(.symbolEffect(.replace))
                     .symbolEffect(.bounce, value: isOn)
-                    .frame(width: 28, height: 28)
-                    .background(isOn ? Brand.accent : Color.primary.opacity(0.1), in: .circle)
-                Text(title).font(.callout).lineLimit(1)
-                Spacer(minLength: 0)
+                    .frame(width: 46, height: 46)
+                    .background(isOn ? AnyShapeStyle(Brand.accent.gradient)
+                                     : AnyShapeStyle(Color.primary.opacity(hovering ? 0.16 : 0.09)), in: .circle)
+                    .shadow(color: isOn ? Brand.accent.opacity(0.45) : .clear, radius: 6, y: 2)
+                Text(title).font(.caption).lineLimit(1).minimumScaleFactor(0.85)
+                    .foregroundStyle(isOn ? .primary : .secondary)
             }
-            .padding(8)
-            .background(Color.primary.opacity(hovering ? 0.12 : 0.06), in: .rect(cornerRadius: Theme.cardRadius))
+            .frame(maxWidth: .infinity)
             .contentShape(.rect)
         }
         .buttonStyle(PressableStyle())
         .onHover { hovering = $0 }
+        .animation(.spring(duration: 0.3), value: isOn)
         .accessibilityLabel(title)
         .accessibilityValue(isOn ? "On" : "Off")
     }
