@@ -103,6 +103,49 @@ struct AppIconArtwork: View {
     }
 }
 
+/// The app icon's layers, for Icon Composer's format: macOS 26 masks the
+/// shape and adds the glass, light and shadows itself.
+enum IconLayer {
+    /// Dusk, with a few stars, edge to edge.
+    static var sky: some View {
+        Canvas { context, size in
+            context.fill(Path(CGRect(origin: .zero, size: size)),
+                         with: .linearGradient(Gradient(colors: [Color(red: 0.34, green: 0.32, blue: 0.72), Brand.indigoDeep]),
+                                               startPoint: .zero, endPoint: CGPoint(x: 0, y: size.height)))
+            let stars: [(CGFloat, CGFloat, CGFloat)] = [
+                (0.18, 0.2, 0.011), (0.3, 0.11, 0.007), (0.84, 0.36, 0.009), (0.11, 0.44, 0.007),
+                (0.9, 0.64, 0.007), (0.2, 0.8, 0.006), (0.5, 0.08, 0.006),
+            ]
+            for (x, y, r) in stars {
+                context.fill(Path(ellipseIn: CGRect(x: x * size.width, y: y * size.height,
+                                                     width: r * size.width * 2, height: r * size.width * 2)),
+                             with: .color(.white.opacity(0.8)))
+            }
+        }
+    }
+
+    /// A crescent moon, top right.
+    static var moon: some View {
+        Canvas { context, size in
+            var moon = Path(ellipseIn: CGRect(x: 0.66 * size.width, y: 0.1 * size.height,
+                                              width: 0.17 * size.width, height: 0.17 * size.width))
+            moon = moon.subtracting(Path(ellipseIn: CGRect(x: 0.71 * size.width, y: 0.08 * size.height,
+                                                           width: 0.16 * size.width, height: 0.16 * size.width)))
+            context.fill(moon, with: .color(Brand.amber))
+        }
+    }
+
+    /// The owl, looking up at you.
+    static var owl: some View {
+        GeometryReader { proxy in
+            let side = proxy.size.width
+            OwlView(eyesOpen: true, look: CGVector(dx: 0.2, dy: 0.15), blinks: false, palette: .golden)
+                .frame(width: side * 0.76, height: side * 0.76)
+                .position(x: side * 0.48, y: side * 0.55)
+        }
+    }
+}
+
 /// `"Barn Owl" --render-icons <folder>` writes the app icon set and exits.
 /// `--render-owls <file.png>` writes a sheet of the owl's looks, for checking
 /// the drawing without clicking through the app. `--render-owl-strip` and
@@ -144,6 +187,16 @@ enum IconRenderer {
             let owl = OwlView(look: CGVector(dx: 0.25, dy: 0.1), blinks: false, palette: .golden)
                 .frame(width: 400, height: 400)
             write(owl, to: URL(fileURLWithPath: arguments[index + 1]), scale: 2)
+            exit(0)
+        }
+        if let index = arguments.firstIndex(of: "--render-icon-layers"), arguments.count > index + 1 {
+            // The layers of the Liquid Glass icon (BarnOwl/Resources/AppIcon.icon):
+            // the sky, the moon and the owl, each on the full 1024-point canvas.
+            let folder = URL(fileURLWithPath: arguments[index + 1])
+            try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+            write(IconLayer.sky.frame(width: 1024, height: 1024), to: folder.appending(path: "sky.png"), scale: 1)
+            write(IconLayer.moon.frame(width: 1024, height: 1024), to: folder.appending(path: "moon.png"), scale: 1)
+            write(IconLayer.owl.frame(width: 1024, height: 1024), to: folder.appending(path: "owl.png"), scale: 1)
             exit(0)
         }
         guard let index = arguments.firstIndex(of: "--render-icons"), arguments.count > index + 1 else { return }
