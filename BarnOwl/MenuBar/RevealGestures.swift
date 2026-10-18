@@ -8,7 +8,9 @@ final class RevealGestures {
     private let isCollapsed: () -> Bool
     private let reveal: () -> Void
     private let hide: () -> Void
-    private var monitors: [Any] = []
+    private var hoverMonitor: Any?
+    private var scrollMonitor: Any?
+    private var settingsObserver: NSObjectProtocol?
     private var hoverTask: Task<Void, Never>?
     private var lastScrollAction = Date.distantPast
 
@@ -21,16 +23,42 @@ final class RevealGestures {
     }
 
     func start() {
+        update()
+        // Turned on or off in Settings: listen, or stop listening, right away.
+        settingsObserver = NotificationCenter.default.addObserver(
+            forName: UserDefaults.didChangeNotification, object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.update() }
+        }
+    }
+
+    /// Listens only for the gestures that are on. Every pointer movement on
+    /// the Mac would otherwise be sent to Barn Owl, for nothing.
+    private func update() {
         // Global monitors see events going to other apps, which is where the
         // pointer is when it's over the menu bar.
-        if let moved = NSEvent.addGlobalMonitorForEvents(matching: .mouseMoved, handler: { [weak self] _ in
-            MainActor.assumeIsolated { self?.pointerMoved() }
-        }) { monitors.append(moved) }
-        if let scrolled = NSEvent.addGlobalMonitorForEvents(matching: .scrollWheel, handler: { [weak self] event in
-            let delta = event.scrollingDeltaY
-            MainActor.assumeIsolated { self?.scrolled(delta) }
-        }) { monitors.append(scrolled) }
+        if Preferences.revealOnHover, hoverMonitor == nil {
+            hoverMonitor = NSEvent.addGlobalMonitorForEvents(matching: .mouseMoved) { [weak self] _ in
+                MainActor.assumeIsolated { self?.pointerMoved() }
+            }
+        } else if !Preferences.revealOnHover, let monitor = hoverMonitor {
+            NSEvent.removeMonitor(monitor)
+            hoverMonitor = nil
+            hoverTask?.cancel()
+            hoverTask = nil
+        }
+        if Preferences.revealOnScroll, scrollMonitor == nil {
+            scrollMonitor = NSEvent.addGlobalMonitorForEvents(matching: .scrollWheel) { [weak self] event in
+                let delta = event.scrollingDeltaY
+                MainActor.assumeIsolated { self?.scrolled(delta) }
+            }
+        } else if !Preferences.revealOnScroll, let monitor = scrollMonitor {
+            NSEvent.removeMonitor(monitor)
+            scrollMonitor = nil
+        }
     }
+
+    /// Whether anything is listening to the pointer, for tests.
+    var isListening: (hover: Bool, scroll: Bool) { (hoverMonitor != nil, scrollMonitor != nil) }
 
     private func pointerMoved() {
         guard Preferences.revealOnHover, isCollapsed(), let arrow = StatusItems.frame(of: statusItems.toggle) else {

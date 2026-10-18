@@ -3,6 +3,13 @@
 All notable changes to Barn Owl. Versions follow [semantic versioning](https://semver.org);
 before 1.0, a minor version can change behaviour.
 
+## Unreleased
+
+- Lighter on your Mac: Barn Owl no longer hears every pointer movement
+  unless you've turned on showing hidden icons by hovering or scrolling
+  (that alone cost a few percent CPU whenever the mouse moved), and the
+  Barn's map of the disk is let go two minutes after you close the Barn.
+
 ## 0.10.0
 
 - **A fresher look.** Floating panels share one Liquid Glass style with a
