@@ -3,7 +3,7 @@
 All notable changes to Barn Owl. Versions follow [semantic versioning](https://semver.org);
 before 1.0, a minor version can change behaviour.
 
-## Unreleased
+## 0.10.0
 
 - **A fresher look.** Floating panels share one Liquid Glass style with a
   touch of dusk, and the owl's lavender is the accent everywhere. The quick
