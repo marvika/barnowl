@@ -367,7 +367,8 @@ final class BarnModel {
 
     // MARK: Exploring
 
-    func startScan() {
+    /// Maps the whole disk, or just `root`.
+    func startScan(root: String = DiskScanner.dataVolume) {
         scanTask?.cancel()
         if DemoMode.isOn {
             scanTask = Task {
@@ -386,7 +387,7 @@ final class BarnModel {
         let home = DiskScanner.dataVolume + FileManager.default.homeDirectoryForCurrentUser.path
         let skipping: Set<String> = fullDiskAccess ? [] : [home + "/Library/Containers", home + "/Library/Group Containers"]
         scanTask = Task {
-            let result = await DiskScanner().scan(skipping: skipping) { progress in
+            let result = await DiskScanner().scan(root: root, skipping: skipping) { progress in
                 Task { @MainActor [weak self] in
                     guard let self, case .scanning = self.scan else { return }
                     self.scan = .scanning(progress)
@@ -396,6 +397,15 @@ final class BarnModel {
             if let result { scan = .done(result) } else { scan = .idle }
             refreshSpace()
         }
+    }
+
+    /// Lets go of the map of the disk, unless the basket still needs it.
+    func forgetScan() {
+        guard basket.isEmpty, cleaning == nil else { return }
+        if case .idle = scan { return }
+        scanTask?.cancel()
+        scanTask = nil
+        scan = .idle
     }
 
     func cancelScan() {
