@@ -12,7 +12,7 @@ final class SettingsWindowController {
 
     func show() {
         if window == nil {
-            let window = NSWindow(contentViewController: NSHostingController(rootView: SettingsView(model: model)))
+            let window = NSWindow(contentViewController: NSHostingController(rootView: SettingsView(model: model).tint(Brand.accent)))
             window.title = "Barn Owl Settings"
             window.styleMask = [.titled, .closable, .miniaturizable, .fullSizeContentView]
             window.setFrameAutosaveName("BarnOwlSettings")

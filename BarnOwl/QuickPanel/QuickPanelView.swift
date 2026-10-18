@@ -18,8 +18,7 @@ struct QuickPanelView: View {
         }
         .padding(14)
         .frame(width: 340)
-        .glassEffect(.regular, in: .rect(cornerRadius: 18))
-        .shadow(color: .black.opacity(0.28), radius: 14, y: 6)
+        .owlPanel()
         .padding(FloatingPanel.shadowInset)
     }
 
@@ -158,7 +157,7 @@ private struct KeepAwakeCard: View {
             let rules = keepAwake.rules.rules
             if !rules.isEmpty {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("RULES").font(.caption2.weight(.semibold)).foregroundStyle(.secondary)
+                    Text("Rules").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
                     ForEach(rules.prefix(4)) { rule in
                         RuleRow(rule: rule, isActive: keepAwake.activeRule?.id == rule.id) { enabled in
                             var changed = rule
@@ -175,7 +174,8 @@ private struct KeepAwakeCard: View {
                 Label(rules.isEmpty ? "Keep awake automatically…" : "Edit rules…", systemImage: "wand.and.sparkles")
                     .font(.callout)
             }
-            .buttonStyle(.link)
+            .buttonStyle(.plain)
+            .foregroundStyle(.tint)
         }
     }
 
@@ -298,12 +298,12 @@ private struct ToggleTile: View {
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(isOn ? .white : .primary)
                     .frame(width: 28, height: 28)
-                    .background(isOn ? Color.accentColor : Color.primary.opacity(0.1), in: .circle)
+                    .background(isOn ? Brand.accent : Color.primary.opacity(0.1), in: .circle)
                 Text(title).font(.callout).lineLimit(1)
                 Spacer(minLength: 0)
             }
             .padding(8)
-            .background(Color.primary.opacity(hovering ? 0.12 : 0.06), in: .rect(cornerRadius: 12))
+            .background(Color.primary.opacity(hovering ? 0.12 : 0.06), in: .rect(cornerRadius: Theme.cardRadius))
             .contentShape(.rect)
         }
         .buttonStyle(.plain)
@@ -323,7 +323,7 @@ private struct QuickFooterButton: View {
         Button(action: action) {
             Image(systemName: symbol)
                 .frame(width: 30, height: 26)
-                .background(hovering ? Color.primary.opacity(0.1) : .clear, in: .rect(cornerRadius: 7))
+                .background(hovering ? Color.primary.opacity(0.1) : .clear, in: .rect(cornerRadius: Theme.rowRadius))
                 .contentShape(.rect)
         }
         .buttonStyle(.plain)
@@ -444,8 +444,8 @@ private struct DiskGlance: View {
                     Image(systemName: "chevron.right").font(.caption).foregroundStyle(.secondary)
                 }
                 .padding(10)
-                .background(Color.primary.opacity(0.05), in: .rect(cornerRadius: 12))
-                .contentShape(.rect(cornerRadius: 12))
+                .background(Color.primary.opacity(0.05), in: .rect(cornerRadius: Theme.cardRadius))
+                .contentShape(.rect(cornerRadius: Theme.cardRadius))
             }
             .buttonStyle(.plain)
             .accessibilityLabel("\(Bytes.format(space.available)) free. Open the Barn to free up space.")

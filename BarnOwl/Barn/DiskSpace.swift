@@ -79,8 +79,17 @@ enum FullDiskAccess {
 }
 
 enum Bytes {
-    /// "12.4 GB", the way Finder counts.
+    /// "12.4 GB", counted as Finder does (1 GB is 1,000,000,000 bytes), with
+    /// one decimal below 100 and none above, so numbers side by side match.
     static func format(_ bytes: Int64) -> String {
-        ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file)
+        let units = ["bytes", "KB", "MB", "GB", "TB", "PB"]
+        var value = Double(max(0, bytes))
+        var unit = 0
+        while value >= 1000, unit < units.count - 1 {
+            value /= 1000
+            unit += 1
+        }
+        let decimals = unit >= 2 && value < 100 ? 1 : 0
+        return value.formatted(.number.precision(.fractionLength(decimals))) + " " + units[unit]
     }
 }

@@ -68,9 +68,9 @@ struct MenuBarDiagram: View {
                 .renderingMode(.template)
             Image(systemName: collapsed ? "chevron.left" : "chevron.right")
                 .font(.system(size: 12, weight: .bold))
-                .foregroundStyle(Color.accentColor)
+                .foregroundStyle(Brand.accent)
                 .frame(width: 22, height: 20)
-                .background(Color.accentColor.opacity(0.15), in: .rect(cornerRadius: 5))
+                .background(Brand.accent.opacity(0.15), in: .rect(cornerRadius: 5))
                 .contentTransition(.symbolEffect(.replace))
             icons(systemIcons)
             Text("Fri 9:41").font(.system(size: 12, weight: .medium))
@@ -78,8 +78,8 @@ struct MenuBarDiagram: View {
         .padding(.horizontal, 14)
         .frame(height: 30)
         .frame(maxWidth: .infinity)
-        .background(.regularMaterial, in: .rect(cornerRadius: 8))
-        .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(.separator))
+        .background(.regularMaterial, in: .rect(cornerRadius: Theme.rowRadius))
+        .overlay(RoundedRectangle(cornerRadius: Theme.rowRadius).strokeBorder(.separator))
         .animation(.spring(duration: 0.45), value: collapsed)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(collapsed ? "Menu bar with icons hidden" : "Menu bar with all icons showing")
@@ -124,7 +124,7 @@ struct Card<Content: View>: View {
                 }
             }
         }
-        .background(.quaternary.opacity(0.6), in: .rect(cornerRadius: 12))
+        .background(.quaternary.opacity(0.6), in: .rect(cornerRadius: Theme.cardRadius))
     }
 }
 

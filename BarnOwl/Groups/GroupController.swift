@@ -152,8 +152,7 @@ private struct GroupPanelView: View {
         .padding(12)
         .frame(minWidth: 200, maxWidth: 420, alignment: .leading)
         .fixedSize(horizontal: false, vertical: true)
-        .glassEffect(.regular, in: .rect(cornerRadius: 16))
-        .shadow(color: .black.opacity(0.28), radius: 14, y: 6)
+        .owlPanel()
         .padding(FloatingPanel.shadowInset)
     }
 }

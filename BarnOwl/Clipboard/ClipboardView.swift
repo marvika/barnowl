@@ -44,7 +44,7 @@ struct ClipboardView: View {
             if tab == .history { history } else { shelf }
         }
         .frame(width: 460)
-        .glassEffect(.regular, in: .rect(cornerRadius: 18))
+        .owlPanel()
         .task {
             // Just copied a password or a colour? The owl reacts once you look.
             try? await Task.sleep(for: .milliseconds(500))
@@ -55,7 +55,6 @@ struct ClipboardView: View {
                 clipboard.owlCue = OwlCue(.colour(colour))
             }
         }
-        .shadow(color: .black.opacity(0.28), radius: 14, y: 6)
         .padding(FloatingPanel.shadowInset)
         .onAppear { focused = true }
     }
@@ -156,7 +155,7 @@ struct ClipboardView: View {
                 .frame(height: min(CGFloat((clipboard.shelf.count + 3) / 4) * 112 + 20, 360))
             }
         }
-        .background(dropTargeted ? Color.accentColor.opacity(0.15) : .clear, in: .rect(cornerRadius: 12))
+        .background(dropTargeted ? Brand.accent.opacity(0.15) : .clear, in: .rect(cornerRadius: Theme.cardRadius))
         .padding(8)
         .dropDestination(for: URL.self) { urls, _ in
             let files = urls.filter(\.isFileURL)
@@ -195,7 +194,7 @@ private struct ClipRow: View {
         }
         .padding(.horizontal, 8)
         .frame(minHeight: 44)
-        .background(selected ? Color.accentColor.opacity(0.25) : .clear, in: .rect(cornerRadius: 8))
+        .background(selected ? Brand.accent.opacity(0.25) : .clear, in: .rect(cornerRadius: Theme.rowRadius))
         .contentShape(.rect)
     }
 }

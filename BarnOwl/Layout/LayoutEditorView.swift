@@ -158,7 +158,7 @@ private struct ItemChip: View {
         .padding(4)
         .overlay(alignment: .leading) {
             if targeted {
-                Capsule().fill(Color.accentColor).frame(width: 3).offset(x: -4)
+                Capsule().fill(Brand.accent).frame(width: 3).offset(x: -4)
             }
         }
         .opacity(item.isMovable ? 1 : 0.55)
@@ -244,10 +244,10 @@ private struct GroupEditorSheet: View {
                         Image(systemName: symbol)
                             .font(.system(size: 16))
                             .frame(width: 36, height: 36)
-                            .background(group.symbol == symbol ? Color.accentColor.opacity(0.3) : .clear,
+                            .background(group.symbol == symbol ? Brand.accent.opacity(0.3) : .clear,
                                         in: .rect(cornerRadius: 8))
                             .overlay(RoundedRectangle(cornerRadius: 8)
-                                .strokeBorder(group.symbol == symbol ? Color.accentColor : .clear, lineWidth: 2))
+                                .strokeBorder(group.symbol == symbol ? Brand.accent : .clear, lineWidth: 2))
                     }
                     .buttonStyle(.plain)
                     .accessibilityLabel(symbol)
@@ -324,7 +324,7 @@ struct CustomIconSheet: View {
                         Image(systemName: name)
                             .font(.system(size: 16))
                             .frame(width: 36, height: 36)
-                            .background(symbol == name && label.isEmpty ? Color.accentColor.opacity(0.3) : .clear,
+                            .background(symbol == name && label.isEmpty ? Brand.accent.opacity(0.3) : .clear,
                                         in: .rect(cornerRadius: 8))
                     }
                     .buttonStyle(.plain)

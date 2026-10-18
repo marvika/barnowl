@@ -124,7 +124,7 @@ struct OnboardingView: View {
             HStack(spacing: 6) {
                 ForEach(Step.allCases, id: \.self) { s in
                     Capsule()
-                        .fill(s == step ? Color.accentColor : Color.secondary.opacity(0.3))
+                        .fill(s == step ? Brand.accent : Color.secondary.opacity(0.3))
                         .frame(width: s == step ? 18 : 7, height: 7)
                 }
             }

@@ -340,9 +340,9 @@ private struct OwlPalettePicker: View {
                             .frame(width: 56, height: 56)
                             .padding(10)
                             .background(RoundedRectangle(cornerRadius: 14, style: .continuous)
-                                .fill(selected ? Color.accentColor.opacity(0.16) : Color.primary.opacity(0.04)))
+                                .fill(selected ? Brand.accent.opacity(0.16) : Color.primary.opacity(0.04)))
                             .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous)
-                                .strokeBorder(selected ? Color.accentColor : Color.clear, lineWidth: 2))
+                                .strokeBorder(selected ? Brand.accent : Color.clear, lineWidth: 2))
                         Text(option.title).font(.caption).foregroundStyle(selected ? .primary : .secondary)
                     }
                     .contentShape(Rectangle())
@@ -834,7 +834,7 @@ private struct RuleEditorSheet: View {
                         if currentSchedule != nil { setSchedule(true) }
                     }
                     .buttonStyle(.bordered)
-                    .tint(weekdays.contains(day) ? .accentColor : .secondary)
+                    .tint(weekdays.contains(day) ? Brand.accent : .secondary)
                     .controlSize(.small)
                 }
                 DatePicker("", selection: $start, displayedComponents: .hourAndMinute).labelsHidden()

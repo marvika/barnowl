@@ -221,7 +221,8 @@ private struct ExploreResults: View {
             if unreadable > 0 {
                 Text("\(unreadable) \(unreadable == 1 ? "folder was" : "folders were") locked\(barn.fullDiskAccess ? "" : ": Full Disk Access shows them")")
             }
-            Button("Look Again") { barn.startScan() }.buttonStyle(.link)
+            Button("Look Again", systemImage: "arrow.clockwise") { barn.startScan() }
+                .buttonStyle(.bordered).controlSize(.small).padding(.top, 4)
         }
         .font(.caption).foregroundStyle(.secondary)
     }
