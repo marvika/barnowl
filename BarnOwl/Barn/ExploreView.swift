@@ -148,7 +148,7 @@ private struct ExploreResults: View {
         return VStack(spacing: 4) {
             Text("Scanned \(scan.total.files.formatted()) files in \(Int(scan.duration.rounded())) s")
             if unreadable > 0 {
-                Text("\(unreadable) folders were locked\(barn.fullDiskAccess ? "" : ": Full Disk Access shows them")")
+                Text("\(unreadable) \(unreadable == 1 ? "folder was" : "folders were") locked\(barn.fullDiskAccess ? "" : ": Full Disk Access shows them")")
             }
             Button("Look Again") { barn.startScan() }.buttonStyle(.link)
         }
@@ -259,6 +259,8 @@ struct RingMap: View {
         let start: Double
         let end: Double
         let hue: Int
+        /// Its place among its siblings, for a shade of the family colour.
+        let position: Int
     }
 
     private static let levels = 4
@@ -295,7 +297,8 @@ struct RingMap: View {
                 // Too thin to see or point at: leave it to the list.
                 guard span > 0.6 / 360 else { break }
                 let childHue = hue < 0 && splits ? position % hues.count : hue
-                result.append(Slice(index: child, depth: depth + 1, start: angle, end: angle + span, hue: childHue))
+                result.append(Slice(index: child, depth: depth + 1, start: angle, end: angle + span, hue: childHue,
+                                    position: position))
                 if depth + 1 < levels, childNode.isFolder { add(child, depth: depth + 1, start: angle, end: angle + span, hue: childHue) }
                 angle += span
             }
@@ -321,7 +324,7 @@ struct RingMap: View {
                         path.addArc(center: centre, radius: inner, startAngle: to, endAngle: from, clockwise: true)
                         path.closeSubpath()
                         let node = scan.nodes[Int(slice.index)]
-                        var colour = (slice.hue < 0 ? Color.gray : Self.hues[slice.hue]).opacity(1 - Double(slice.depth - 1) * 0.17)
+                        var colour = Self.shade(slice)
                         if node.kind == .file { colour = Color.gray.opacity(0.45) }
                         if node.kind == .unreadable { colour = Color.gray.opacity(0.2) }
                         context.fill(path, with: .color(colour))
@@ -343,6 +346,19 @@ struct RingMap: View {
             })
         }
         .accessibilityLabel("Map of \(scan.nodes[Int(focus)].name)")
+    }
+
+    /// The family colour, a little lighter or darker for each sibling and
+    /// fainter further out, so neighbours stay apart even inside one big folder.
+    private static func shade(_ slice: Slice) -> Color {
+        let base = NSColor(slice.hue < 0 ? Color.gray : hues[slice.hue]).usingColorSpace(.sRGB) ?? .gray
+        var hue: CGFloat = 0, saturation: CGFloat = 0, brightness: CGFloat = 0, alpha: CGFloat = 0
+        base.getHue(&hue, saturation: &saturation, brightness: &brightness, alpha: &alpha)
+        let step = CGFloat(slice.position % 4) - 1.5
+        let shifted = NSColor(hue: (hue + step * 0.018 + 1).truncatingRemainder(dividingBy: 1),
+                              saturation: max(0, min(1, saturation - step * 0.06)),
+                              brightness: max(0, min(1, brightness + step * 0.07)), alpha: 1)
+        return Color(nsColor: shifted).opacity(1 - Double(slice.depth - 1) * 0.15)
     }
 
     private var centreLabel: some View {

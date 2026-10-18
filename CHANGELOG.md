@@ -3,6 +3,17 @@
 All notable changes to Barn Owl. Versions follow [semantic versioning](https://semver.org);
 before 1.0, a minor version can change behaviour.
 
+## Unreleased
+
+- **The Barn**, for disk space: a storage bar that adds up to the whole
+  disk, safe one-click clean-up of caches and build files (using each
+  tool's own command where there is one), picks for everything else with
+  undo, and Explore, a ring map of the whole disk with the biggest files,
+  Quick Look and a basket for the Trash. It warns when the disk is nearly
+  full and can check weekly. It never cleans by itself.
+- Barn Owl no longer uses CPU while idle: closed panels are torn down and
+  hidden owls stop.
+
 ## 0.9.1
 
 - The owl's speech bubble stays inside its window and no longer covers the

@@ -95,6 +95,7 @@ private struct BarnHeader: View {
         }
         let total = barn.safeTotal
         if total > 0 { return "The owl found \(Bytes.format(total)) that's safe to clean, and more to look at." }
+        if barn.reviewTotal > 0 { return "All the easy bits are done. A few more things are worth a look." }
         return "Your barn is tidy."
     }
 }

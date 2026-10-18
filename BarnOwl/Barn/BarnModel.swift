@@ -41,8 +41,8 @@ final class BarnModel {
         case done(DiskScan)
     }
 
-    private(set) var space = DiskSpace.current()
-    private(set) var fullDiskAccess = FullDiskAccess.isGranted
+    private(set) var space = DemoMode.isOn ? BarnDemo.space : DiskSpace.current()
+    private(set) var fullDiskAccess = DemoMode.isOn || FullDiskAccess.isGranted
     private(set) var suggestions: [Suggestion] = []
     private(set) var isMeasuring = false
     private(set) var lastMeasured: Date?
@@ -72,6 +72,7 @@ final class BarnModel {
     // MARK: Measuring
 
     func refreshSpace() {
+        guard !DemoMode.isOn else { return }
         space = DiskSpace.current()
         fullDiskAccess = FullDiskAccess.isGranted
     }
@@ -79,6 +80,11 @@ final class BarnModel {
     /// Measures every rule that applies on this Mac.
     func measure() {
         guard measureTask == nil else { return }
+        if DemoMode.isOn {
+            suggestions = BarnDemo.suggestions()
+            lastMeasured = Date()
+            return
+        }
         refreshSpace()
         isMeasuring = true
         measureTask = Task {
@@ -182,6 +188,7 @@ final class BarnModel {
     /// Cleans one suggestion: all of it, or the picked items.
     func clean(_ suggestion: Suggestion, items: [String] = []) async {
         guard cleaning == nil else { return }
+        if DemoMode.isOn { return await pretendToClean([suggestion], title: suggestion.rule.title) }
         cleaning = suggestion.id
         let before = DiskSpace.current()?.free ?? 0
         let outcome = await CleanupRunner.run(suggestion.rule, items: items)
@@ -200,6 +207,7 @@ final class BarnModel {
         guard cleaning == nil else { return }
         let safe = suggestions.filter { $0.rule.safety == .safe && $0.blockedBy == nil }
         guard !safe.isEmpty else { return }
+        if DemoMode.isOn { return await pretendToClean(safe, title: "Everything safe") }
         cleaning = "all"
         let before = DiskSpace.current()?.free ?? 0
         var problems: [String] = []
@@ -213,6 +221,18 @@ final class BarnModel {
         measureTask?.cancel()
         measureTask = nil
         measure()
+    }
+
+    /// Demo mode: looks like cleaning, touches nothing.
+    private func pretendToClean(_ cleaned: [Suggestion], title: String) async {
+        cleaning = cleaned.count == 1 ? cleaned[0].id : "all"
+        try? await Task.sleep(for: .seconds(1.2))
+        let freed = cleaned.map(\.size).reduce(0, +)
+        suggestions.removeAll { gone in cleaned.contains { $0.id == gone.id } }
+        space?.free += freed
+        space?.data -= freed
+        report = Report(title: title, freed: freed)
+        cleaning = nil
     }
 
     /// Puts back what the last clean-up moved to the Trash.
@@ -240,6 +260,17 @@ final class BarnModel {
 
     func startScan() {
         scanTask?.cancel()
+        if DemoMode.isOn {
+            scanTask = Task {
+                for step in 1...12 {
+                    scan = .scanning(DiskScanner.Progress(files: Int64(step) * 241_000, bytes: Int64(step) * 31_000_000_000,
+                                                          folder: "/Users/you/Projects/ml-experiments/node_modules"))
+                    try? await Task.sleep(for: .milliseconds(150))
+                }
+                scan = .done(BarnDemo.scan())
+            }
+            return
+        }
         scan = .scanning(DiskScanner.Progress(files: 0, bytes: 0, folder: "/"))
         // Without Full Disk Access, other apps' private folders are listed
         // but not entered: each look would make macOS ask for permission.
@@ -280,6 +311,11 @@ final class BarnModel {
 
     /// Moves everything in the basket to the Trash.
     func trashBasket() {
+        if DemoMode.isOn {
+            report = Report(title: "Your basket", freed: 0, trashedSize: basket.map(\.size).reduce(0, +))
+            basket = []
+            return
+        }
         var trashed: [(from: URL, to: URL)] = []
         var problems: [String] = []
         let size = basket.map(\.size).reduce(0, +)

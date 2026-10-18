@@ -31,7 +31,8 @@ Barn Owl does two jobs that usually take two apps:
   automatically by rules.
 
 Around those it adds a few everyday tools you'll reach for: search, quick
-toggles, clipboard history and a nest for your files.
+toggles, clipboard history, a nest for your files, and a barn to keep your
+disk tidy.
 
 ## Meet the owl
 
@@ -127,6 +128,29 @@ and press Return to open it. You can also type a command:
 <img src="docs/images/search-commands.png" alt="Search showing keep-awake commands for the query awake" width="460">
 
 `awake 2h` · `awake +30` · `dark` · `present` · `mute` · `arrange` · `clipboard`
+
+## The Barn: free up disk space
+
+<img src="docs/images/barn-tidy.png" alt="The Barn: a storage bar and cards for Xcode build files, Homebrew, simulator caches and more, with a button to free up 19 GB" width="760">
+
+Click the disk row in the quick panel, or search for "disk", and the owl
+shows you how your disk is used and what it can safely clean:
+
+- **Tidy up:** Xcode build files, simulator caches, Homebrew, npm, pnpm, pip
+  and other caches, browser caches, old installers in Downloads and the
+  Trash. Each card says how safe it is and how much you'll get back. Clean
+  everything safe in one click, or pick what goes. Barn Owl uses each tool's
+  own clean-up command where there is one, and moves anything you might want
+  back to the Trash, with undo.
+- **Yours to decide:** iPhone backups, Xcode archives, simulators and Docker
+  are shown but never cleaned for you.
+- **Explore:** a map of the whole disk, about three million files in half a
+  minute, as rings to click through. Find the biggest files, preview them
+  with Quick Look, and drop what you don't need in a basket for the Trash.
+- **Keeps an eye out:** a gentle warning when the disk is nearly full, and,
+  if you like, a weekly look for things to tidy. It never cleans by itself.
+
+<img src="docs/images/barn-explore.png" alt="Explore: a ring map of the disk with the biggest folders listed beside it" width="760">
 
 ## Clipboard history and the Nest
 
@@ -270,6 +294,9 @@ Barn Owl learned from [Hidden Bar](https://github.com/dwarvesf/hidden) and
 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md). It also learned from reading
 [Ice](https://github.com/jordanbaird/Ice) and
 [Thaw](https://github.com/thaw-app/Thaw), both GPL-3; no code was copied.
+The Barn's approach to safe cleaning was inspired by
+[Mole](https://github.com/tw93/mole) (GPL-3), and its map by
+[DaisyDisk](https://daisydiskapp.com); no code was copied.
 Hotkeys use [KeyboardShortcuts](https://github.com/sindresorhus/KeyboardShortcuts),
 and updates use [Sparkle](https://sparkle-project.org).
 

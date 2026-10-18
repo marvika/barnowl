@@ -11,6 +11,7 @@
 - [Quick panel and toggles](#quick-panel-and-toggles)
 - [Search and commands](#search-and-commands)
 - [Clipboard history and the Nest](#clipboard-history-and-the-nest)
+- [The Barn: disk space](#the-barn-disk-space)
 - [Appearance](#appearance)
 - [The owl](#the-owl)
 - [Automation](#automation)
@@ -265,6 +266,67 @@ disk, and copies it to another disk (hold Option to copy instead). Files you
 move or delete elsewhere leave the Nest by themselves. The **Nest** tab in
 clipboard history shows the same files. Turn off the Nest or its tab in
 Settings → Clipboard.
+
+## The Barn: disk space
+
+Open the Barn from the disk row in the quick panel, by searching for "disk"
+or "barn", with `barnowl barn`, or with `barnowl://barn`.
+
+The bar at the top adds up to your whole disk: your apps and files, macOS
+itself, system data (swap, recovery and startup files, snapshots), what's
+**purgeable** (caches, iCloud copies and snapshots macOS removes by itself
+when it needs room) and what's free. Finder counts purgeable space as free.
+
+### Tidy up
+
+The owl looks in the places it knows: Xcode build files and caches, Homebrew,
+npm, pnpm, Yarn, pip, CocoaPods, Swift packages, Go and Cargo caches,
+browser caches, other apps' caches and logs, old installers in Downloads,
+and the Trash. Each card shows how much you'd get back and how safe it is:
+
+- **Safe to clean:** rebuilt automatically when needed. **Free Up** cleans
+  all of these at once. Where a tool has its own clean-up command (`brew
+  cleanup`, `npm cache clean`, `pnpm store prune`, `pip cache purge`, `xcrun
+  simctl delete unavailable`), Barn Owl uses it.
+- **Pick what goes:** probably fine, but you choose. Most go to the Trash, so
+  **Undo** puts them back.
+- **Your call:** iPhone backups, Xcode archives, simulator devices and
+  Docker. Shown with advice, never cleaned by Barn Owl.
+
+A cache is skipped while its app is running ("Quit Xcode first"). Every
+removal is checked twice against a list of folders Barn Owl may touch, and
+anything it isn't sure about is kept. What it did is written to
+`~/Library/Logs/Barn Owl/cleanup.log`.
+
+Things moved to the Trash still take space until you empty the Trash.
+
+### Explore
+
+**Look Through the Disk** scans everything, usually in under a minute, and
+draws a ring map: the centre is the folder you're in, each ring a level
+deeper, each slice as wide as its share. Hover to see what it is, click a
+folder to go in, click the centre to go back. Beside it, the folder's
+contents biggest first, or the **Biggest Files** anywhere. Press Space for
+Quick Look, or right-click to show it in Finder or put it in the **basket**.
+**Move to Trash** sends everything in the basket to the Trash.
+
+Sizes are what files really take on disk. Hard links count once, iCloud
+files that aren't downloaded count as nothing (and are never downloaded),
+and other disks are left out.
+
+### Full Disk Access
+
+Without it, the owl can't see the Trash, Mail, Safari, iPhone backups or other
+apps' private folders; Explore shows them as locked. To allow it, open
+**System Settings → Privacy & Security → Full Disk Access** and turn on Barn
+Owl (the Barn has a button that goes straight there).
+
+### Keep it clean
+
+At the bottom of Tidy Up: **Warn me when the disk is nearly full** (on by
+default, at most once a day, when less than 10 GB or a twentieth of the disk
+is free), and **Look for things to tidy once a week** (off by default). Both
+only tell you; nothing is cleaned without you.
 
 ## Appearance
 

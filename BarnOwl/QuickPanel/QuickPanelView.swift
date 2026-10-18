@@ -411,7 +411,7 @@ struct AwakeOwlBadge: View {
 private struct DiskGlance: View {
     let model: AppModel
     let close: () -> Void
-    @State private var space = DiskSpace.current()
+    @State private var space = DemoMode.isOn ? BarnDemo.space : DiskSpace.current()
 
     /// Under a tenth free, or under 20 GB.
     private var low: Bool {
