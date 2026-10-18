@@ -68,6 +68,17 @@ struct DiskScan: Sendable {
         nodes.indices.filter { nodes[$0].kind == .unreadable }.map(Int32.init)
     }
 
+    /// The node at a path, if the scan reached it.
+    func index(of path: String) -> Int32? {
+        guard path.hasPrefix(root) else { return nil }
+        var current: Int32 = 0
+        for name in path.dropFirst(root.count).split(separator: "/") {
+            guard let next = nodes[Int(current)].children.first(where: { nodes[Int($0)].name == name }) else { return nil }
+            current = next
+        }
+        return current
+    }
+
     /// The biggest single files.
     func largestFiles(limit: Int = 50) -> [Int32] {
         nodes.indices.filter { nodes[$0].kind == .file }

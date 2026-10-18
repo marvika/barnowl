@@ -28,7 +28,9 @@ struct BarnView: View {
         .frame(minWidth: 820, minHeight: 620)
         .overlay(alignment: .bottom) {
             if let report = barn.report {
-                ReportBanner(report: report, undo: barn.undoLast, dismiss: barn.dismissReport)
+                ReportBanner(report: report, busy: barn.cleaning != nil, stuck: !barn.stuckInTrash.isEmpty,
+                             undo: barn.undoLast, emptyTrashed: { Task { await barn.emptyTrashed() } },
+                             showStuck: barn.showStuckInTrash, dismiss: barn.dismissReport)
                     .padding(16)
                     .transition(.move(edge: .bottom).combined(with: .opacity))
             }
@@ -36,15 +38,21 @@ struct BarnView: View {
         .animation(.spring(duration: 0.4), value: barn.report != nil)
         .onChange(of: barn.report?.title) { _, title in
             guard let report = barn.report, title != nil else { return }
-            let amount = report.freed > 0 ? report.freed : report.trashedSize
-            if amount > 0 {
-                owlCue = OwlCue(.cleaned(report.freed > 0 ? "Freed \(Bytes.format(amount))!" : "Swept!"))
+            let freed = max(report.freed, report.expected)
+            if freed > 0 {
+                owlCue = OwlCue(.cleaned("Freed \(Bytes.format(freed))!"))
+            } else if report.trashedSize > 0 {
+                owlCue = OwlCue(.cleaned("Swept!"))
             }
         }
         .onChange(of: barn.isMeasuring) { _, measuring in
-            if !measuring, let biggest = barn.suggestions.map(\.size).max(), biggest > 10_000_000_000 {
-                owlCue = OwlCue(.bigFind("Whoa, \(Bytes.format(biggest))!"))
-            }
+            // Something big it can actually help with, and only once a day each.
+            guard !measuring,
+                  let biggest = barn.suggestions.filter({ $0.rule.safety != .yourCall && $0.blockedBy == nil })
+                      .max(by: { $0.size < $1.size }),
+                  biggest.size > 5_000_000_000,
+                  OwlOccasions.firstTime("bigFind-\(biggest.id)", period: OwlOccasions.today) else { return }
+            owlCue = OwlCue(.bigFind("Whoa, \(Bytes.format(biggest.size))!"))
         }
         .task { barn.measure() }
     }
@@ -71,8 +79,9 @@ private struct BarnHeader: View {
                     Text("The Barn").font(.largeTitle.bold())
                     Spacer()
                     if let space = barn.space {
-                        Text("\(Bytes.format(space.available)) free of \(Bytes.format(space.total))")
+                        Text("\(Bytes.format(space.available)) available of \(Bytes.format(space.total))")
                             .font(.title3.weight(.medium)).monospacedDigit()
+                            .help("Free space plus what macOS can purge by itself, as Finder counts it.")
                     }
                 }
                 if let space = barn.space {
@@ -173,31 +182,19 @@ private struct TidyUpView: View {
             VStack(alignment: .leading, spacing: 22) {
                 if !barn.fullDiskAccess { FullDiskAccessCallout() }
                 if barn.safeTotal > 0 || barn.cleaning == "all" { cleanEverything }
-                ForEach(CleanupRule.Group.allCases, id: \.self) { group in
-                    let cards = barn.suggestions(in: group)
-                    if !cards.isEmpty {
-                        VStack(alignment: .leading, spacing: 10) {
-                            Text(group.rawValue).font(.headline)
-                            LazyVGrid(columns: [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)],
-                                      spacing: 12) {
-                                ForEach(cards) { suggestion in
-                                    SuggestionCard(suggestion: suggestion, cleaning: barn.cleaning == suggestion.id,
-                                                   busy: barn.cleaning != nil) {
-                                        if suggestion.rule.pickItems {
-                                            picking = suggestion
-                                        } else if suggestion.rule.needsConfirmation {
-                                            confirming = Confirmation(
-                                                title: suggestion.rule.id == "trash" ? "Empty the Trash?" : "Delete \(suggestion.rule.title)?",
-                                                message: "\(Bytes.format(suggestion.size)) will be deleted for good. This can't be undone.",
-                                                button: suggestion.rule.id == "trash" ? "Empty Trash" : "Delete") {
-                                                await barn.clean(suggestion)
-                                            }
-                                        } else {
-                                            Task { await barn.clean(suggestion) }
-                                        }
-                                    }
+                ForEach([CleanupRule.Safety.safe, .review, .yourCall], id: \.self) { safety in
+                    let rows = barn.suggestions.filter { $0.rule.safety == safety }
+                    if !rows.isEmpty {
+                        VStack(alignment: .leading, spacing: 8) {
+                            SectionHeading(safety: safety, total: rows.map(\.size).reduce(0, +))
+                            VStack(spacing: 0) {
+                                ForEach(Array(rows.enumerated()), id: \.element.id) { position, suggestion in
+                                    if position > 0 { Divider().padding(.leading, 58) }
+                                    SuggestionRow(suggestion: suggestion, cleaning: barn.cleaning == suggestion.id,
+                                                  busy: barn.cleaning != nil) { start(suggestion) }
                                 }
                             }
+                            .background(Color.primary.opacity(0.04), in: .rect(cornerRadius: 14))
                         }
                     }
                 }
@@ -220,9 +217,9 @@ private struct TidyUpView: View {
                 picking = nil
                 if suggestion.rule.needsConfirmation {
                     let size = suggestion.items.filter { paths.contains($0.path) }.map(\.size).reduce(0, +)
-                    confirming = Confirmation(title: "Delete \(paths.count) \(paths.count == 1 ? "item" : "items")?",
-                                              message: "\(Bytes.format(size)) will be deleted for good. This can't be undone.",
-                                              button: "Delete") {
+                    confirming = Confirmation(title: "Remove \(paths.count) \(paths.count == 1 ? "item" : "items")?",
+                                              message: "\(Bytes.format(size)) will be removed for good. This can't be undone.",
+                                              button: "Remove") {
                         await barn.clean(suggestion, items: paths)
                     }
                 } else {
@@ -239,6 +236,35 @@ private struct TidyUpView: View {
         }
     }
 
+    private func start(_ suggestion: BarnModel.Suggestion) {
+        let rule = suggestion.rule
+        if rule.pickItems {
+            picking = suggestion
+        } else if rule.id == "trash" {
+            // Measured again now: things may have gone in since.
+            Task {
+                let size = await barn.currentSize(of: rule)
+                let pending = barn.report?.trashed.count ?? 0
+                confirming = Confirmation(
+                    title: "Empty the Trash?",
+                    message: "\(Bytes.format(size)) will be removed for good. "
+                        + (pending > 0 ? "That includes the \(pending == 1 ? "item" : "\(pending) items") you just moved there, which you then can't undo. " : "")
+                        + "This can't be undone.",
+                    button: "Empty Trash") { await barn.clean(suggestion) }
+            }
+        } else if rule.needsConfirmation {
+            let names = suggestion.items.prefix(8).map(\.name).joined(separator: ", ")
+            let more = suggestion.items.count > 8 ? ", and \(suggestion.items.count - 8) more" : ""
+            confirming = Confirmation(
+                title: "Remove \(rule.title)?",
+                message: (names.isEmpty ? "" : names + more + ". ")
+                    + "\(Bytes.format(suggestion.size)) will be removed for good. This can't be undone.",
+                button: "Remove") { await barn.clean(suggestion) }
+        } else {
+            Task { await barn.clean(suggestion) }
+        }
+    }
+
     private var cleanEverything: some View {
         HStack(spacing: 16) {
             Image(systemName: "sparkles").font(.title).foregroundStyle(Brand.amber)
@@ -249,13 +275,13 @@ private struct TidyUpView: View {
             }
             Spacer()
             Button {
-                let safe = barn.suggestions.filter { $0.rule.safety == .safe && $0.blockedBy == nil }
+                let safe = barn.safeSuggestions
                 confirming = Confirmation(
                     title: "Free up \(Bytes.format(barn.safeTotal))?",
                     message: "The owl will clean: " + safe.map { "\($0.rule.title) (\(Bytes.format($0.size)))" }
                         .joined(separator: ", ") + ". Apps and tools make these again when they need them.",
                     button: "Free Up") {
-                    await barn.cleanAllSafe()
+                    await barn.cleanAllSafe(safe)
                 }
             } label: {
                 if barn.cleaning == "all" {
@@ -274,7 +300,49 @@ private struct TidyUpView: View {
     }
 }
 
-private struct SuggestionCard: View {
+/// One heading per kind of safety, so you know before you read on.
+private struct SectionHeading: View {
+    let safety: CleanupRule.Safety
+    let total: Int64
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
+            Circle().fill(safety.colour).frame(width: 9, height: 9)
+            Text(safety.heading).font(.headline)
+            Text(safety.explanation).font(.callout).foregroundStyle(.secondary).lineLimit(1)
+            Spacer()
+            Text(Bytes.format(total)).font(.callout.weight(.medium)).monospacedDigit().foregroundStyle(.secondary)
+        }
+    }
+}
+
+extension CleanupRule.Safety {
+    var heading: String {
+        switch self {
+        case .safe: "Safe to clean"
+        case .review: "Check first"
+        case .yourCall: "Only you know"
+        }
+    }
+
+    var explanation: String {
+        switch self {
+        case .safe: "Apps and tools make these again when they need them."
+        case .review: "Probably fine to clean, but have a look at what goes."
+        case .yourCall: "Big, but yours. The owl shows you where; it never cleans these."
+        }
+    }
+
+    var colour: Color {
+        switch self {
+        case .safe: .green
+        case .review: Brand.amber
+        case .yourCall: Brand.lavender
+        }
+    }
+}
+
+private struct SuggestionRow: View {
     let suggestion: BarnModel.Suggestion
     let cleaning: Bool
     let busy: Bool
@@ -283,42 +351,38 @@ private struct SuggestionCard: View {
     private var rule: CleanupRule { suggestion.rule }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(alignment: .top) {
-                Image(systemName: rule.symbol)
-                    .font(.title3)
-                    .foregroundStyle(.white)
-                    .frame(width: 34, height: 34)
-                    .background(safetyColour.gradient, in: .rect(cornerRadius: 8))
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(rule.title).font(.headline)
-                    SafetyChip(safety: rule.safety)
+        HStack(spacing: 12) {
+            Image(systemName: rule.symbol)
+                .font(.body)
+                .foregroundStyle(.white)
+                .frame(width: 32, height: 32)
+                .background(rule.safety.colour.gradient, in: .rect(cornerRadius: 8))
+            VStack(alignment: .leading, spacing: 2) {
+                Text(rule.title).font(.body.weight(.semibold))
+                Text(rule.detail).font(.callout).foregroundStyle(.secondary).lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .help(rule.detail)
+                HStack(spacing: 10) {
+                    Label(rule.methodSummary, systemImage: methodSymbol)
+                    if let blocked = suggestion.blockedBy {
+                        Label(blocked, systemImage: "pause.circle").foregroundStyle(Brand.amber)
+                    }
                 }
-                Spacer()
-                Text(suggestion.blockedBy == "Needs Full Disk Access" ? "?" : Bytes.format(suggestion.size))
-                    .font(.title3.weight(.semibold)).monospacedDigit()
-            }
-            Text(rule.detail).font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
-            Label(rule.methodSummary, systemImage: methodSymbol)
                 .font(.caption).foregroundStyle(.tertiary).lineLimit(1)
-            Spacer(minLength: 0)
-            HStack {
-                if let blocked = suggestion.blockedBy {
-                    Label(blocked, systemImage: "pause.circle").font(.caption).foregroundStyle(.secondary)
-                }
-                Spacer()
-                actionButton
             }
+            Spacer(minLength: 12)
+            Text(suggestion.blockedBy == "Needs Full Disk Access" ? "?" : Bytes.format(suggestion.size))
+                .font(.body.weight(.semibold)).monospacedDigit()
+            actionButton.frame(minWidth: 96, alignment: .trailing)
         }
-        .padding(14)
-        .frame(maxWidth: .infinity, minHeight: 150, alignment: .topLeading)
-        .background(Color.primary.opacity(0.04), in: .rect(cornerRadius: 14))
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
     }
 
     @ViewBuilder private var actionButton: some View {
         switch rule.safety {
         case .yourCall:
-            Button("Show in Finder") {
+            Button("Show") {
                 if let path = rule.expandedPaths.first(where: { FileManager.default.fileExists(atPath: $0) }) {
                     NSWorkspace.shared.selectFile(nil, inFileViewerRootedAtPath: path)
                 }
@@ -327,45 +391,25 @@ private struct SuggestionCard: View {
             Button {
                 action()
             } label: {
-                if cleaning { ProgressView().controlSize(.small) } else { Text(rule.pickItems ? "Choose…" : "Clean") }
+                if cleaning { ProgressView().controlSize(.small) } else { Text(buttonTitle) }
             }
             .disabled(busy || suggestion.blockedBy != nil)
         }
     }
 
+    private var buttonTitle: String {
+        if rule.pickItems { return "Choose…" }
+        if rule.id == "trash" { return "Empty…" }
+        return rule.needsConfirmation ? "Remove…" : "Clean"
+    }
+
     private var methodSymbol: String {
         switch rule.method {
         case .delete: "xmark.bin"
-        case .trash: "trash"
+        case .trash: "arrow.uturn.backward"
         case .command: "terminal"
         case .none: "eye"
         }
-    }
-
-    private var safetyColour: Color {
-        switch rule.safety {
-        case .safe: .green
-        case .review: Brand.amber
-        case .yourCall: Brand.lavender
-        }
-    }
-}
-
-struct SafetyChip: View {
-    let safety: CleanupRule.Safety
-
-    var body: some View {
-        let (text, colour): (String, Color) = switch safety {
-        case .safe: ("Safe to clean", .green)
-        case .review: ("Pick what goes", Brand.amber)
-        case .yourCall: ("Your call", Brand.lavender)
-        }
-        Text(text)
-            .font(.caption2.weight(.semibold))
-            .padding(.horizontal, 6)
-            .padding(.vertical, 2)
-            .background(colour.opacity(0.18), in: .capsule)
-            .foregroundStyle(colour)
     }
 }
 
@@ -460,8 +504,13 @@ private struct FullDiskAccessCallout: View {
 
 private struct ReportBanner: View {
     let report: BarnModel.Report
+    let busy: Bool
+    let stuck: Bool
     let undo: () -> Void
+    let emptyTrashed: () -> Void
+    let showStuck: () -> Void
     let dismiss: () -> Void
+    @State private var confirmingEmpty = false
 
     var body: some View {
         HStack(spacing: 14) {
@@ -471,7 +520,10 @@ private struct ReportBanner: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(headline).font(.headline)
                 if !report.trashed.isEmpty {
-                    Text("Moved to the Trash. It frees the space when you empty the Trash.")
+                    Text("It frees the space once it's gone from the Trash.")
+                        .font(.caption).foregroundStyle(.secondary)
+                } else if report.freed == 0, report.expected > 0 {
+                    Text("macOS can take a little while to count it as free, while a snapshot holds on to it.")
                         .font(.caption).foregroundStyle(.secondary)
                 }
                 if let problem = report.problems.first {
@@ -480,8 +532,18 @@ private struct ReportBanner: View {
                 }
             }
             Spacer()
-            if !report.trashed.isEmpty { Button("Undo", action: undo) }
+            if stuck { Button("Show in Trash", action: showStuck) }
+            if !report.trashed.isEmpty {
+                Button("Undo", action: undo).disabled(busy)
+                Button("Empty from Trash…") { confirmingEmpty = true }.disabled(busy)
+            }
             Button("Done", action: dismiss).keyboardShortcut(.defaultAction)
+        }
+        .alert("Remove these from the Trash?", isPresented: $confirmingEmpty) {
+            Button("Remove", role: .destructive, action: emptyTrashed)
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Only the \(report.trashed.count == 1 ? "item" : "\(report.trashed.count) items") just moved there (\(Bytes.format(report.trashedSize))) are removed for good. The rest of your Trash stays. This can't be undone.")
         }
         .padding(14)
         .frame(maxWidth: 640)
@@ -491,6 +553,7 @@ private struct ReportBanner: View {
 
     private var headline: String {
         if report.freed > 0 { return "\(report.title): freed \(Bytes.format(report.freed))" }
+        if report.trashed.isEmpty, report.expected > 0 { return "\(report.title): cleared about \(Bytes.format(report.expected))" }
         if report.trashedSize > 0 { return "\(report.title): \(Bytes.format(report.trashedSize)) moved to the Trash" }
         return report.problems.isEmpty ? "\(report.title): done" : "\(report.title): some things were kept"
     }

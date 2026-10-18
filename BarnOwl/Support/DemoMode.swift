@@ -5,7 +5,8 @@ import AppKit
 /// `Scripts/demo.sh`, which runs a separate copy of Barn Owl with its own
 /// settings, so nothing real is read, moved or saved.
 enum DemoMode {
-    static var isOn: Bool { UserDefaults.standard.bool(forKey: "BarnOwlDemo") }
+    /// Read once at launch, so it can't change under a running clean-up.
+    static let isOn = UserDefaults.standard.bool(forKey: "BarnOwlDemo")
 
     struct Icon {
         let name: String

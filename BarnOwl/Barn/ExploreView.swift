@@ -1,5 +1,6 @@
 import QuickLook
 import SwiftUI
+import UniformTypeIdentifiers
 
 /// A map of everything on the disk: rings of folders, biggest first, to click
 /// into; a list beside it; and a basket for what you decide can go.
@@ -52,8 +53,31 @@ private struct ExploreResults: View {
     @State private var showing = Listing.folder
     @State private var preview: URL?
     @State private var largest: [Int32] = []
+    @State private var kind = FileKind.all
+    @State private var home: Int32?
 
     enum Listing: String, CaseIterable { case folder = "This Folder", largest = "Biggest Files" }
+
+    /// What sort of file, for narrowing the biggest-files list.
+    enum FileKind: String, CaseIterable {
+        case all = "All Kinds", videos = "Videos", images = "Disk Images and Archives", audio = "Music and Audio",
+             pictures = "Pictures", documents = "Documents"
+
+        func matches(_ name: String) -> Bool {
+            guard self != .all else { return true }
+            guard let type = UTType(filenameExtension: (name as NSString).pathExtension) else { return false }
+            return switch self {
+            case .all: true
+            case .videos: type.conforms(to: .movie)
+            case .images: type.conforms(to: .archive) || type.conforms(to: .diskImage)
+                || ["xip", "iso", "dmg", "pkg"].contains((name as NSString).pathExtension.lowercased())
+            case .audio: type.conforms(to: .audio)
+            case .pictures: type.conforms(to: .image)
+            case .documents: type.conforms(to: .pdf) || type.conforms(to: .presentation)
+                || type.conforms(to: .spreadsheet) || type.conforms(to: .text)
+            }
+        }
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -74,11 +98,20 @@ private struct ExploreResults: View {
                     footnote
                 }
                 VStack(alignment: .leading, spacing: 8) {
-                    Breadcrumbs(scan: scan, focus: $focus)
-                    Picker("", selection: $showing) {
-                        ForEach(Listing.allCases, id: \.self) { Text($0.rawValue).tag($0) }
+                    Breadcrumbs(scan: scan, focus: $focus, home: home)
+                    HStack {
+                        Picker("", selection: $showing) {
+                            ForEach(Listing.allCases, id: \.self) { Text($0.rawValue).tag($0) }
+                        }
+                        .pickerStyle(.segmented).labelsHidden().frame(width: 240)
+                        Spacer()
+                        if showing == .largest {
+                            Picker("", selection: $kind) {
+                                ForEach(FileKind.allCases, id: \.self) { Text($0.rawValue).tag($0) }
+                            }
+                            .labelsHidden().fixedSize()
+                        }
                     }
-                    .pickerStyle(.segmented).labelsHidden().frame(width: 240)
                     list
                 }
             }
@@ -87,9 +120,30 @@ private struct ExploreResults: View {
             if !barn.basket.isEmpty { BasketBar(barn: barn) }
         }
         .quickLookPreview($preview)
-        .task(id: scan.finished) { largest = scan.largestFiles(limit: 60) }
+        .task(id: scan.finished) {
+            largest = scan.largestFiles(limit: 1_000)
+            // Start at home, where your things are; the whole disk is one click out.
+            home = scan.index(of: DiskScanner.dataVolume + FileManager.default.homeDirectoryForCurrentUser.path)
+                ?? scan.index(of: DiskScanner.dataVolume + "/Users/you")
+            if focus == 0, let home { focus = home }
+        }
         .onKeyPress(.space) {
             if let selected { preview = URL(fileURLWithPath: scan.path(of: selected)) }
+            return .handled
+        }
+        .onKeyPress(.leftArrow) {
+            guard focus != 0 else { return .ignored }
+            withAnimation(.spring(duration: 0.4)) { selected = focus; focus = scan.nodes[Int(focus)].parent }
+            return .handled
+        }
+        .onKeyPress(.rightArrow) {
+            guard let selected, scan.nodes[Int(selected)].isFolder, !scan.nodes[Int(selected)].children.isEmpty else { return .ignored }
+            withAnimation(.spring(duration: 0.4)) { focus = selected; showing = .folder }
+            return .handled
+        }
+        .onKeyPress(.delete) {
+            guard let selected else { return .ignored }
+            collect(selected)
             return .handled
         }
     }
@@ -97,7 +151,16 @@ private struct ExploreResults: View {
     private var rows: [Int32] {
         switch showing {
         case .folder: scan.children(of: focus)
-        case .largest: largest
+        case .largest: Array(largest.lazy.filter { kind.matches(scan.nodes[Int($0)].name) }.prefix(100))
+        }
+    }
+
+    private func collect(_ index: Int32) {
+        let path = scan.path(of: index)
+        let node = scan.nodes[Int(index)]
+        guard barn.canCollect(path), node.kind != .unreadable, !node.inCloud else { NSSound.beep(); return }
+        withAnimation(.spring(duration: 0.3)) {
+            barn.collect(BarnModel.Item(path: path, name: node.name, size: node.reclaimable, modified: nil))
         }
     }
 
@@ -108,8 +171,12 @@ private struct ExploreResults: View {
                 let node = scan.nodes[Int(index)]
                 ItemRow(node: node, path: showing == .largest ? scan.displayPath(of: index) : nil,
                         fraction: Double(node.size) / Double(showing == .largest ? scan.total.size : parentSize),
-                        highlighted: hovered == index)
+                        highlighted: hovered == index, inBasket: barn.basket.contains { $0.path == scan.path(of: index) },
+                        note: FolderNotes.note(for: scan.displayPath(of: index)))
                     .tag(index)
+                    .onHover { inside in
+                        if inside { hovered = index } else if hovered == index { hovered = nil }
+                    }
                     .onTapGesture(count: 2) {
                         if node.isFolder, !node.children.isEmpty { withAnimation { focus = index; showing = .folder } }
                         else { preview = URL(fileURLWithPath: scan.path(of: index)) }
@@ -134,13 +201,17 @@ private struct ExploreResults: View {
         let node = scan.nodes[Int(index)]
         Button("Quick Look") { preview = URL(fileURLWithPath: path) }
         Button("Show in Finder") { NSWorkspace.shared.selectFile(path, inFileViewerRootedAtPath: "") }
-        Divider()
-        Button("Put in Basket") {
-            withAnimation(.spring(duration: 0.3)) {
-                barn.basket.append(BarnModel.Item(path: path, name: node.name, size: node.reclaimable, modified: nil))
-            }
+        Button("Copy Path") {
+            NSPasteboard.general.clearContents()
+            NSPasteboard.general.setString(DiskScanner.displayPath(path), forType: .string)
         }
-        .disabled(!barn.canCollect(path) || node.kind == .unreadable)
+        Divider()
+        Button("Put in Basket") { collect(index) }
+            .keyboardShortcut(.delete, modifiers: [])
+            .disabled(!barn.canCollect(path) || node.kind == .unreadable || node.inCloud)
+        if let refusal = BarnModel.basketRefusal(DiskScanner.displayPath(path)) {
+            Text("Can't go in the basket: \(refusal)")
+        }
     }
 
     private var footnote: some View {
@@ -162,14 +233,20 @@ private struct ItemRow: View {
     let path: String?
     let fraction: Double
     let highlighted: Bool
+    var inBasket = false
+    /// What a system folder is, for the ones with names nobody knows.
+    var note: String?
 
     var body: some View {
         HStack(spacing: 10) {
-            Image(systemName: symbol).foregroundStyle(node.kind == .unreadable ? .secondary : Brand.amber).frame(width: 20)
+            Image(systemName: inBasket ? "basket.fill" : symbol)
+                .foregroundStyle(node.kind == .unreadable ? .secondary : Brand.amber).frame(width: 20)
             VStack(alignment: .leading, spacing: 1) {
                 Text(node.name).lineLimit(1).truncationMode(.middle)
                 if let path {
                     Text(path).font(.caption2).foregroundStyle(.secondary).lineLimit(1).truncationMode(.head)
+                } else if let note {
+                    Text(note).font(.caption2).foregroundStyle(.secondary).lineLimit(1)
                 }
             }
             Spacer()
@@ -181,6 +258,7 @@ private struct ItemRow: View {
         }
         .padding(.vertical, 2)
         .background(highlighted ? Brand.lavender.opacity(0.15) : .clear, in: .rect(cornerRadius: 6))
+        .opacity(inBasket ? 0.55 : 1)
     }
 
     private var symbol: String {
@@ -193,9 +271,33 @@ private struct ItemRow: View {
     }
 }
 
+/// What the folders at the top of the disk are, in a few words.
+enum FolderNotes {
+    static func note(for path: String) -> String? {
+        let home = FileManager.default.homeDirectoryForCurrentUser.path
+        return switch path {
+        case "/Applications": "Apps installed for everyone"
+        case "/Library": "Settings and support files shared by all accounts"
+        case "/private": "macOS's working files: swap, caches, temporary files. Leave to macOS."
+        case "/opt": "Command-line tools, usually Homebrew"
+        case "/usr": "Command-line tools that came with macOS or that you added"
+        case "/Users": "Everyone's home folders"
+        case "/System": "More of macOS itself"
+        case "/cores": "Memory dumps from crashed programs"
+        case home + "/Library": "Your apps' settings, caches and data. Tidy Up handles the safe parts."
+        case home + "/Library/Containers", home + "/Library/Group Containers": "Sandboxed apps' own data"
+        case home + "/Library/Application Support": "Apps' data, often things you'd miss"
+        case home + "/Library/Developer": "Xcode and simulators"
+        case home + "/Library/Mobile Documents": "iCloud Drive: removing here removes it everywhere"
+        default: nil
+        }
+    }
+}
+
 private struct Breadcrumbs: View {
     let scan: DiskScan
     @Binding var focus: Int32
+    var home: Int32?
 
     var body: some View {
         var chain: [Int32] = []
@@ -207,7 +309,7 @@ private struct Breadcrumbs: View {
         return ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 4) {
                 ForEach(chain, id: \.self) { index in
-                    Button(index == 0 ? "Disk" : scan.nodes[Int(index)].name) {
+                    Button(index == 0 ? "Whole Disk" : index == home ? "Home" : scan.nodes[Int(index)].name) {
                         withAnimation(.spring(duration: 0.4)) { focus = index }
                     }
                     .buttonStyle(.plain)
@@ -222,18 +324,38 @@ private struct Breadcrumbs: View {
 
 private struct BasketBar: View {
     @Bindable var barn: BarnModel
+    @State private var confirming = false
+
+    private var total: Int64 { barn.basket.map(\.size).reduce(0, +) }
 
     var body: some View {
         HStack(spacing: 12) {
             Image(systemName: "basket.fill").font(.title2).foregroundStyle(Brand.amber)
             VStack(alignment: .leading, spacing: 1) {
-                Text("Basket: \(barn.basket.count) \(barn.basket.count == 1 ? "item" : "items"), \(Bytes.format(barn.basket.map(\.size).reduce(0, +)))")
+                Text("Basket: \(barn.basket.count) \(barn.basket.count == 1 ? "item" : "items"), \(Bytes.format(total))")
                     .font(.headline)
                 Text(barn.basket.map(\.name).joined(separator: ", ")).font(.caption).foregroundStyle(.secondary).lineLimit(1)
             }
             Spacer()
-            Button("Empty Basket") { withAnimation { barn.basket = [] } }
-            Button("Move to Trash") { barn.trashBasket() }.buttonStyle(.borderedProminent)
+            Menu("Basket") {
+                ForEach(barn.basket) { item in
+                    Button("Take Out \(item.name) (\(Bytes.format(item.size)))") {
+                        withAnimation { barn.basket.removeAll { $0.path == item.path } }
+                    }
+                }
+                Divider()
+                Button("Take Everything Out") { withAnimation { barn.basket = [] } }
+            }
+            .fixedSize()
+            Button("Move to Trash…") { confirming = true }.buttonStyle(.borderedProminent)
+        }
+        .alert("Move \(barn.basket.count == 1 ? "this" : "these \(barn.basket.count)") to the Trash?", isPresented: $confirming) {
+            Button("Move to Trash") { barn.trashBasket() }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text(barn.basket.prefix(12).map { "\($0.name) (\(Bytes.format($0.size)))" }.joined(separator: "\n")
+                 + (barn.basket.count > 12 ? "\n…and \(barn.basket.count - 12) more" : "")
+                 + "\n\nYou can undo, or put them back from the Trash.")
         }
         .padding(.horizontal, 20)
         .padding(.vertical, 12)

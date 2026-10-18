@@ -12,6 +12,8 @@ enum BarnDemo {
             "npm": 1_830_000_000, "pnpm": 2_060_000_000, "cocoapods": 1_480_000_000, "chrome": 1_210_000_000,
             "device-support": 6_900_000_000, "app-caches": 4_400_000_000, "installers": 2_700_000_000,
             "iphone-backups": 38_500_000_000, "xcode-archives": 5_200_000_000, "docker": 24_000_000_000,
+            "macos-installers": 13_400_000_000, "unused-apps": 4_900_000_000, "big-downloads": 9_100_000_000,
+            "ios-updates": 6_300_000_000, "photos-library": 61_000_000_000,
         ]
         return CleanupRule.all.compactMap { rule in
             guard let size = sizes[rule.id] else { return nil }
@@ -30,6 +32,9 @@ enum BarnDemo {
         case "device-support": ["iPhone17,1 26.0 (23A341)", "iPhone16,2 18.6 (22G86)", "Watch7,3 11.5 (22T572)"]
         case "installers": ["Figma-125.4.dmg", "Docker.dmg", "Zoom.pkg", "Xcode_26.xip"]
         case "app-caches": ["com.spotify.client", "com.tinyspeck.slackmacgap", "com.microsoft.VSCode", "JetBrains"]
+        case "macos-installers": ["Install macOS Tahoe.app"]
+        case "unused-apps": ["GarageBand.app", "Blender.app", "Unity Hub.app"]
+        case "big-downloads": ["dataset.zip", "Conference talk.mov", "Ubuntu 24.04.img"]
         default: []
         }
         let share = total / Int64(max(1, names.count))
