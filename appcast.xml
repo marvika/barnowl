@@ -10,6 +10,22 @@
         <language>en</language>
         <!-- Releases, newest first -->
         <item>
+            <title>Barn Owl 0.10.1</title>
+            <link>https://github.com/marvika/barnowl/releases/tag/v0.10.1</link>
+            <pubDate>Sun, 18 Oct 2026 19:30:52 +0000</pubDate>
+            <sparkle:version>13</sparkle:version>
+            <sparkle:shortVersionString>0.10.1</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>26.0</sparkle:minimumSystemVersion>
+            <sparkle:fullReleaseNotesLink>https://github.com/marvika/barnowl/releases/tag/v0.10.1</sparkle:fullReleaseNotesLink>
+            <description sparkle:format="markdown"><![CDATA[
+- Lighter on your Mac: Barn Owl no longer hears every pointer movement
+  unless you've turned on showing hidden icons by hovering or scrolling
+  (that alone cost a few percent CPU whenever the mouse moved), and the
+  Barn's map of the disk is let go two minutes after you close the Barn.
+]]></description>
+            <enclosure url="https://github.com/marvika/barnowl/releases/download/v0.10.1/BarnOwl-0.10.1.zip" sparkle:edSignature="lKHDGCge6gd4GyS22t23m5eTLSo7iqN9kOTsIubS9Ye4hm2KHGPSi3R8Y0FCwt0iUHnfiNGX3ekPiyYkDy4gCg==" length="7583132" type="application/octet-stream"/>
+        </item>
+        <item>
             <title>Barn Owl 0.10.0</title>
             <link>https://github.com/marvika/barnowl/releases/tag/v0.10.0</link>
             <pubDate>Sun, 18 Oct 2026 18:40:39 +0000</pubDate>
