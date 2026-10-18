@@ -29,6 +29,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         Preferences.registerDefaults()
         // Closed-lid mode may have been switched off while Barn Owl wasn't running.
         if Preferences.closedLidMode, !ClosedLidMode.isEnabled { Preferences.closedLidMode = false }
+        // Restarting, shutting down or logging out: if Barn Owl opens again at
+        // login, it's back before the Mac is in a bag.
+        NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.willPowerOffNotification,
+                                                          object: nil, queue: .main) { _ in
+            MainActor.assumeIsolated {
+                if LaunchAtLogin.isEnabled { ClosedLidMode.keepOnQuit = true }
+            }
+        }
 
         items = StatusItems()
         sections = SectionController(items: items, engine: HidingEngineFactory.make(items: items))
@@ -300,8 +308,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationWillTerminate(_ notification: Notification) {
         keepAwake.stop()
-        // Never leave the Mac unable to sleep after Barn Owl is gone.
-        if Preferences.closedLidMode, ClosedLidMode.isEnabled {
+        // Never leave the Mac unable to sleep after Barn Owl is gone. But an
+        // update or a restart brings it straight back: keep the setting then
+        // (and don't ask for a password in the middle of it).
+        if ClosedLidMode.keepOnQuit {
+            Log.keepAwake.info("Leaving closed-lid mode as it is: Barn Owl is coming back")
+        } else if Preferences.closedLidMode, ClosedLidMode.isEnabled {
             if ClosedLidMode.set(false) { Preferences.closedLidMode = false }
         }
     }
