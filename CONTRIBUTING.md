@@ -35,6 +35,20 @@ to `Config/Local.xcconfig` and set your team ID. That file is git-ignored.
 [docs/how-it-works.md](docs/how-it-works.md) explains how hiding, moving and
 opening icons work.
 
+### Screenshots and the demo GIF
+
+The pictures in the README come from a demo copy with made-up icons, files
+and disk contents, so nothing real is ever shown:
+
+- `Scripts/demo.sh` starts the demo copy (quitting your Barn Owl), and
+  `Scripts/demo.sh stop` brings yours back.
+- `Scripts/record-demo.sh` records `docs/images/demo.gif`. It drives the demo
+  with `barnowl://` links over a dusk backdrop that hides your desktop, and
+  `Scripts/make-gif.swift` paints out macOS's recording indicator. Keep your
+  hands off the Mac for the 20 seconds it takes.
+- `Scripts/make-icon.sh` and `Scripts/make-hero.sh` draw the app icon, the owl
+  pictures and the hero image with the app's own drawing code.
+
 ## Making a release
 
 Releases are signed with the maintainer's Developer ID and notarized, and
