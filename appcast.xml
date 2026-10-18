@@ -10,6 +10,38 @@
         <language>en</language>
         <!-- Releases, newest first -->
         <item>
+            <title>Barn Owl 0.10.0</title>
+            <link>https://github.com/marvika/barnowl/releases/tag/v0.10.0</link>
+            <pubDate>Sun, 18 Oct 2026 18:40:39 +0000</pubDate>
+            <sparkle:version>12</sparkle:version>
+            <sparkle:shortVersionString>0.10.0</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>26.0</sparkle:minimumSystemVersion>
+            <sparkle:fullReleaseNotesLink>https://github.com/marvika/barnowl/releases/tag/v0.10.0</sparkle:fullReleaseNotesLink>
+            <description sparkle:format="markdown"><![CDATA[
+- **A fresher look.** Floating panels share one Liquid Glass style with a
+  touch of dusk, and the owl's lavender is the accent everywhere. The quick
+  panel puts the owl and a big countdown first, has one row of time buttons
+  and round Control Center–style toggles. Search groups commands and icons
+  and shows what Return does. Toggles bounce, icons settle onto the Perch,
+  the Nest glows as a file comes near, and the app icon is a layered Liquid
+  Glass icon with dark and tinted versions. Sizes read the same everywhere.
+- Clearing clipboard history or the Nest asks first. New links:
+  `barnowl://quick` and `barnowl://nest`.
+- **The Barn**, for disk space: a storage bar that adds up to the whole
+  disk, and Tidy Up, sorted by how safe things are. Safe caches and build
+  files go in one click; macOS installers, apps you haven't opened in six
+  months, big old downloads and app caches are yours to pick, go to the
+  Trash with Undo, and can be emptied from it on their own. Each clean-up is
+  locked to its own folders, waits while its app or a build is running, and
+  asks before anything that can't be undone. Explore draws a ring map of the
+  disk with the biggest files by kind, Quick Look and a basket for the
+  Trash. It warns when the disk is nearly full, and never cleans by itself.
+- Barn Owl no longer uses CPU while idle: closed panels are torn down and
+  hidden owls stop.
+]]></description>
+            <enclosure url="https://github.com/marvika/barnowl/releases/download/v0.10.0/BarnOwl-0.10.0.zip" sparkle:edSignature="HPccRFi1quwetNfJXcsBYrVzlNQwT5SaFX0/ML4+pbUejoeervFWe6fMMz3B64G1ffBMch1AyJq86c3U5nuaDQ==" length="7577850" type="application/octet-stream"/>
+        </item>
+        <item>
             <title>Barn Owl 0.9.1</title>
             <link>https://github.com/marvika/barnowl/releases/tag/v0.9.1</link>
             <pubDate>Sun, 18 Oct 2026 08:09:00 +0000</pubDate>
