@@ -12,6 +12,9 @@ enum Brand {
 
     /// The dusk sky behind the owl in setup and About.
     static let dusk = LinearGradient(colors: [indigo, indigoDeep], startPoint: .top, endPoint: .bottom)
+    /// Selections, switches and buttons everywhere: always the owl's
+    /// lavender, whatever accent colour macOS is set to.
+    static let accent = lavender
 }
 
 extension Color {
@@ -70,8 +73,33 @@ enum OwlPalette: String, CaseIterable, Identifiable {
     }
 }
 
+/// Shared measurements, so every surface has the same shape.
+enum Theme {
+    /// Floating panels: the Perch, quick panel, search, clipboard, the Nest.
+    static let panelRadius: CGFloat = 20
+    /// Groups inside a panel or window: cards, tiles.
+    static let cardRadius: CGFloat = 14
+    /// Rows, chips and small controls.
+    static let rowRadius: CGFloat = 9
+}
+
+extension View {
+    /// What every floating panel wears: Liquid Glass with a breath of dusk,
+    /// the owl's accent, and a soft shadow (the window draws none, as it's
+    /// larger than the glass).
+    func owlPanel() -> some View {
+        self
+            .tint(Brand.accent)
+            .glassEffect(.regular.tint(Brand.indigo.opacity(0.10)), in: .rect(cornerRadius: Theme.panelRadius))
+            .shadow(color: .black.opacity(0.22), radius: 18, y: 8)
+    }
+}
+
 /// A dusk sky with a few softly twinkling stars.
 struct DuskSky: View {
+    /// Tonight's moon in the corner; off where it would look like a button.
+    var showsMoon = true
+
     private static let stars: [(x: CGFloat, y: CGFloat, size: CGFloat, delay: Double)] = [
         (0.08, 0.12, 2.5, 0), (0.22, 0.06, 1.8, 0.7), (0.37, 0.18, 1.5, 1.4), (0.61, 0.08, 2.2, 0.3),
         (0.78, 0.15, 1.6, 1.1), (0.91, 0.07, 2.4, 1.8), (0.86, 0.32, 1.4, 0.5), (0.14, 0.34, 1.6, 2.1),
@@ -95,9 +123,11 @@ struct DuskSky: View {
                     }
                 }
                 // Tonight's moon, as it really is.
-                Moon(phase: Moon.phase(on: .now))
-                    .frame(width: max(14, min(26, proxy.size.width * 0.04)))
-                    .position(x: proxy.size.width * 0.88, y: proxy.size.height * 0.16)
+                if showsMoon {
+                    Moon(phase: Moon.phase(on: .now))
+                        .frame(width: max(14, min(26, proxy.size.width * 0.04)))
+                        .position(x: proxy.size.width * 0.88, y: proxy.size.height * 0.16)
+                }
             }
         }
         .ignoresSafeArea()

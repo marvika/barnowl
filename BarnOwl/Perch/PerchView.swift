@@ -33,7 +33,8 @@ struct PerchView: View {
                         Label("Show real icons: allow Screen Recording", systemImage: "rectangle.dashed.badge.record")
                             .font(.caption)
                     }
-                    .buttonStyle(.link)
+                    .buttonStyle(.plain)
+                    .foregroundStyle(.tint)
                 }
             }
             footer
@@ -41,7 +42,7 @@ struct PerchView: View {
         .padding(12)
         .frame(minWidth: 280, maxWidth: 520, alignment: .leading)
         .fixedSize(horizontal: false, vertical: true)
-        .glassEffect(.regular, in: .rect(cornerRadius: 16))
+        .owlPanel()
         .overlay(alignment: .topTrailing) {
             // Perched on the edge, watching the icon you point at.
             if model.accessibilityTrusted, !(hidden.isEmpty && alwaysHidden.isEmpty && behindNotch.isEmpty) {
@@ -50,7 +51,6 @@ struct PerchView: View {
                     .offset(x: -16, y: -19)
             }
         }
-        .shadow(color: .black.opacity(0.28), radius: 14, y: 6)
         .padding(FloatingPanel.shadowInset)
     }
 
@@ -58,13 +58,13 @@ struct PerchView: View {
     private func group(_ title: String, _ items: [MenuBarItem]) -> some View {
         if !items.isEmpty {
             VStack(alignment: .leading, spacing: 4) {
-                Text(title.uppercased())
-                    .font(.caption2.weight(.semibold))
+                Text(title)
+                    .font(.caption.weight(.semibold))
                     .foregroundStyle(.secondary)
                     .padding(.leading, 4)
                 FlowLayout(spacing: 2) {
-                    ForEach(items) { item in
-                        ItemTile(item: item, image: model.images.image(for: item)) { open(item) }
+                    ForEach(Array(items.enumerated()), id: \.element.id) { position, item in
+                        ItemTile(item: item, image: model.images.image(for: item), position: position) { open(item) }
                             .contextMenu { ItemContextMenu(model: model, item: item) }
                     }
                 }
@@ -111,6 +111,7 @@ struct PerchView: View {
 struct ItemTile: View {
     let item: MenuBarItem
     let image: NSImage?
+    var position = 0
     let action: () -> Void
     @State private var hovering = false
 
@@ -119,10 +120,11 @@ struct ItemTile: View {
             ItemImage(item: item, image: image)
                 .padding(.horizontal, 2)
                 .frame(minWidth: 28, minHeight: 28)
-                .background(hovering ? Color.primary.opacity(0.12) : .clear, in: .rect(cornerRadius: 7))
+                .background(hovering ? Color.primary.opacity(0.12) : .clear, in: .rect(cornerRadius: Theme.rowRadius))
                 .contentShape(.rect)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(PressableStyle())
+        .arrives(after: min(Double(position) * 0.025, 0.3))
         .onHover { hovering = $0 }
         .help(item.displayName)
         .accessibilityLabel(item.displayName)
@@ -171,7 +173,7 @@ struct PermissionCallout: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
             Spacer(minLength: 8)
-            Button("Allow…", action: action).buttonStyle(.borderedProminent)
+            Button("Allow…", action: action).buttonStyle(.glassProminent)
         }
     }
 }

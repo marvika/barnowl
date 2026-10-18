@@ -278,7 +278,7 @@ struct DropTrayView: View {
             .font(.caption.weight(.semibold))
             .padding(.horizontal, 10)
             .frame(height: 24)
-            .background(Color.accentColor.opacity(0.2), in: .capsule)
+            .background(Brand.accent.opacity(0.2), in: .capsule)
             .overlay(FileDragSource(urls: { files }, takenOut: { tray.takenOut($0) }))
             .help("Drag all the files in the nest at once")
             .accessibilityLabel("Drag all \(files.count) files")
@@ -305,11 +305,17 @@ struct DropTrayView: View {
                     }
                 }
                 .frame(maxWidth: .infinity, minHeight: 56)
-                .background(tray.isTargeted ? Color.accentColor.opacity(0.3) : Color.primary.opacity(0.06),
-                            in: .rect(cornerRadius: 12))
-                .overlay(RoundedRectangle(cornerRadius: 12)
-                    .strokeBorder(tray.isTargeted ? Color.accentColor : Color.secondary.opacity(0.4),
-                                  style: StrokeStyle(lineWidth: 2, dash: [6, 4])))
+                // A soft well that lights up and opens a little as a file comes near.
+                .background(
+                    RoundedRectangle(cornerRadius: Theme.cardRadius)
+                        .fill(tray.isTargeted ? AnyShapeStyle(Brand.accent.opacity(0.28).gradient)
+                                              : AnyShapeStyle(Color.primary.opacity(0.06)))
+                        .shadow(color: tray.isTargeted ? Brand.accent.opacity(0.6) : .clear, radius: 12)
+                )
+                .overlay(RoundedRectangle(cornerRadius: Theme.cardRadius)
+                    .strokeBorder(tray.isTargeted ? Brand.accent : Color.primary.opacity(0.1), lineWidth: 1.5))
+                .scaleEffect(tray.isTargeted ? 1.02 : 1)
+                .animation(.spring(duration: 0.3, bounce: 0.4), value: tray.isTargeted)
             }
             if tray.mode == .open {
                 HStack(spacing: 8) {
@@ -346,8 +352,7 @@ struct DropTrayView: View {
         }
         .padding(12)
         .frame(width: max(320, min(CGFloat(files.count) * 104 + 24, 560)))
-        .glassEffect(.regular, in: .rect(cornerRadius: 18))
-        .shadow(color: .black.opacity(0.28), radius: 14, y: 6)
+        .owlPanel()
         .dropDestination(for: URL.self) { urls, _ in
             tray.receive(urls)
             return true

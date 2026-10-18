@@ -93,7 +93,7 @@ private struct BarnHeader: View {
         }
         .padding(.horizontal, 28)
         .padding(.vertical, 22)
-        .background(DuskSky())
+        .background(DuskSky(showsMoon: false))
         .environment(\.colorScheme, .dark)
     }
 
@@ -194,7 +194,7 @@ private struct TidyUpView: View {
                                                   busy: barn.cleaning != nil) { start(suggestion) }
                                 }
                             }
-                            .background(Color.primary.opacity(0.04), in: .rect(cornerRadius: 14))
+                            .background(Color.primary.opacity(0.04), in: .rect(cornerRadius: Theme.cardRadius))
                         }
                     }
                 }
@@ -290,13 +290,13 @@ private struct TidyUpView: View {
                     Text("Free Up \(Bytes.format(barn.safeTotal))").frame(minWidth: 120)
                 }
             }
-            .buttonStyle(.borderedProminent)
+            .buttonStyle(.glassProminent)
             .controlSize(.large)
             .disabled(barn.cleaning != nil || barn.isMeasuring)
         }
         .padding(16)
-        .background(Brand.amber.opacity(0.12), in: .rect(cornerRadius: 14))
-        .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(Brand.amber.opacity(0.35)))
+        .background(Color.primary.opacity(0.05), in: .rect(cornerRadius: Theme.cardRadius))
+        .overlay(RoundedRectangle(cornerRadius: Theme.cardRadius).strokeBorder(Brand.accent.opacity(0.3)))
     }
 }
 
@@ -356,7 +356,7 @@ private struct SuggestionRow: View {
                 .font(.body)
                 .foregroundStyle(.white)
                 .frame(width: 32, height: 32)
-                .background(rule.safety.colour.gradient, in: .rect(cornerRadius: 8))
+                .background(rule.safety.colour.gradient, in: .rect(cornerRadius: Theme.rowRadius))
             VStack(alignment: .leading, spacing: 2) {
                 Text(rule.title).font(.body.weight(.semibold))
                 Text(rule.detail).font(.callout).foregroundStyle(.secondary).lineLimit(2)
@@ -462,7 +462,7 @@ private struct PickItemsSheet: View {
                 Spacer()
                 Button("Cancel", role: .cancel, action: cancel).keyboardShortcut(.cancelAction)
                 Button(cleanTitle) { clean(Array(picked)) }
-                    .buttonStyle(.borderedProminent)
+                    .buttonStyle(.glassProminent)
                     .keyboardShortcut(.defaultAction)
                     .disabled(picked.isEmpty)
             }
@@ -493,7 +493,7 @@ private struct KeepItClean: View {
             }
             .padding(14)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(Color.primary.opacity(0.04), in: .rect(cornerRadius: 14))
+            .background(Color.primary.opacity(0.04), in: .rect(cornerRadius: Theme.cardRadius))
         }
     }
 }
@@ -511,7 +511,7 @@ private struct FullDiskAccessCallout: View {
             Button("Open Settings") { NSWorkspace.shared.open(FullDiskAccess.settingsURL) }
         }
         .padding(14)
-        .background(Brand.lavender.opacity(0.1), in: .rect(cornerRadius: 14))
+        .background(Brand.lavender.opacity(0.1), in: .rect(cornerRadius: Theme.cardRadius))
     }
 }
 

@@ -14,7 +14,7 @@ final class BarnWindowController {
 
     func show() {
         if window == nil {
-            let window = NSWindow(contentViewController: NSHostingController(rootView: BarnView(barn: barn)))
+            let window = NSWindow(contentViewController: NSHostingController(rootView: BarnView(barn: barn).tint(Brand.accent)))
             window.title = "The Barn"
             window.styleMask = [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView]
             window.titlebarAppearsTransparent = true

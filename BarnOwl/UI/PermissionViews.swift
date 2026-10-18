@@ -127,16 +127,16 @@ struct HiddenIconsDisplayPicker: View {
             VStack(alignment: .leading, spacing: 6) {
                 Image(systemName: symbol)
                     .font(.title2)
-                    .foregroundStyle(selected ? Color.accentColor : .secondary)
+                    .foregroundStyle(selected ? Brand.accent : .secondary)
                 Text(value.title).fontWeight(.semibold)
                 Text(caption).font(.caption).foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
             .padding(12)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-            .background(.quaternary.opacity(selected ? 0.9 : 0.5), in: .rect(cornerRadius: 12))
-            .overlay(RoundedRectangle(cornerRadius: 12)
-                .strokeBorder(selected ? Color.accentColor : .clear, lineWidth: 2))
+            .background(.quaternary.opacity(selected ? 0.9 : 0.5), in: .rect(cornerRadius: Theme.cardRadius))
+            .overlay(RoundedRectangle(cornerRadius: Theme.cardRadius)
+                .strokeBorder(selected ? Brand.accent : .clear, lineWidth: 2))
             .contentShape(.rect)
         }
         .buttonStyle(.plain)

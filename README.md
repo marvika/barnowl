@@ -98,12 +98,12 @@ example, a briefcase can hold your VPN, mail and chat apps. You can also
 
 ## Keep awake
 
-<img src="docs/images/quick-panel.png" alt="The quick panel: keep awake for 2 h 15 min more, add-time buttons, and toggles" width="380" align="right">
+<img src="docs/images/quick-panel.png" alt="The quick panel: the owl with 2:14:56 left, add-time buttons, rules, round toggles and free disk space" width="380" align="right">
 
 Click the owl for the quick panel. Barn Owl can keep your Mac awake:
 
 - **For a while:** 15 minutes, 1 hour, 2 hours, 4 hours, or until you stop it.
-  The time left counts down next to the owl, and you can add time with one
+  The time left counts down beside the owl, and you can add time with one
   click.
 - **Until a time:** for example, until 17:30.
 - **While an app runs:** say, while your build or a video export runs.
@@ -172,7 +172,7 @@ notch, with the owl watching your pointer. Drop files there to hold them,
 then drag them out later, wherever you need them, one by one or all at once.
 Once you've dropped a file somewhere, it leaves the Nest.
 
-<img src="docs/images/drop-tray.png" alt="The Nest holding three files while the owl watches a file being dragged" width="380">
+<img src="docs/images/drop-tray.png" alt="The Nest holding three files, with a button to drag them all out" width="380">
 
 ## Download
 

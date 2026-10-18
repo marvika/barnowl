@@ -22,7 +22,7 @@ struct ExploreView: View {
             Text("The owl looks through the whole disk, usually in under a minute, and draws you a map. Nothing is changed until you say so.")
                 .multilineTextAlignment(.center).foregroundStyle(.secondary).frame(maxWidth: 420)
             Button("Look Through the Disk") { barn.startScan() }
-                .buttonStyle(.borderedProminent).controlSize(.large)
+                .buttonStyle(.glassProminent).controlSize(.large)
             if !barn.fullDiskAccess {
                 Text("Without Full Disk Access, some folders show as locked.")
                     .font(.caption).foregroundStyle(.secondary)
@@ -221,7 +221,8 @@ private struct ExploreResults: View {
             if unreadable > 0 {
                 Text("\(unreadable) \(unreadable == 1 ? "folder was" : "folders were") locked\(barn.fullDiskAccess ? "" : ": Full Disk Access shows them")")
             }
-            Button("Look Again") { barn.startScan() }.buttonStyle(.link)
+            Button("Look Again", systemImage: "arrow.clockwise") { barn.startScan() }
+                .buttonStyle(.bordered).controlSize(.small).padding(.top, 4)
         }
         .font(.caption).foregroundStyle(.secondary)
     }
@@ -347,7 +348,7 @@ private struct BasketBar: View {
                 Button("Take Everything Out") { withAnimation { barn.basket = [] } }
             }
             .fixedSize()
-            Button("Move to Trash…") { confirming = true }.buttonStyle(.borderedProminent)
+            Button("Move to Trash…") { confirming = true }.buttonStyle(.glassProminent)
         }
         .alert("Move \(barn.basket.count == 1 ? "this" : "these \(barn.basket.count)") to the Trash?", isPresented: $confirming) {
             Button("Move to Trash") { barn.trashBasket() }

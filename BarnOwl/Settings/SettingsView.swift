@@ -340,9 +340,9 @@ private struct OwlPalettePicker: View {
                             .frame(width: 56, height: 56)
                             .padding(10)
                             .background(RoundedRectangle(cornerRadius: 14, style: .continuous)
-                                .fill(selected ? Color.accentColor.opacity(0.16) : Color.primary.opacity(0.04)))
+                                .fill(selected ? Brand.accent.opacity(0.16) : Color.primary.opacity(0.04)))
                             .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous)
-                                .strokeBorder(selected ? Color.accentColor : Color.clear, lineWidth: 2))
+                                .strokeBorder(selected ? Brand.accent : Color.clear, lineWidth: 2))
                         Text(option.title).font(.caption).foregroundStyle(selected ? .primary : .secondary)
                     }
                     .contentShape(Rectangle())
@@ -440,7 +440,7 @@ private struct MenuBarPane: View {
                     .listRowInsets(EdgeInsets(top: 12, leading: 12, bottom: 12, trailing: 12))
                 LabeledContent {
                     Button("Open Layout") { model.settingsPane = .layout }
-                        .buttonStyle(.borderedProminent)
+                        .buttonStyle(.glassProminent)
                 } label: {
                     BadgeLabel(title: "Arrange icons and groups",
                                subtitle: "Drag icons between the menu bar, hidden and your groups.",
@@ -603,7 +603,7 @@ private struct KeepAwakePane: View {
                         .labelsHidden()
                         .frame(width: 130)
                         Button("Start") { keepAwake.start(minutes: startMinutes) }
-                            .buttonStyle(.borderedProminent)
+                            .buttonStyle(.glassProminent)
                             .controlSize(.large)
                     }
                 }
@@ -770,7 +770,7 @@ private struct RuleEditorSheet: View {
                     if isNew { rules.add(rule) } else { rules.update(rule) }
                     dismiss()
                 }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(.glassProminent)
                 .keyboardShortcut(.defaultAction)
                 .disabled(rule.conditions.isEmpty)
             }
@@ -834,7 +834,7 @@ private struct RuleEditorSheet: View {
                         if currentSchedule != nil { setSchedule(true) }
                     }
                     .buttonStyle(.bordered)
-                    .tint(weekdays.contains(day) ? .accentColor : .secondary)
+                    .tint(weekdays.contains(day) ? Brand.accent : .secondary)
                     .controlSize(.small)
                 }
                 DatePicker("", selection: $start, displayedComponents: .hourAndMinute).labelsHidden()

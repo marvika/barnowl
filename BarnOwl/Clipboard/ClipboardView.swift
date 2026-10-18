@@ -12,6 +12,7 @@ struct ClipboardView: View {
     @State private var tab = Tab.history
     @State private var query = ""
     @State private var selection = 0
+    @State private var confirmingClear = false
     @FocusState private var focused: Bool
 
     private var results: [ClipEntry] {
@@ -33,18 +34,25 @@ struct ClipboardView: View {
                 .labelsHidden()
                 .frame(width: 200)
                 Spacer()
-                if tab == .history, !clipboard.entries.isEmpty {
-                    Button("Clear") { clipboard.clear() }.buttonStyle(.borderless)
-                } else if tab == .shelf, !clipboard.shelf.isEmpty {
-                    Button("Clear") { clipboard.clearShelf() }.buttonStyle(.borderless)
+                if tab == .history ? !clipboard.entries.isEmpty : !clipboard.shelf.isEmpty {
+                    Button("Clear…", systemImage: "trash") { confirmingClear = true }
+                        .buttonStyle(.bordered).controlSize(.small)
                 }
             }
             .padding(12)
+            .confirmationDialog(tab == .history ? "Clear clipboard history?" : "Empty the Nest?",
+                                isPresented: $confirmingClear) {
+                Button(tab == .history ? "Clear History" : "Empty Nest", role: .destructive) {
+                    if tab == .history { clipboard.clear() } else { clipboard.clearShelf() }
+                }
+            } message: {
+                Text(tab == .history ? "Pinned items stay." : "The files themselves stay where they are.")
+            }
             Divider()
             if tab == .history { history } else { shelf }
         }
         .frame(width: 460)
-        .glassEffect(.regular, in: .rect(cornerRadius: 18))
+        .owlPanel()
         .task {
             // Just copied a password or a colour? The owl reacts once you look.
             try? await Task.sleep(for: .milliseconds(500))
@@ -55,7 +63,6 @@ struct ClipboardView: View {
                 clipboard.owlCue = OwlCue(.colour(colour))
             }
         }
-        .shadow(color: .black.opacity(0.28), radius: 14, y: 6)
         .padding(FloatingPanel.shadowInset)
         .onAppear { focused = true }
     }
@@ -156,7 +163,7 @@ struct ClipboardView: View {
                 .frame(height: min(CGFloat((clipboard.shelf.count + 3) / 4) * 112 + 20, 360))
             }
         }
-        .background(dropTargeted ? Color.accentColor.opacity(0.15) : .clear, in: .rect(cornerRadius: 12))
+        .background(dropTargeted ? Brand.accent.opacity(0.15) : .clear, in: .rect(cornerRadius: Theme.cardRadius))
         .padding(8)
         .dropDestination(for: URL.self) { urls, _ in
             let files = urls.filter(\.isFileURL)
@@ -195,7 +202,7 @@ private struct ClipRow: View {
         }
         .padding(.horizontal, 8)
         .frame(minHeight: 44)
-        .background(selected ? Color.accentColor.opacity(0.25) : .clear, in: .rect(cornerRadius: 8))
+        .background(selected ? Brand.accent.opacity(0.25) : .clear, in: .rect(cornerRadius: Theme.rowRadius))
         .contentShape(.rect)
     }
 }

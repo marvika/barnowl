@@ -82,6 +82,12 @@ struct SearchView: View {
                     ScrollView {
                         VStack(spacing: 2) {
                             ForEach(Array(results.enumerated()), id: \.element.id) { index, result in
+                                if let heading = heading(before: index) {
+                                    Text(heading)
+                                        .font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+                                        .frame(maxWidth: .infinity, alignment: .leading)
+                                        .padding(.horizontal, 10).padding(.top, index == 0 ? 2 : 8).padding(.bottom, 2)
+                                }
                                 Group {
                                     switch result {
                                     case .command(let command): commandRow(command, selected: index == selection)
@@ -94,7 +100,7 @@ struct SearchView: View {
                         }
                         .padding(6)
                     }
-                    .frame(height: min(CGFloat(results.count) * 40 + 12, 340))
+                    .frame(height: min(CGFloat(results.count) * 40 + CGFloat(headingCount) * 24 + 12, 380))
                     .onChange(of: selection) { _, new in
                         if results.indices.contains(new) { proxy.scrollTo(results[new].id) }
                     }
@@ -112,8 +118,7 @@ struct SearchView: View {
             }
         }
         .frame(width: 560)
-        .glassEffect(.regular, in: .rect(cornerRadius: 18))
-        .shadow(color: .black.opacity(0.28), radius: 14, y: 6)
+        .owlPanel()
         .padding(FloatingPanel.shadowInset)
         .onAppear {
             query = ""
@@ -134,33 +139,29 @@ struct SearchView: View {
                 }
             }
             Spacer()
-            Text(badge(for: item))
-                .font(.caption2.weight(.medium))
-                .foregroundStyle(.secondary)
-                .padding(.horizontal, 6).padding(.vertical, 2)
-                .background(.quaternary, in: .capsule)
+            if selected {
+                ReturnHint(verb: "Open")
+            } else if let place = place(of: item) {
+                Text(place).font(.caption).foregroundStyle(.tertiary)
+            }
         }
         .padding(.horizontal, 8)
         .frame(height: 38)
-        .background(selected ? Color.accentColor.opacity(0.25) : .clear, in: .rect(cornerRadius: 8))
+        .background(selected ? Brand.accent.opacity(0.25) : .clear, in: .rect(cornerRadius: Theme.rowRadius))
         .contentShape(.rect)
     }
 
     private func commandRow(_ command: AppCommand, selected: Bool) -> some View {
         HStack(spacing: 10) {
-            IconBadge(symbol: command.symbol, color: .orange, size: 28)
+            IconBadge(symbol: command.symbol, color: Brand.amber, size: 28)
                 .frame(width: 48)
             Text(command.title).fontWeight(.medium)
             Spacer()
-            Text("Command")
-                .font(.caption2.weight(.medium))
-                .foregroundStyle(.secondary)
-                .padding(.horizontal, 6).padding(.vertical, 2)
-                .background(.quaternary, in: .capsule)
+            if selected { ReturnHint(verb: "Run") }
         }
         .padding(.horizontal, 8)
         .frame(height: 38)
-        .background(selected ? Color.accentColor.opacity(0.25) : .clear, in: .rect(cornerRadius: 8))
+        .background(selected ? Brand.accent.opacity(0.25) : .clear, in: .rect(cornerRadius: Theme.rowRadius))
         .contentShape(.rect)
     }
 
@@ -171,14 +172,26 @@ struct SearchView: View {
         }
     }
 
-    private func badge(for item: MenuBarItem) -> String {
+    /// Where an icon lives, when that's worth saying: not for ones you can see.
+    private func place(of item: MenuBarItem) -> String? {
         if let group = model.groups.group(containing: item.key) { return "In \(group.name)" }
-        if item.isBehindNotch { return "Behind notch" }
+        if item.isBehindNotch { return "Behind the notch" }
         switch item.section {
-        case .visible: return "Visible"
+        case .visible: return nil
         case .hidden: return "Hidden"
         case .alwaysHidden: return "Always hidden"
         }
+    }
+
+    /// A heading where commands start, and where icons start.
+    private func heading(before index: Int) -> String? {
+        let isCommand = { (i: Int) -> Bool in if case .command = results[i] { true } else { false } }
+        if index == 0 { return isCommand(0) ? "Commands" : nil }
+        return isCommand(index - 1) && !isCommand(index) ? "Menu bar icons" : nil
+    }
+
+    private var headingCount: Int {
+        results.indices.filter { heading(before: $0) != nil }.count
     }
 
     private func move(_ delta: Int) {
@@ -189,5 +202,19 @@ struct SearchView: View {
     private func openSelection() {
         guard results.indices.contains(selection) else { return }
         perform(results[selection])
+    }
+}
+
+/// "↩ Open" on the selected row, so Return's meaning is never a guess.
+private struct ReturnHint: View {
+    let verb: String
+
+    var body: some View {
+        HStack(spacing: 4) {
+            Text(verb)
+            Image(systemName: "return")
+        }
+        .font(.caption.weight(.medium))
+        .foregroundStyle(.secondary)
     }
 }
