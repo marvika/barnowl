@@ -39,7 +39,8 @@ case "$1" in
   hoot)
     hoots=("Hoo!" "Hoo hoo!" "Hoot!" "Who? Me?" "Hello there!")
     owl "${hoots[$(( RANDOM % ${#hoots} + 1 ))]}" "" ;;
-  show|toggle) go toggle ;;
+  show) go show ;;
+  toggle) go toggle ;;
   hide) go hide ;;
   all) go show-all ;;
   bar) go bar ;;

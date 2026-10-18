@@ -882,6 +882,17 @@ final class ScreenAnchor {
         let frame = window.convertToScreen(view.convert(view.bounds, to: nil))
         return CGPoint(x: frame.midX, y: frame.midY)
     }
+
+    /// Space between the view and the edges of its window.
+    var roomInWindow: EdgeInsets? {
+        guard let view, let content = view.window?.contentView else { return nil }
+        let frame = view.convert(view.bounds, to: content)
+        let bounds = content.bounds
+        let top = content.isFlipped ? frame.minY - bounds.minY : bounds.maxY - frame.maxY
+        let bottom = content.isFlipped ? bounds.maxY - frame.maxY : frame.minY - bounds.minY
+        return EdgeInsets(top: top, leading: frame.minX - bounds.minX, bottom: bottom,
+                          trailing: bounds.maxX - frame.maxX)
+    }
 }
 
 struct ScreenAnchorView: NSViewRepresentable {

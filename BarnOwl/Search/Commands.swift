@@ -107,7 +107,7 @@ enum CommandParser {
     /// Commands for a query, best first. "awake 2h", "awake 90m" and
     /// "awake 45" get a matching duration.
     static func commands(for query: String) -> [AppCommand] {
-        let words = query.lowercased().split(whereSeparator: \.isWhitespace).map(String.init)
+        let words = joiningUnits(query.lowercased().split(whereSeparator: \.isWhitespace).map(String.init))
         guard let first = words.first, first.count >= 2 || words.count > 1 else { return [] }
 
         var all: [AppCommand] = [.stopKeepAwake, .presenter, .darkMode, .microphone, .desktopIcons,
@@ -139,6 +139,21 @@ enum CommandParser {
             }
         }
         return results
+    }
+
+    /// "2 h" → "2h", so a unit typed after a space still counts.
+    static func joiningUnits(_ words: [String]) -> [String] {
+        var joined: [String] = []
+        for word in words {
+            if let last = joined.last, last.allSatisfy({ $0.isNumber || $0 == "." || $0 == "," || $0 == "+" }),
+               last.contains(where: \.isNumber), word.first?.isLetter == true,
+               duration(from: String(last.drop { $0 == "+" }) + word) != nil {
+                joined[joined.count - 1] = last + word
+            } else {
+                joined.append(word)
+            }
+        }
+        return joined
     }
 
     /// "2h", "2 h", "90m", "45", "1.5h", "forever" → minutes (0 = indefinitely).

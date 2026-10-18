@@ -1,3 +1,4 @@
+import Foundation
 import Testing
 @testable import BarnOwl
 
@@ -15,6 +16,22 @@ struct CommandParserTests {
     @Test func awakeWithADurationStartsThatSession() {
         #expect(CommandParser.commands(for: "awake 2h").first == .keepAwake(minutes: 120))
         #expect(CommandParser.commands(for: "caff 30").first == .keepAwake(minutes: 30))
+    }
+
+    @Test func aUnitAfterASpaceStillCounts() {
+        #expect(CommandParser.commands(for: "awake 2 h").first == .keepAwake(minutes: 120))
+        #expect(CommandParser.commands(for: "awake 90 min").first == .keepAwake(minutes: 90))
+        #expect(CommandParser.commands(for: "awake +1 h").first == .extendKeepAwake(minutes: 60))
+        #expect(CommandParser.joiningUnits(["dark", "mode"]) == ["dark", "mode"])
+    }
+
+    @Test func linksReadDurationsLikeSearch() {
+        let items = { (value: String) in [URLQueryItem(name: "minutes", value: value)] }
+        #expect(AppDelegate.minutes(in: items("2h"), default: 0) == 120)
+        #expect(AppDelegate.minutes(in: items("45"), default: 0) == 45)
+        #expect(AppDelegate.minutes(in: nil, default: 15) == 15)
+        // A typo must not mean "indefinitely".
+        #expect(AppDelegate.minutes(in: items("2x"), default: 0) == nil)
     }
 
     @Test func awakeAloneOffersDurations() {

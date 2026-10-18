@@ -24,6 +24,8 @@ final class PresenterMode {
     @ObservationIgnored private let mover: ItemMover
     @ObservationIgnored private let layout: LayoutController
     @ObservationIgnored private var sharingChecks = 0
+    /// Set when presenting is turned off by hand during a share.
+    @ObservationIgnored private var stoppedDuringShare = false
     /// Icons moved out of view for presenting, to put back afterwards.
     @ObservationIgnored private(set) var movedKeys: [String] = []
 
@@ -55,6 +57,8 @@ final class PresenterMode {
         isChanging = true
         isPresenting = presenting
         startedAutomatically = presenting && automatically
+        // Turned off by hand during a share: stay off until that share ends.
+        if !presenting, !automatically, sharingChecks >= 2 { stoppedDuringShare = true }
         Log.app.info("Presenter mode \(presenting ? "on" : "off")\(automatically ? " (screen sharing)" : "")")
         onChange?(presenting)
         sections.collapse()
@@ -113,8 +117,9 @@ final class PresenterMode {
         let ownCaptureRecently = Date().timeIntervalSince(max(images.lastCapture, OwnCaptures.last)) < 10
         let indicator = !ownCaptureRecently && Self.isScreenBeingShared
         sharingChecks = indicator ? sharingChecks + 1 : 0
+        if !indicator && !ownCaptureRecently { stoppedDuringShare = false }
         let sharing = sharingChecks >= 2
-        if sharing && !isPresenting {
+        if sharing && !isPresenting && !stoppedDuringShare {
             await set(true, automatically: true)
         } else if !indicator && !ownCaptureRecently && isPresenting && startedAutomatically {
             await set(false, automatically: true)

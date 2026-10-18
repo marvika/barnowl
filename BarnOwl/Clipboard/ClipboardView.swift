@@ -114,6 +114,14 @@ struct ClipboardView: View {
                 .font(.caption).foregroundStyle(.tertiary)
                 .padding(.bottom, 10)
         }
+        // Rows move when one is pinned, deleted or copied: keep the same one selected.
+        .onChange(of: results.map(\.id)) { old, new in
+            if old.indices.contains(selection), let index = new.firstIndex(of: old[selection]) {
+                selection = index
+            } else {
+                selection = max(0, min(selection, new.count - 1))
+            }
+        }
     }
 
     private func move(_ delta: Int) {

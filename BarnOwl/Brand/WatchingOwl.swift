@@ -65,6 +65,7 @@ struct WatchingOwl: View {
     @State private var lids: CGFloat = 0
     @State private var faceDip: CGFloat = 0
     @State private var bubble: String?
+    @State private var bubblePlacement = BubblePlacement.aboveTrailing
     @State private var bubbleID = 0
     @State private var cheering = false
     @State private var loving = false
@@ -87,6 +88,7 @@ struct WatchingOwl: View {
     private var moves: Bool { !reduceMotion && personality != .still }
     /// Whether it may do things nobody asked for.
     private var idles: Bool { moves && personality == .lively }
+    private var bubbleFontSize: CGFloat { max(10, min(22, side * 0.14)) }
     private var outfit: OwlOutfit { accessory ?? (side >= 40 ? .seasonal : .none) }
 
     var body: some View {
@@ -117,12 +119,12 @@ struct WatchingOwl: View {
             }
             .overlay(alignment: .topLeading) {
                 if talks, let bubble {
-                    // Grows to the right from just above the owl's shoulder.
-                    let fontSize = max(10, min(22, side * 0.14))
-                    SpeechBubble(text: bubble, fontSize: fontSize)
-                        .fixedSize()
-                        .offset(x: side * 0.7, y: side * 0.1 - fontSize * 1.9)
-                        .transition(.scale(scale: 0.5, anchor: .bottomLeading).combined(with: .opacity))
+                    let size = SpeechBubble.size(of: bubble, fontSize: bubbleFontSize)
+                    let origin = bubblePlacement.origin(for: size, owlSide: side)
+                    SpeechBubble(text: bubble, fontSize: bubbleFontSize, placement: bubblePlacement)
+                        .offset(x: origin.x, y: origin.y)
+                        .transition(moves ? .scale(scale: 0.5, anchor: bubblePlacement.growsFrom).combined(with: .opacity)
+                                          : .opacity)
                         .zIndex(1)
                 }
             }
@@ -463,6 +465,9 @@ struct WatchingOwl: View {
     private func say(_ text: String, for seconds: Double) {
         bubbleID += 1
         let id = bubbleID
+        // Chosen as it appears, so it fits wherever the owl is right now.
+        bubblePlacement = .best(for: SpeechBubble.size(of: text, fontSize: bubbleFontSize), owlSide: side,
+                                room: anchor.roomInWindow)
         withAnimation(.spring(duration: 0.35, bounce: 0.55)) { bubble = text }
         Task {
             try? await Task.sleep(for: .seconds(seconds))
@@ -817,42 +822,6 @@ private struct OrbitingStars: View {
             }
         }
         .allowsHitTesting(false)
-    }
-}
-
-/// A small speech bubble with a tail pointing back at the owl.
-private struct SpeechBubble: View {
-    let text: String
-    let fontSize: CGFloat
-
-    var body: some View {
-        Text(text)
-            .font(.system(size: fontSize, weight: .heavy, design: .rounded))
-            .foregroundStyle(Brand.indigoDeep)
-            .padding(.horizontal, fontSize * 0.6)
-            .padding(.vertical, fontSize * 0.32)
-            .background(alignment: .bottomLeading) {
-                ZStack(alignment: .bottomLeading) {
-                    RoundedRectangle(cornerRadius: fontSize * 0.6, style: .continuous).fill(Brand.cream)
-                    BubbleTail()
-                        .fill(Brand.cream)
-                        .frame(width: fontSize * 0.7, height: fontSize * 0.6)
-                        .offset(x: fontSize * 0.25, y: fontSize * 0.45)
-                }
-            }
-            .shadow(color: .black.opacity(0.25), radius: 4, y: 2)
-            .rotationEffect(.degrees(-5))
-    }
-}
-
-private struct BubbleTail: Shape {
-    func path(in rect: CGRect) -> Path {
-        var path = Path()
-        path.move(to: CGPoint(x: rect.minX + rect.width * 0.35, y: rect.minY))
-        path.addLine(to: CGPoint(x: rect.maxX, y: rect.minY))
-        path.addLine(to: CGPoint(x: rect.minX, y: rect.maxY))
-        path.closeSubpath()
-        return path
     }
 }
 
