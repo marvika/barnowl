@@ -355,7 +355,7 @@ For Raycast, Alfred, scripts and anything that can open a URL:
 
 | Link | Does |
 |---|---|
-| `barnowl://toggle`, `barnowl://hide`, `barnowl://show-all` | Hidden icons |
+| `barnowl://show`, `barnowl://hide`, `barnowl://toggle`, `barnowl://show-all` | Hidden icons |
 | `barnowl://bar`, `barnowl://search`, `barnowl://clipboard` | Panels |
 | `barnowl://keep-awake?minutes=60` (0 = indefinitely) | Keep awake |
 | `barnowl://keep-awake/extend?minutes=30` | Add time |

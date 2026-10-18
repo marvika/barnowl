@@ -11,8 +11,19 @@ final class ClipboardPanelController {
 
     var isOpen: Bool { panel?.isVisible ?? false }
 
+    /// The last other app that was in front, for when the panel opens from
+    /// Barn Owl's own search or Settings.
+    private var lastOtherApp: NSRunningApplication?
+
     init(clipboard: ClipboardHistory) {
         self.clipboard = clipboard
+        NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.didActivateApplicationNotification,
+                                                          object: nil, queue: .main) { [weak self] note in
+            let app = note.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication
+            MainActor.assumeIsolated {
+                if let app, app != .current { self?.lastOtherApp = app }
+            }
+        }
     }
 
     func toggle() {
@@ -20,7 +31,8 @@ final class ClipboardPanelController {
     }
 
     func show() {
-        previousApp = NSWorkspace.shared.frontmostApplication
+        let front = NSWorkspace.shared.frontmostApplication
+        previousApp = front == .current ? lastOtherApp : front
         let view = ClipboardView(clipboard: clipboard, paste: { [weak self] entry in
             guard let self else { return }
             self.close()

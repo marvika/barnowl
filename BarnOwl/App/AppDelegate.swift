@@ -25,6 +25,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] == nil else { return }
         if !DemoMode.isOn { Migration.runIfNeeded() }
         Preferences.registerDefaults()
+        // Closed-lid mode may have been switched off while Barn Owl wasn't running.
+        if Preferences.closedLidMode, !ClosedLidMode.isEnabled { Preferences.closedLidMode = false }
 
         items = StatusItems()
         sections = SectionController(items: items, engine: HidingEngineFactory.make(items: items))
@@ -178,8 +180,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     /// barnowl://settings, barnowl://setup, barnowl://search, barnowl://bar,
     /// barnowl://open?app=NAME, barnowl://place?app=NAME&row=hidden, barnowl://watch?app=NAME,
-    /// barnowl://icon?app=NAME&label=TEXT, barnowl://presenter, barnowl://toggle, barnowl://show-all,
-    /// barnowl://hide, barnowl://keep-awake?minutes=60 (0 or none = indefinitely),
+    /// barnowl://icon?app=NAME&label=TEXT, barnowl://presenter, barnowl://show, barnowl://toggle,
+    /// barnowl://show-all, barnowl://hide, barnowl://keep-awake?minutes=60 (also 2h; 0 or none = indefinitely),
     /// barnowl://keep-awake/stop. For Shortcuts, Raycast and scripts.
     func application(_ application: NSApplication, open urls: [URL]) {
         // A link that launches Barn Owl can arrive before launch has finished.
@@ -254,16 +256,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     }
                 }
             case ("setup", _): onboardingWindow.show()
+            case ("show", _):
+                // Like the arrow, but never hides what's already showing.
+                if sections.state == .collapsed, !bar.isOpen { revealHiddenIcons() }
             case ("toggle", _): sections.toggle()
             case ("show-all", _): sections.showAll()
             case ("hide", _): sections.collapse()
             case ("keep-awake", "/stop"): keepAwake.stop()
             case ("keep-awake", "/extend"):
                 // barnowl://keep-awake/extend?minutes=30
-                let minutes = query?.first { $0.name == "minutes" }?.value.flatMap(Int.init) ?? 15
+                guard let minutes = Self.minutes(in: query, default: 15) else { break }
                 keepAwake.extend(minutes: minutes)
             case ("keep-awake", _):
-                let minutes = query?.first { $0.name == "minutes" }?.value.flatMap(Int.init) ?? 0
+                guard let minutes = Self.minutes(in: query, default: 0) else { break }
                 keepAwake.start(minutes: minutes)
             default:
                 Log.app.error("Unknown URL: \(url.absoluteString)")
@@ -271,11 +276,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    /// The `minutes` of a keep-awake link, read like search does ("90", "2h",
+    /// "1.5h"). nil when it's there but can't be read, so a typo never turns
+    /// into "indefinitely".
+    nonisolated static func minutes(in query: [URLQueryItem]?, default fallback: Int) -> Int? {
+        guard let value = query?.first(where: { $0.name == "minutes" })?.value, !value.isEmpty else { return fallback }
+        guard let minutes = CommandParser.duration(from: value) else {
+            Log.app.error("Can't read keep-awake minutes: \(value)")
+            return nil
+        }
+        return minutes
+    }
+
     func applicationWillTerminate(_ notification: Notification) {
         keepAwake.stop()
         // Never leave the Mac unable to sleep after Barn Owl is gone.
         if Preferences.closedLidMode, ClosedLidMode.isEnabled {
-            ClosedLidMode.set(false)
+            if ClosedLidMode.set(false) { Preferences.closedLidMode = false }
         }
     }
 
