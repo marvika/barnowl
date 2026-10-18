@@ -123,11 +123,17 @@ final class DiskScanner: @unchecked Sendable {
     private var lastReport = Date.distantPast
     private var progress: (@Sendable (Progress) -> Void)?
 
+    /// Folders listed but not entered, shown as not readable: other apps'
+    /// private folders, where looking makes macOS ask "would like to access
+    /// data from other apps" again and again unless Barn Owl has Full Disk Access.
+    private var notEntered: Set<String> = []
+
     /// Scans `root` (by default the whole Data volume). Returns nil if cancelled.
-    func scan(root: String = DiskScanner.dataVolume, workers: Int = 8,
+    func scan(root: String = DiskScanner.dataVolume, workers: Int = 8, skipping: Set<String> = [],
               progress: @escaping @Sendable (Progress) -> Void) async -> DiskScan? {
         Self.neverDownloadFromICloud()
         let start = Date()
+        notEntered = skipping
         prepare(root: root, progress: progress)
         await withTaskCancellationHandler {
             await withCheckedContinuation { (done: CheckedContinuation<Void, Never>) in
@@ -225,10 +231,13 @@ final class DiskScanner: @unchecked Sendable {
             if entry.isFolder {
                 let index = Int32(nodes.count)
                 let ext = (entry.name as NSString).pathExtension.lowercased()
+                let childPath = path + "/" + entry.name
+                let enter = !notEntered.contains(path)
                 nodes.append(DiskScan.Node(name: entry.name, parent: folder,
-                                           kind: Self.packageExtensions.contains(ext) ? .package : .folder))
+                                           kind: !enter ? .unreadable
+                                               : Self.packageExtensions.contains(ext) ? .package : .folder))
                 children.append(index)
-                pending.append((index, path + "/" + entry.name))
+                if enter { pending.append((index, childPath)) }
                 continue
             }
             // A hard link: count the file once, wherever it's first seen.

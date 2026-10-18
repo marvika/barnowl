@@ -180,7 +180,7 @@ extension CleanupRule {
                     paths: ["~/Library/Developer/CoreSimulator/Devices"]),
         CleanupRule(id: "docker", title: "Docker", detail: "Images, containers and volumes. Clean up in Docker Desktop, or with docker system prune.",
                     symbol: "shippingbox.circle.fill", group: .yours, safety: .yourCall, method: .none,
-                    paths: ["~/Library/Containers/com.docker.docker/Data/vms"]),
+                    paths: ["~/Library/Containers/com.docker.docker/Data/vms"], needsFullDiskAccess: true),
     ]
 }
 

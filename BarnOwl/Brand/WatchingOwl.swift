@@ -45,6 +45,8 @@ struct WatchingOwl: View {
     var tired = false
     /// Opens its beak, hoping for a snack.
     var hungry = false
+    /// Eyes glowing, searching.
+    var glows = false
     var accessory: OwlOutfit?
     /// nil uses the colours chosen in Settings.
     var palette: OwlPalette?
@@ -106,7 +108,7 @@ struct WatchingOwl: View {
                 OwlView(eyesOpen: awake, look: look, blinks: visible, surprised: surprised || roused || stunned,
                         happy: happy || cheering,
                         hearts: loving, dizzy: dizzy, lids: lids, wingLift: wingLift, turn: turn, tilt: tilt, yawn: yawn,
-                        accessory: outfit, coverEyes: coverEyes, shush: shush, glowEyes: glow, tired: tired,
+                        accessory: outfit, coverEyes: coverEyes, shush: shush, glowEyes: glow || glows, tired: tired,
                         bellyTint: bellyTint, faceDip: faceDip, palette: palette)
                     .scaleEffect(x: 1 + depth * 0.7 * breath, y: 1 - depth * breath, anchor: .bottom)
             }
@@ -397,6 +399,22 @@ struct WatchingOwl: View {
             OwlMoment.chargedUp.meet()
             burst(.sparkles)
             bounce(height: 9)
+        case .cleaned(let message):
+            say(message, for: 2)
+            OwlMoment.springCleaning.meet()
+            burst(.confetti)
+            Task {
+                for angle in [-12.0, 12, -12, 0] {
+                    withAnimation(.easeInOut(duration: 0.15)) { tilt = angle; wingLift = angle == 0 ? 0 : 0.8 }
+                    try? await Task.sleep(for: .milliseconds(150))
+                }
+            }
+            bounce(height: 10)
+        case .bigFind(let message):
+            say(message, for: 2)
+            OwlMoment.bigFind.meet()
+            hold(.stunned, for: 1.6)
+            flap(times: 2)
         case .thrown:
             say("Whee!", for: 1.2)
             OwlMoment.thrown.meet()

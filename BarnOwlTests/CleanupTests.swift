@@ -56,3 +56,31 @@ struct CleanupTests {
         #expect(Set(ids).count == ids.count)
     }
 }
+
+struct CleanupRunnerTests {
+    @Test func trashesPickedItemsAndPutsThemBack() async throws {
+        let rule = try #require(CleanupRule.all.first { $0.id == "app-caches" })
+        let caches = FileManager.default.homeDirectoryForCurrentUser.appending(path: "Library/Caches")
+        let item = caches.appending(path: "barn-owl-test-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: item, withIntermediateDirectories: true)
+        try Data(repeating: 7, count: 4096).write(to: item.appending(path: "cache.bin"))
+        defer { try? FileManager.default.removeItem(at: item) }
+
+        let outcome = await CleanupRunner.run(rule, items: [item.path])
+        #expect(outcome.done == [item.path])
+        #expect(!FileManager.default.fileExists(atPath: item.path))
+        let trashed = try #require(outcome.trashed.first)
+        defer { try? FileManager.default.removeItem(at: trashed.to) }
+
+        #expect(CleanupRunner.undo(outcome.trashed) == 1)
+        #expect(FileManager.default.fileExists(atPath: item.appending(path: "cache.bin").path))
+    }
+
+    @Test func refusesItemsTheRuleKeeps() async throws {
+        let rule = try #require(CleanupRule.all.first { $0.id == "logs" })
+        let kept = FileManager.default.homeDirectoryForCurrentUser.appending(path: "Library/Logs/DiagnosticReports").path
+        let outcome = await CleanupRunner.run(rule, items: [kept])
+        #expect(outcome.done.isEmpty)
+        #expect(FileManager.default.fileExists(atPath: kept) || outcome.skipped.isEmpty == false)
+    }
+}
