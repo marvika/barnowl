@@ -304,7 +304,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         let flags = event.modifierFlags
         if event.type == .rightMouseUp || flags.contains(.control) {
-            bar.close()
             quickPanel.toggle(under: items.toggle.button?.window?.frame)
         } else if flags.contains(.option) {
             bar.close()

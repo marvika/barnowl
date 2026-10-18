@@ -148,7 +148,7 @@ final class KeepAwakeController {
 
         // Low battery ends everything, so a forgotten session can't drain it.
         let threshold = Preferences.keepAwakeStopBelowBattery
-        if threshold > 0, !snapshot.onAC, let percent = snapshot.batteryPercent, percent < threshold {
+        if Self.batteryTooLow(threshold: threshold, onAC: snapshot.onAC, percent: snapshot.batteryPercent) {
             if session != nil || activeRule != nil {
                 stoppedForBattery = true
                 if session != nil { endSession(reason: "Battery is below \(threshold)%, so your Mac can sleep again.") }
@@ -157,6 +157,11 @@ final class KeepAwakeController {
                 onChange?()
             }
             return
+        }
+        // Plugged in (or the limit lowered): the low-battery note no longer applies.
+        if stoppedForBattery {
+            stoppedForBattery = false
+            onChange?()
         }
 
         if let session {
@@ -180,6 +185,11 @@ final class KeepAwakeController {
         }
         applyAssertion()
         nudgeIfNeeded()
+    }
+
+    nonisolated static func batteryTooLow(threshold: Int, onAC: Bool, percent: Int?) -> Bool {
+        guard threshold > 0, !onAC, let percent else { return false }
+        return percent < threshold
     }
 
     /// Reads only what the session and enabled rules need. Reading the
@@ -206,10 +216,7 @@ final class KeepAwakeController {
 
     private func applyAssertion() {
         guard isActive else { return releaseAssertion() }
-        // Display sleep is allowed only if every active source allows it.
-        let sessionAllows = session == nil || Preferences.keepAwakeAllowDisplaySleep
-        let ruleAllows = activeRule?.allowDisplaySleep ?? true
-        let type = sessionAllows && ruleAllows && !presenting ? "PreventUserIdleSystemSleep" : "PreventUserIdleDisplaySleep"
+        let type = displayMaySleep ? "PreventUserIdleSystemSleep" : "PreventUserIdleDisplaySleep"
         guard type != assertionType || assertionID == 0 else { return }
         releaseAssertion()
         let result = IOPMAssertionCreateWithName(type as CFString, IOPMAssertionLevel(kIOPMAssertionLevelOn),
@@ -220,6 +227,17 @@ final class KeepAwakeController {
             Log.keepAwake.error("IOPMAssertionCreateWithName failed: \(result)")
             assertionID = 0
         }
+    }
+
+    /// Display sleep is allowed only if every active source allows it.
+    private var displayMaySleep: Bool {
+        Self.displayMaySleep(session: session, sessionAllows: Preferences.keepAwakeAllowDisplaySleep,
+                             rule: activeRule, presenting: presenting)
+    }
+
+    nonisolated static func displayMaySleep(session: Session?, sessionAllows: Bool, rule: KeepAwakeRule?,
+                                            presenting: Bool) -> Bool {
+        (session == nil || sessionAllows) && (rule?.allowDisplaySleep ?? true) && !presenting
     }
 
     private func releaseAssertion() {
@@ -234,9 +252,10 @@ final class KeepAwakeController {
     /// Chat apps (Teams, Slack) mark you Away after a few idle minutes, even
     /// while the Mac stays awake. With "keep me available" on, an idle Mac
     /// gets a one-pixel pointer nudge every four minutes, which they count as
-    /// activity. Only while keeping awake.
+    /// activity. Only while keeping awake, and not while the display may
+    /// sleep: a nudge counts as you, so the display would never sleep or lock.
     private func nudgeIfNeeded() {
-        guard isActive, Preferences.keepAwakeKeepAvailable,
+        guard isActive, Preferences.keepAwakeKeepAvailable, !displayMaySleep,
               SystemConditions.secondsSinceInput > 4 * 60, Date().timeIntervalSince(lastNudge) > 4 * 60,
               let location = CGEvent(source: nil)?.location else { return }
         lastNudge = Date()

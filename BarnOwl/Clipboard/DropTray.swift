@@ -33,6 +33,8 @@ final class DropTray {
     @ObservationIgnored private var collapseTask: Task<Void, Never>?
     @ObservationIgnored private var hovering = false
     @ObservationIgnored private let outsideClicks = OutsideClickMonitor()
+    /// True while the tray changes the shelf itself, and takes care of its own mode.
+    @ObservationIgnored private var changingShelf = false
 
     init(clipboard: ClipboardHistory) {
         self.clipboard = clipboard
@@ -52,7 +54,19 @@ final class DropTray {
         if let up = NSEvent.addGlobalMonitorForEvents(matching: .leftMouseUp, handler: { [weak self] _ in
             MainActor.assumeIsolated { self?.mouseUp() }
         }) { monitors.append(up) }
+        // The clipboard panel's Nest tab changes the shelf too: show or hide
+        // the tab to match, after the change has landed.
+        clipboard.onShelfChange = { [weak self] in
+            guard let self, !self.changingShelf else { return }
+            Task { self.refresh() }
+        }
         settle()
+    }
+
+    private func changeShelf(_ change: () -> Void) {
+        changingShelf = true
+        change()
+        changingShelf = false
     }
 
     private func mouseDown() {
@@ -82,7 +96,7 @@ final class DropTray {
         owlTargeted = false
         // The open nest's owl takes over from the receiving one: cue it once it's there.
         cueOwl(fedToOwl ? .nom : .caught, after: 0.35)
-        clipboard.addToShelf(files)
+        changeShelf { clipboard.addToShelf(files) }
         justReceived = true
         Task { [weak self] in
             try? await Task.sleep(for: .seconds(1.6))
@@ -108,7 +122,7 @@ final class DropTray {
     }
 
     func clear() {
-        clipboard.clearShelf()
+        changeShelf { clipboard.clearShelf() }
         // A sweep of the wing, then the empty nest tucks away.
         cueOwl(.sweep, after: 0)
         collapseTask?.cancel()
@@ -127,7 +141,7 @@ final class DropTray {
     }
 
     func remove(_ url: URL) {
-        clipboard.removeFromShelf(url)
+        changeShelf { clipboard.removeFromShelf(url) }
         if clipboard.shelf.isEmpty { settle() }
     }
 
@@ -135,7 +149,7 @@ final class DropTray {
     /// unless you'd rather keep them (Settings → Clipboard).
     func takenOut(_ urls: [URL]) {
         guard !Preferences.nestKeepsDraggedFiles else { return }
-        clipboard.removeFromShelf(urls)
+        changeShelf { clipboard.removeFromShelf(urls) }
         cueOwl(.bye, after: 0)
         guard clipboard.shelf.isEmpty else { return }
         // Wave goodbye on the tab, then tuck away.
@@ -167,13 +181,13 @@ final class DropTray {
     /// Back to rest: a tab if something's held (and the tab is wanted), else nothing.
     func settle() {
         isTargeted = false
-        clipboard.pruneShelf()
+        changeShelf { clipboard.pruneShelf() }
         let showTab = Preferences.dropTrayEnabled && Preferences.dropTrayTab && !clipboard.shelf.isEmpty
         set(showTab ? .tab : .hidden)
     }
 
     private func set(_ newMode: Mode) {
-        if newMode == .open || newMode == .tab { clipboard.pruneShelf() }
+        if newMode == .open || newMode == .tab { changeShelf { clipboard.pruneShelf() } }
         mode = newMode
         if newMode == .hidden {
             outsideClicks.stop()

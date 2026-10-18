@@ -57,6 +57,37 @@ final class FloatingPanel: NSPanel {
     }
 }
 
+/// One panel at a time: opening the Perch, the quick panel, search or the
+/// clipboard closes whichever other one is open. Clicks on Barn Owl's own
+/// icons and hotkeys never reach the outside-click monitor, so it can't.
+@MainActor
+final class OpenPanel {
+    static let shared = OpenPanel()
+    private var current: (owner: ObjectIdentifier, close: () -> Void)?
+
+    /// Call when `owner` shows its panel; closes another owner's.
+    func opening(_ owner: AnyObject, close: @escaping () -> Void) {
+        let id = ObjectIdentifier(owner)
+        if let previous = current, previous.owner != id {
+            current = nil
+            previous.close()
+        }
+        current = (id, close)
+    }
+
+    /// Call when `owner` closes its panel.
+    func closed(_ owner: AnyObject) {
+        if current?.owner == ObjectIdentifier(owner) { current = nil }
+    }
+
+    /// For windows such as Settings, which shouldn't open under a panel.
+    func closeAll() {
+        let previous = current
+        current = nil
+        previous?.close()
+    }
+}
+
 /// Closes a panel when the user clicks anywhere outside it.
 @MainActor
 final class OutsideClickMonitor {

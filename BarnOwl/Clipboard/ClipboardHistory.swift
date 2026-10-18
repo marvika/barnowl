@@ -44,7 +44,11 @@ final class ClipboardHistory {
     /// For the owl in the clipboard panel: a skipped password, a colour.
     var owlCue: OwlCue?
     @ObservationIgnored private(set) var lastSecretSkipped = Date.distantPast
-    private(set) var shelf: [URL] = []
+    private(set) var shelf: [URL] = [] {
+        didSet { if shelf != oldValue { onShelfChange?() } }
+    }
+    /// For the Nest under the notch, which shows or hides its tab to match.
+    @ObservationIgnored var onShelfChange: (() -> Void)?
 
     @ObservationIgnored private var changeCount = NSPasteboard.general.changeCount
     @ObservationIgnored private var task: Task<Void, Never>?

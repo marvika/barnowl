@@ -241,10 +241,12 @@ final class QuickPanelController: NSObject {
         panel.makeKey()
         self.panel = panel
         outsideClicks.start { [weak self] in self?.close() }
+        OpenPanel.shared.opening(self) { [weak self] in self?.close() }
     }
 
     func close() {
         outsideClicks.stop()
+        OpenPanel.shared.closed(self)
         panel?.orderOut(nil)
         panel = nil
     }

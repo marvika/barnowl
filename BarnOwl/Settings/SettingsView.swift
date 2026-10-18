@@ -673,7 +673,7 @@ private struct KeepAwakePane: View {
                 }
                 Toggle(isOn: $keepAvailable) {
                     BadgeLabel(title: "Keep me available",
-                               subtitle: "Nudges the pointer every few idle minutes so Teams and Slack don't show you as Away.",
+                               subtitle: "Nudges the pointer every few idle minutes so Teams and Slack don't show you as Away. Paused while the display may sleep.",
                                symbol: "person.crop.circle.badge.checkmark", color: .green)
                 }
                 Picker(selection: $stopBelowBattery) {

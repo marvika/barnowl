@@ -21,6 +21,16 @@ before 1.0, a minor version can change behaviour.
 - Pinned images no longer come back empty after a restart.
 - The clipboard panel keeps the right entry selected when the list changes,
   and pastes into your app when opened from search or Settings.
+- One panel at a time: opening the quick panel, the clipboard, search or
+  Settings closes the Perch (and the other way round), instead of leaving it
+  open underneath.
+- The Nest's tab under the notch keeps up when you add, remove or clear files
+  from the clipboard panel's Nest tab.
+- After a session stops for low battery, plugging in clears "Stopped: battery
+  low" from the status.
+- When presenting ends, desktop icons you showed again by hand stay showing.
+- **Keep me available** pauses while the display may sleep, so the display can
+  still sleep and your Mac can still lock.
 
 ## 0.9.0
 
