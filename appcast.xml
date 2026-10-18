@@ -10,6 +10,21 @@
         <language>en</language>
         <!-- Releases, newest first -->
         <item>
+            <title>Barn Owl 0.10.2</title>
+            <link>https://github.com/marvika/barnowl/releases/tag/v0.10.2</link>
+            <pubDate>Sun, 18 Oct 2026 19:48:28 +0000</pubDate>
+            <sparkle:version>14</sparkle:version>
+            <sparkle:shortVersionString>0.10.2</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>26.0</sparkle:minimumSystemVersion>
+            <sparkle:fullReleaseNotesLink>https://github.com/marvika/barnowl/releases/tag/v0.10.2</sparkle:fullReleaseNotesLink>
+            <description sparkle:format="markdown"><![CDATA[
+- Closed-lid mode stays on through updates, and through restarts when Barn
+  Owl opens at login, instead of switching off (and asking for your password
+  in the middle of shutting down). Quitting Barn Owl still turns it off.
+]]></description>
+            <enclosure url="https://github.com/marvika/barnowl/releases/download/v0.10.2/BarnOwl-0.10.2.zip" sparkle:edSignature="fgyaJOdNcBLa1L9NFvmDZ8dpFzA7zJ9q24kYKSiTMkNKzxpAVeYyQLq49b+T1a5ubjamS7v7NjCtd0/c+ajkAw==" length="7585691" type="application/octet-stream"/>
+        </item>
+        <item>
             <title>Barn Owl 0.10.1</title>
             <link>https://github.com/marvika/barnowl/releases/tag/v0.10.1</link>
             <pubDate>Sun, 18 Oct 2026 19:30:52 +0000</pubDate>
