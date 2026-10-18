@@ -10,13 +10,14 @@
 #   barnowl watch <app> [off]                show the icon when it changes
 #   barnowl icon <app> <text>|reset          replace an app's icon with text or an emoji
 #   barnowl settings [layout|general|menuBar|appearance|keepAwake|toggles|clipboard|shortcuts]
+#   barnowl barn                             free up disk space
 #   barnowl hoot                             say hello to the owl
 
 set -e
 encode() { python3 -c 'import sys, urllib.parse; print(urllib.parse.quote(sys.argv[1]))' "$1"; }
 go() { open -g "barnowl://$1"; }
 script=$0
-usage() { sed -n '2,14p' "$script" | sed 's/^# \{0,1\}//'; }
+usage() { sed -n '2,15p' "$script" | sed 's/^# \{0,1\}//'; }
 
 # The owl, in amber where the terminal has colour.
 owl() {
@@ -46,6 +47,7 @@ case "$1" in
   bar) go bar ;;
   search) go search ;;
   clipboard) go clipboard ;;
+  barn|disk) go barn ;;
   awake)
     case "${2:-}" in
       stop|off) go keep-awake/stop ;;

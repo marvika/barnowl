@@ -12,6 +12,7 @@ struct QuickPanelView: View {
             KeepAwakeCard(model: model, close: close)
             Divider()
             TogglesGrid(model: model)
+            DiskGlance(model: model, close: close)
             Divider()
             footer
         }
@@ -403,5 +404,51 @@ struct AwakeOwlBadge: View {
         }
         if model.presenter.isPresenting { outfit = outfit + .sunglasses }
         return outfit
+    }
+}
+
+/// How full the disk is, at a glance; opens the Barn.
+private struct DiskGlance: View {
+    let model: AppModel
+    let close: () -> Void
+    @State private var space = DemoMode.isOn ? BarnDemo.space : DiskSpace.current()
+
+    /// Under a tenth free, or under 20 GB.
+    private var low: Bool {
+        guard let space else { return false }
+        return space.freeFraction < 0.1 || space.available < 20_000_000_000
+    }
+
+    var body: some View {
+        if let space {
+            Button {
+                close()
+                model.showBarn()
+            } label: {
+                HStack(spacing: 10) {
+                    ZStack {
+                        Circle().stroke(Color.primary.opacity(0.12), lineWidth: 4)
+                        Circle()
+                            .trim(from: 0, to: 1 - space.freeFraction)
+                            .stroke(low ? Brand.amber : Brand.lavender, style: StrokeStyle(lineWidth: 4, lineCap: .round))
+                            .rotationEffect(.degrees(-90))
+                    }
+                    .frame(width: 24, height: 24)
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text("\(Bytes.format(space.available)) free").font(.callout.weight(.semibold)).monospacedDigit()
+                        Text(low ? "Your disk is nearly full" : "of \(Bytes.format(space.total))")
+                            .font(.caption).foregroundStyle(low ? Brand.amber : .secondary)
+                    }
+                    Spacer()
+                    Text("Tidy Up").font(.callout)
+                    Image(systemName: "chevron.right").font(.caption).foregroundStyle(.secondary)
+                }
+                .padding(10)
+                .background(Color.primary.opacity(0.05), in: .rect(cornerRadius: 12))
+                .contentShape(.rect(cornerRadius: 12))
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("\(Bytes.format(space.available)) free. Open the Barn to free up space.")
+        }
     }
 }

@@ -17,6 +17,8 @@ enum PrefKey {
     static let hiddenIconsDisplay = "hiddenIconsDisplay"
     static let owlPalette = "owlPalette"
     static let owlPersonality = "owlPersonality"
+    static let barnLowSpaceWarning = "barnLowSpaceWarning"
+    static let barnWeeklyCheck = "barnWeeklyCheck"
     static let newIconPlacement = "newIconPlacement"
     static let keepAwakeStopBelowBattery = "keepAwakeStopBelowBattery"
     static let keepAwakeKeepAvailable = "keepAwakeKeepAvailable"
@@ -57,6 +59,8 @@ enum Preferences {
             PrefKey.hiddenIconsDisplay: HiddenIconsDisplay.automatic.rawValue,
             PrefKey.owlPalette: OwlPalette.golden.rawValue,
             PrefKey.owlPersonality: OwlPersonality.lively.rawValue,
+            PrefKey.barnLowSpaceWarning: true,
+            PrefKey.barnWeeklyCheck: false,
             PrefKey.newIconPlacement: NewIconPlacement.hidden.rawValue,
             PrefKey.keepAwakeStopBelowBattery: 10,
             PrefKey.keepAwakeKeepAvailable: false,
@@ -129,6 +133,10 @@ enum Preferences {
     static var dropTrayEnabled: Bool { defaults.bool(forKey: PrefKey.dropTrayEnabled) }
     /// Keep a small tab under the notch while the shelf holds files.
     static var dropTrayTab: Bool { defaults.bool(forKey: PrefKey.dropTrayTab) }
+    /// Warn once a day when the disk is nearly full.
+    static var barnLowSpaceWarning: Bool { defaults.bool(forKey: PrefKey.barnLowSpaceWarning) }
+    /// Look for things to tidy once a week.
+    static var barnWeeklyCheck: Bool { defaults.bool(forKey: PrefKey.barnWeeklyCheck) }
     static var owlPersonality: OwlPersonality {
         OwlPersonality(rawValue: defaults.string(forKey: PrefKey.owlPersonality) ?? "") ?? .lively
     }

@@ -41,6 +41,8 @@ struct OwlCue: Equatable {
         /// Clipboard.
         case didntSee, colour(Color)
         case charged, thrown
+        /// The Barn.
+        case cleaned(String), bigFind(String)
     }
 
     let kind: Kind
@@ -58,6 +60,7 @@ enum OwlMoment: String, CaseIterable, Identifiable {
     case presenting, onCall, coffee, doubleShot, allNighter, lidClosed, atTheDesk, runningLow, chargedUp
     case lightsOut, shush, peekaboo, secrets, found, puzzled, bye, sweep, nom, didntSee, pretty
     case sweetDreams, hooray, santa, witch, newYear, birthday, morning, nightOwl, thrown
+    case springCleaning, bigFind
 
     var id: Self { self }
 
@@ -101,6 +104,8 @@ enum OwlMoment: String, CaseIterable, Identifiable {
         case .morning: "Morning!"
         case .nightOwl: "Night owl"
         case .thrown: "Whee!"
+        case .springCleaning: "Spring cleaning"
+        case .bigFind: "Big find"
         }
     }
 
@@ -144,6 +149,8 @@ enum OwlMoment: String, CaseIterable, Identifiable {
         case .morning: "Say good morning."
         case .nightOwl: "Stay up past midnight."
         case .thrown: "Throw the owl in About."
+        case .springCleaning: "Free up space in the Barn."
+        case .bigFind: "Find something over 10 GB in the Barn."
         }
     }
 
@@ -188,6 +195,8 @@ enum OwlMoment: String, CaseIterable, Identifiable {
         case .morning: OwlView(blinks: false, lids: 0.4, yawn: 0.8)
         case .nightOwl: OwlView(blinks: false, tilt: 8, glowEyes: true)
         case .thrown: OwlView(blinks: false, happy: true, wingLift: 1.1, tilt: 18)
+        case .springCleaning: OwlView(blinks: false, happy: true, wingLift: 0.8, tilt: -10)
+        case .bigFind: OwlView(blinks: false, surprised: true, wingLift: 0.9)
         }
     }
 

@@ -9,6 +9,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var quickPanel: QuickPanelController!
     private var model: AppModel!
     private var settingsWindow: SettingsWindowController!
+    private var barnWindow: BarnWindowController!
+    private var barnWatch: BarnWatch!
     private var onboardingWindow: OnboardingWindowController!
     private var scanner: ItemScanner!
     private let images = ItemImageCache()
@@ -69,6 +71,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         model.showSetup = { [weak self] in self?.onboardingWindow.show() }
         model.openSettingsWindow = { [weak self] in self?.settingsWindow.show() }
+        barnWindow = BarnWindowController(barn: model.barn)
+        model.showBarn = { [weak self] in self?.barnWindow.show() }
+        barnWatch = BarnWatch(barn: model.barn) { [weak self] in self?.barnWindow.show() }
+        barnWatch.start()
         quickPanel = QuickPanelController(model: model)
         quickPanel.syncOwlIcon()
         model.watcher.onSurface = { [weak self] frame in self?.quickPanel.glance(toward: frame) }
@@ -198,6 +204,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 model.showSettings(pane)
             case ("search", _): search.show()
             case ("clipboard", _): clipboardPanel.show()
+            case ("barn", _): barnWindow.show()
             case ("presenter", _):
                 // barnowl://presenter (toggle), ?on=1 or ?on=0
                 let on = query?.first { $0.name == "on" }?.value

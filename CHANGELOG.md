@@ -3,6 +3,20 @@
 All notable changes to Barn Owl. Versions follow [semantic versioning](https://semver.org);
 before 1.0, a minor version can change behaviour.
 
+## Unreleased
+
+- **The Barn**, for disk space: a storage bar that adds up to the whole
+  disk, and Tidy Up, sorted by how safe things are. Safe caches and build
+  files go in one click; macOS installers, apps you haven't opened in six
+  months, big old downloads and app caches are yours to pick, go to the
+  Trash with Undo, and can be emptied from it on their own. Each clean-up is
+  locked to its own folders, waits while its app or a build is running, and
+  asks before anything that can't be undone. Explore draws a ring map of the
+  disk with the biggest files by kind, Quick Look and a basket for the
+  Trash. It warns when the disk is nearly full, and never cleans by itself.
+- Barn Owl no longer uses CPU while idle: closed panels are torn down and
+  hidden owls stop.
+
 ## 0.9.1
 
 - The owl's speech bubble stays inside its window and no longer covers the

@@ -12,6 +12,7 @@ enum AppCommand: Hashable, Sendable, Identifiable {
     case hiddenFiles
     case sleepDisplay
     case clipboard
+    case barn
     case showAllIcons
     case settings(SettingsPaneID)
 
@@ -30,6 +31,7 @@ enum AppCommand: Hashable, Sendable, Identifiable {
         case .hiddenFiles: "Show or hide hidden files"
         case .sleepDisplay: "Sleep display"
         case .clipboard: "Clipboard history"
+        case .barn: "Free up disk space"
         case .showAllIcons: "Show all menu bar icons"
         case .settings(let pane): pane == .layout ? "Arrange menu bar icons" : "\(pane.title) settings"
         }
@@ -46,6 +48,7 @@ enum AppCommand: Hashable, Sendable, Identifiable {
         case .hiddenFiles: "eye.fill"
         case .sleepDisplay: "moon.fill"
         case .clipboard: "doc.on.clipboard"
+        case .barn: "externaldrive.fill"
         case .showAllIcons: "eye.circle"
         case .settings(let pane): pane == .layout ? "square.grid.3x1.below.line.grid.1x2" : "gearshape"
         }
@@ -64,6 +67,7 @@ enum AppCommand: Hashable, Sendable, Identifiable {
         case .hiddenFiles: ["hidden", "files", "dotfiles", "finder"]
         case .sleepDisplay: ["sleep", "display", "screen", "lock"]
         case .clipboard: ["clipboard", "paste", "copy", "history", "nest", "shelf"]
+        case .barn: ["barn", "disk", "storage", "space", "free", "tidy", "junk", "cache", "full", "cleanup"]
         case .showAllIcons: ["show", "all", "icons", "reveal"]
         case .settings(let pane): ["settings", "preferences", pane.rawValue.lowercased()] + pane.extraKeywords
         }
@@ -111,7 +115,7 @@ enum CommandParser {
         guard let first = words.first, first.count >= 2 || words.count > 1 else { return [] }
 
         var all: [AppCommand] = [.stopKeepAwake, .presenter, .darkMode, .microphone, .desktopIcons,
-                                     .hiddenFiles, .sleepDisplay, .clipboard, .showAllIcons]
+                                     .hiddenFiles, .sleepDisplay, .clipboard, .barn, .showAllIcons]
         all += SettingsPaneID.allCases.map(AppCommand.settings)
 
         var results: [AppCommand] = []

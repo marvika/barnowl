@@ -117,6 +117,25 @@ enum IconRenderer {
             write(OwlSheet(), to: URL(fileURLWithPath: arguments[index + 1]), scale: 2)
             exit(0)
         }
+        if let index = arguments.firstIndex(of: "--measure-scan"), arguments.count > index + 1 {
+            // Times a scan and prints what it found, for tuning the scanner.
+            let root = arguments[index + 1]
+            let done = DispatchSemaphore(value: 0)
+            Task.detached {
+                if let scan = await DiskScanner().scan(root: root, progress: { _ in }) {
+                    print("Scanned \(root) in \(String(format: "%.1f", scan.duration)) s")
+                    print("  \(scan.total.files) files, \(Bytes.format(scan.total.size)) on disk, " +
+                          "\(Bytes.format(scan.total.reclaimable)) reclaimable, \(scan.nodes.count) entries kept")
+                    print("  \(scan.unreadable.count) folders not readable")
+                    for child in scan.children(of: 0).prefix(8) {
+                        print("  \(Bytes.format(scan.nodes[Int(child)].size))\t\(scan.displayPath(of: child))")
+                    }
+                }
+                done.signal()
+            }
+            done.wait()
+            exit(0)
+        }
         if let index = arguments.firstIndex(of: "--render-owl-strip"), arguments.count > index + 1 {
             write(OwlStrip(), to: URL(fileURLWithPath: arguments[index + 1]), scale: 2)
             exit(0)

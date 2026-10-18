@@ -18,6 +18,8 @@ final class AppModel {
     let appearance = MenuBarAppearance()
     let clipboard = ClipboardHistory()
     let updater = Updater()
+    let barn = BarnModel()
+    @ObservationIgnored var showBarn: () -> Void = {}
     @ObservationIgnored var showSetup: () -> Void = {}
     @ObservationIgnored var openSettingsWindow: () -> Void = {}
     @ObservationIgnored var showSearch: () -> Void = {}
@@ -72,6 +74,7 @@ final class AppModel {
         case .hiddenFiles: QuickToggles.toggleHiddenFiles()
         case .sleepDisplay: QuickToggles.sleepDisplay()
         case .clipboard: showClipboard()
+        case .barn: showBarn()
         case .showAllIcons: sections.showAll()
         case .settings(let pane): showSettings(SettingsPane(rawValue: pane.rawValue))
         }
