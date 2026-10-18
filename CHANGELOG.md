@@ -3,7 +3,7 @@
 All notable changes to Barn Owl. Versions follow [semantic versioning](https://semver.org);
 before 1.0, a minor version can change behaviour.
 
-## Unreleased
+## 0.10.1
 
 - Lighter on your Mac: Barn Owl no longer hears every pointer movement
   unless you've turned on showing hidden icons by hovering or scrolling
