@@ -144,10 +144,15 @@ private struct KeepAwakeCard: View {
             HStack(spacing: 14) {
                 Toggle("Let display sleep", isOn: $allowDisplaySleep)
                 Toggle("Keep me available", isOn: $keepAvailable)
-                    .help("Nudges the pointer every few idle minutes so Teams and Slack don't show you as Away.")
+                    .help("Nudges the pointer every few idle minutes so Teams and Slack don't show you as Away. Paused while the display may sleep.")
             }
             .toggleStyle(.checkbox)
             .font(.callout)
+            if allowDisplaySleep, keepAvailable {
+                // A nudge counts as you, so it would keep the display on.
+                Text("Keep me available pauses while the display may sleep.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
 
             let rules = keepAwake.rules.rules
             if !rules.isEmpty {

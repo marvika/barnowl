@@ -190,7 +190,9 @@ Each rule can let the display sleep or keep it on.
 - **Let the display sleep:** the Mac keeps running; only the screen turns
   off.
 - **Keep me available:** while keeping awake, nudges the pointer by one pixel
-  every few idle minutes, so Teams and Slack don't show you as Away.
+  every few idle minutes, so Teams and Slack don't show you as Away. It
+  pauses while the display may sleep, since a nudge would keep the display on
+  and stop your Mac from locking.
 - **Stop when battery is below** 5, 10 (the default), 20 or 30%.
 - **Notify me when a session ends.**
 - **Closed-lid mode:** keeps the Mac running with the lid closed, even

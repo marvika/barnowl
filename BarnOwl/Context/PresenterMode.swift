@@ -62,16 +62,21 @@ final class PresenterMode {
             presenting ? await hideVisibleIcons() : await restoreIcons()
         }
         keepAwake.setPresenting(presenting && Preferences.presenterKeepAwake)
-        if Preferences.presenterHideDesktopIcons {
-            if presenting, !QuickToggles.desktopIconsHidden {
-                QuickToggles.toggleDesktopIcons()
-                hidDesktopIcons = true
-            } else if !presenting, hidDesktopIcons {
-                QuickToggles.toggleDesktopIcons()
-                hidDesktopIcons = false
-            }
-        }
+        let switchesDesktop = Self.switchesDesktopIcons(presenting: presenting,
+                                                        enabled: Preferences.presenterHideDesktopIcons,
+                                                        hidden: QuickToggles.desktopIconsHidden,
+                                                        hidThem: hidDesktopIcons)
+        if switchesDesktop { QuickToggles.toggleDesktopIcons() }
+        hidDesktopIcons = presenting && switchesDesktop
         await finishChange(presenting)
+    }
+
+    /// Hides the desktop icons as presenting starts, if they're showing. At
+    /// the end, shows them again only if Barn Owl hid them and they're still
+    /// hidden: you may have shown them by hand meanwhile.
+    nonisolated static func switchesDesktopIcons(presenting: Bool, enabled: Bool, hidden: Bool,
+                                                 hidThem: Bool) -> Bool {
+        presenting ? enabled && !hidden : hidThem && hidden
     }
 
     /// Moves every other app's visible icon into the hidden section, without

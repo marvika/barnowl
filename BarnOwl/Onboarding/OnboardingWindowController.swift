@@ -24,6 +24,7 @@ final class OnboardingWindowController: NSObject, NSWindowDelegate {
             window.center()
             self.window = window
         }
+        OpenPanel.shared.closeAll()
         NSApp.activate()
         window?.makeKeyAndOrderFront(nil)
     }

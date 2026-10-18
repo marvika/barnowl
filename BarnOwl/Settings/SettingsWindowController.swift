@@ -21,6 +21,7 @@ final class SettingsWindowController {
             window.center()
             self.window = window
         }
+        OpenPanel.shared.closeAll()
         NSApp.activate()
         window?.makeKeyAndOrderFront(nil)
     }
