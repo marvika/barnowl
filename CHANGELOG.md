@@ -3,7 +3,7 @@
 All notable changes to Barn Owl. Versions follow [semantic versioning](https://semver.org);
 before 1.0, a minor version can change behaviour.
 
-## Unreleased
+## 0.9.1
 
 - The owl's speech bubble stays inside its window and no longer covers the
   text next to the owl: the step titles in setup, "Keep Awake" in the quick
