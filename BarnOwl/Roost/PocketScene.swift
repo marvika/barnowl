@@ -516,7 +516,8 @@ enum PocketPaint {
         for cell in cells {
             canvas.put(cell[0] + cx, cell[1] + base, cells.contains([cell[0], cell[1] + 2]) ? light : shade)
         }
-        for (index, dx) in (small ? [-4, 0, 4, 8] : [-6, -2, 2, 6, 10]).enumerated() {
+        let drops: [Int] = small ? [-4, 0, 4, 8] : [-6, -2, 2, 6, 10]
+        for (index, dx) in drops.enumerated() {
             let dy = 2 + (index % 2) * 2
             canvas.put(dx + cx, base + dy, drop)
             canvas.put(dx + cx, base + dy + 1, drop)
