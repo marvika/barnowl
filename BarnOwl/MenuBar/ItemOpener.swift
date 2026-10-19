@@ -51,8 +51,11 @@ final class ItemOpener {
         guard await mover.move(item.windowID, to: destination) else { return false }
         await press(item)
         await waitForMenuToClose(pid: item.pid)
-        if let neighbor {
-            await mover.move(item.windowID, to: .leftOf(neighbor))
+        // Back where it was, once the user pauses: the menu has just closed and
+        // they're likely still moving the pointer. If they don't pause, the
+        // layout keeper puts it back later.
+        if let neighbor, !Task.isCancelled {
+            await mover.move(item.windowID, to: .leftOf(neighbor), whenIdle: true)
         }
         return true
     }
@@ -63,6 +66,8 @@ final class ItemOpener {
         await waitUntilOnScreen(item)
         await press(item)
         await waitForMenuToClose(pid: item.pid)
+        // Another icon is being opened instead: leave the bar to that one.
+        guard !Task.isCancelled else { return }
         sections.holdOpen = false
         sections.collapse()
     }

@@ -114,7 +114,7 @@ final class ClipboardHistory {
         if before.enabled, !now.enabled {
             clear()
         } else if before.remember, !now.remember {
-            save()
+            save(now: true)
         }
     }
 
@@ -142,15 +142,42 @@ final class ClipboardHistory {
             as? [URL], !urls.isEmpty {
             entry = ClipEntry(kind: .files, files: urls)
         } else if let text = pasteboard.string(forType: .string), !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            // A whole log file or database dump would sit in memory and be
+            // rewritten to disk on every copy; history is for everyday snippets.
+            guard text.utf8.count <= Self.largestText else {
+                Log.app.info("Clipboard: skipped \(text.utf8.count) bytes of text, too large to keep")
+                return
+            }
             entry = ClipEntry(kind: .text, text: text)
-        } else if let image = NSImage(pasteboard: pasteboard), let tiff = image.tiffRepresentation,
-                  let png = NSBitmapImageRep(data: tiff)?.representation(using: .png, properties: [:]) {
-            entry = ClipEntry(kind: .image, image: png)
+        } else if let tiff = NSPasteboard.general.data(forType: .tiff) ?? NSImage(pasteboard: pasteboard)?.tiffRepresentation {
+            // Turning a big screenshot into PNG takes a moment: not on the main thread.
+            let source = app?.localizedName
+            Task { [weak self] in
+                guard let png = await Task.detached(operation: { Self.png(from: tiff) }).value else { return }
+                var image = ClipEntry(kind: .image, image: png)
+                image.sourceApp = source
+                self?.add(image)
+            }
+            return
         }
         guard var entry else { return }
         entry.sourceApp = app?.localizedName
         add(entry)
         if let text = entry.text, let colour = colourFromHex(text) { owlCue = OwlCue(.colour(colour)) }
+    }
+
+    /// The most text one entry keeps: a megabyte.
+    nonisolated static let largestText = 1_000_000
+
+    /// PNG for the history, scaled down to at most 2,560 points on its long
+    /// side, so a 6K screenshot doesn't take tens of megabytes of memory.
+    nonisolated static func png(from tiff: Data) -> Data? {
+        guard let source = CGImageSourceCreateWithData(tiff as CFData, nil) else { return nil }
+        let options: [CFString: Any] = [kCGImageSourceCreateThumbnailFromImageAlways: true,
+                                        kCGImageSourceThumbnailMaxPixelSize: 2560,
+                                        kCGImageSourceCreateThumbnailWithTransform: true]
+        guard let image = CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary) else { return nil }
+        return NSBitmapImageRep(cgImage: image).representation(using: .png, properties: [:])
     }
 
     private func add(_ entry: ClipEntry) {
@@ -226,7 +253,7 @@ final class ClipboardHistory {
     /// Clears everything except pinned entries.
     func clear() {
         entries = entries.filter(\.isPinned)
-        save()
+        save(now: true)
     }
 
     // MARK: Shelf
@@ -257,17 +284,38 @@ final class ClipboardHistory {
 
     func clearShelf() {
         shelf = []
-        save()
+        save(now: true)
     }
 
-    private func save() {
+    @ObservationIgnored private var pendingSave: Task<Void, Never>?
+
+    /// Writes the history to disk half a second after the last change, off
+    /// the main thread, so a burst of copies costs one write.
+    /// `now`: clearing must reach the disk at once, even if Barn Owl quits
+    /// a moment later.
+    private func save(now: Bool = false) {
         guard !DemoMode.isOn else { return }
         guard let url = Self.storeURL else { return }
         // Images are never written to disk, pinned or not.
         let kept = entries.filter { $0.kind != .image && (Preferences.clipboardRemember || $0.isPinned) }
-        try? FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
-        if let data = try? JSONEncoder().encode(Store(entries: kept, shelf: shelf)) {
-            try? data.write(to: url, options: [.atomic, .completeFileProtection])
+        let store = Store(entries: kept, shelf: shelf)
+        pendingSave?.cancel()
+        if now {
+            try? FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+            if let data = try? JSONEncoder().encode(store) {
+                try? data.write(to: url, options: [.atomic, .completeFileProtection])
+            }
+            return
+        }
+        pendingSave = Task {
+            try? await Task.sleep(for: .milliseconds(500))
+            guard !Task.isCancelled else { return }
+            await Task.detached(priority: .utility) {
+                try? FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+                if let data = try? JSONEncoder().encode(store) {
+                    try? data.write(to: url, options: [.atomic, .completeFileProtection])
+                }
+            }.value
         }
     }
 }

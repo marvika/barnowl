@@ -100,7 +100,11 @@ final class NativeVisibilityEngine: HidingEngine {
         // The completion always runs on the main queue, so handing the
         // assertion back to this main-actor engine is safe.
         let result: ActivationResult = await withCheckedContinuation { continuation in
+            // The private API's callback could come twice (an error after a
+            // result); resuming a continuation twice crashes.
+            let once = OnceFlag()
             BKNativeVisibilityActivate(Self.systemItemsToKeep, bundles) { assertion, error in
+                guard once.claim() else { return }
                 continuation.resume(returning: ActivationResult(assertion: assertion as AnyObject?,
                                                                 error: error?.localizedDescription))
             }
@@ -130,4 +134,18 @@ final class NativeVisibilityEngine: HidingEngine {
 private struct ActivationResult: @unchecked Sendable {
     var assertion: AnyObject?
     var error: String?
+}
+
+/// True the first time it's claimed, false after: for callbacks that must act once.
+final class OnceFlag: @unchecked Sendable {
+    private let lock = NSLock()
+    private var claimed = false
+
+    func claim() -> Bool {
+        lock.withLock {
+            guard !claimed else { return false }
+            claimed = true
+            return true
+        }
+    }
 }

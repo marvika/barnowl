@@ -138,8 +138,10 @@ enum ClosedLidMode {
 final class ClosedLidController {
     private let keepAwake: KeepAwakeController
     private var lidTask: Task<Void, Never>?
-    /// What was last asked of pmset, so unchanged states cost nothing.
-    private var applied: Bool?
+    /// What closed-lid mode should be now.
+    private var wanted = false
+    /// The change running now, if any; it loops until pmset matches `wanted`.
+    private var applying: Task<Void, Never>?
 
     init(keepAwake: KeepAwakeController) {
         self.keepAwake = keepAwake
@@ -147,18 +149,31 @@ final class ClosedLidController {
 
     /// On while the setting is on and keep awake is active; off otherwise.
     func sync() {
-        let wanted = Preferences.closedLidMode && keepAwake.isActive
-        if wanted != applied {
-            applied = wanted
-            Task.detached { ClosedLidMode.apply(wanted) }
-        }
+        wanted = Preferences.closedLidMode && keepAwake.isActive
         wanted ? watchLid() : stopWatchingLid()
+        guard applying == nil else { return }
+        // One change at a time, off the main thread. Quick on-off-on can't
+        // finish out of order and leave it on: each pass re-reads what's
+        // wanted, and pmset is only told when it differs.
+        applying = Task { [weak self] in
+            while let self {
+                let target = self.wanted
+                let done = await Task.detached { ClosedLidMode.apply(target) }.value
+                if !done { Log.keepAwake.error("Couldn't switch closed-lid mode \(target ? "on" : "off")") }
+                if self.wanted == target {
+                    self.applying = nil
+                    return
+                }
+            }
+        }
     }
 
     /// Sleep comes back on, without asking, when Barn Owl quits.
     func quit() {
         stopWatchingLid()
-        if Preferences.closedLidMode || applied == true { ClosedLidMode.apply(false) }
+        applying?.cancel()
+        wanted = false
+        ClosedLidMode.apply(false)
     }
 
     /// Closing the lid while the Mac keeps running, with no other display,
@@ -194,7 +209,8 @@ enum Lid {
         let root = IOServiceGetMatchingService(kIOMainPortDefault, IOServiceMatching("IOPMrootDomain"))
         guard root != 0 else { return false }
         defer { IOObjectRelease(root) }
-        return IORegistryEntryCreateCFProperty(root, "AppleClamshellState" as CFString, kCFAllocatorDefault, 0) != nil
+        return IORegistryEntryCreateCFProperty(root, "AppleClamshellState" as CFString, kCFAllocatorDefault, 0)?
+            .takeRetainedValue() != nil
     }
 
     /// Whether the lid is closed (false on a Mac without one).

@@ -12,12 +12,23 @@ enum QuickToggles {
 
     /// System Events is the only public way to switch appearance. The first
     /// use asks for Automation permission.
+    /// Runs in osascript, off the main thread: the first time, macOS asks for
+    /// permission, and Barn Owl stays responsive while it does.
     static func toggleDarkMode() {
         let source = "tell application \"System Events\" to tell appearance preferences to set dark mode to not dark mode"
-        var error: NSDictionary?
-        NSAppleScript(source: source)?.executeAndReturnError(&error)
-        if let error {
-            Log.app.error("Dark mode toggle failed: \(error)")
+        Task.detached {
+            let process = Process()
+            process.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")
+            process.arguments = ["-e", source]
+            process.standardOutput = FileHandle.nullDevice
+            process.standardError = FileHandle.nullDevice
+            do {
+                try process.run()
+                process.waitUntilExit()
+                if process.terminationStatus != 0 { Log.app.error("Dark mode toggle failed (\(process.terminationStatus))") }
+            } catch {
+                Log.app.error("Dark mode toggle failed: \(error.localizedDescription)")
+            }
         }
     }
 

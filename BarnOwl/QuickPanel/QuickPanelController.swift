@@ -19,6 +19,7 @@ final class QuickPanelController: NSObject {
     private var winking = false
     private var glanceTask: Task<Void, Never>?
     private var wakeObserver: NSObjectProtocol?
+    private var syncing = false
 
     var isOpen: Bool { panel?.isVisible ?? false }
 
@@ -29,6 +30,11 @@ final class QuickPanelController: NSObject {
     /// Adds or removes the owl to match the setting, and updates it: eyes
     /// open while keeping awake, plus the time left in a timed session.
     func syncOwlIcon() {
+        // Creating the item writes its saved position to the defaults, which
+        // calls back here: never make a second owl on the way.
+        guard !syncing else { return }
+        syncing = true
+        defer { syncing = false }
         guard Preferences.showKeepAwakeIcon else {
             if let owlItem { NSStatusBar.system.removeStatusItem(owlItem) }
             owlItem = nil
@@ -173,6 +179,7 @@ final class QuickPanelController: NSObject {
 
     private func makeOwlItem() -> NSStatusItem {
         let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
+        owlItem = item
         item.autosaveName = "BarnOwlKeepAwake"
         item.button?.target = self
         item.button?.action = #selector(owlClicked)
@@ -183,9 +190,12 @@ final class QuickPanelController: NSObject {
                                                                          .activeAlways, .inVisibleRect],
                                                   owner: self))
         }
-        wakeObserver = NSWorkspace.shared.notificationCenter.addObserver(
-            forName: NSWorkspace.didWakeNotification, object: nil, queue: .main) { [weak self] _ in
-            MainActor.assumeIsolated { self?.wakeBlink() }
+        // Once, however often the owl is shown and hidden again.
+        if wakeObserver == nil {
+            wakeObserver = NSWorkspace.shared.notificationCenter.addObserver(
+                forName: NSWorkspace.didWakeNotification, object: nil, queue: .main) { [weak self] _ in
+                MainActor.assumeIsolated { self?.wakeBlink() }
+            }
         }
         // A new status item appears at the far left, in a hidden section. Put
         // it next to the arrow once; after that macOS remembers its place.

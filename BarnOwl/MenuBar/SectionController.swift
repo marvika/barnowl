@@ -39,7 +39,7 @@ final class SectionController {
     }
 
     func toggle() {
-        set(state == .collapsed ? .expanded : .collapsed)
+        set(state == .collapsed ? .expanded : .collapsed, byUser: true)
     }
 
     func showAll() {
@@ -55,11 +55,15 @@ final class SectionController {
         set(state)
     }
 
-    func set(_ requested: SectionState) {
+    /// `byUser`: the user asked (clicked the arrow, pressed the hotkey), so
+    /// a problem is worth an alert. Collapses Barn Owl does by itself (the
+    /// rehide timer, launch, a display change) only log it: a modal alert out
+    /// of nowhere would take the keyboard from whatever the user is doing.
+    func set(_ requested: SectionState, byUser: Bool = false) {
         rehideTask?.cancel()
         if requested == .collapsed, let problem = arrangementProblem() {
             Log.menuBar.error("Not collapsing: \(problem)")
-            showArrangementAlert(problem)
+            if byUser { showArrangementAlert(problem) }
             return
         }
         applyTask?.cancel()
@@ -112,7 +116,12 @@ final class SectionController {
         return location.y >= screen.frame.maxY - max(menuBarHeight, 24)
     }
 
+    private var showingAlert = false
+
     private func showArrangementAlert(_ message: String) {
+        guard !showingAlert else { return }
+        showingAlert = true
+        defer { showingAlert = false }
         let alert = NSAlert()
         alert.messageText = "Barn Owl can't hide icons yet"
         alert.informativeText = message

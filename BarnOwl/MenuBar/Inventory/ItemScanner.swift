@@ -15,6 +15,8 @@ final class ItemScanner {
     @ObservationIgnored private let statusItems: StatusItems
     @ObservationIgnored private var scanTask: Task<Void, Never>?
     @ObservationIgnored private var rescanRequested = false
+    /// Scans in a row that matched suspiciously few items.
+    @ObservationIgnored private var thinScans = 0
     @ObservationIgnored private var appsObservation: NSKeyValueObservation?
     @ObservationIgnored private var watchTask: Task<Void, Never>?
     @ObservationIgnored private var publishedWindowIDs: Set<CGWindowID> = []
@@ -127,12 +129,15 @@ final class ItemScanner {
         // they don't shift when an item moves between sections.
         // While the bar slides (a collapse, a move) Accessibility and the window
         // list can disagree and few items match. Keep the last list and look again.
-        if items.count >= 4, scanned.count < items.count / 2 {
+        // After three tries it's real (an app with many icons quit), not a slide.
+        if items.count >= 4, scanned.count < items.count / 2, thinScans < 3 {
+            thinScans += 1
             Log.menuBar.info("Scan matched only \(scanned.count) of \(self.items.count) items; retrying")
             rescanRequested = true
             try? await Task.sleep(for: .milliseconds(500))
             return
         }
+        thinScans = 0
         let keyed = ItemKey.assign(scanned.sorted { $0.frame.minX > $1.frame.minX })
         items = classify(keyed).sorted { $0.frame.minX < $1.frame.minX }
         publishedWindowIDs = Set(windows.map(\.windowID))

@@ -63,14 +63,18 @@ final class ItemMover {
     /// skipped if they don't within half a minute.
     @discardableResult
     func move(_ windowID: CGWindowID, to destination: MoveDestination, whenIdle: Bool = false) async -> Bool {
+        // Waiting for a pause happens before joining the queue, so a move the
+        // user asks for meanwhile (opening an icon) goes first.
+        if whenIdle, !(await UserActivity.waitUntilIdle(timeout: 30)) {
+            Log.menuBar.info("Move of \(windowID) skipped: you were busy")
+            return false
+        }
         let previous = tail
         let task = Task { [weak self] () -> Bool in
             _ = await previous?.value
             guard let self else { return false }
-            if whenIdle, !(await UserActivity.waitUntilIdle(timeout: 30)) {
-                Log.menuBar.info("Move of \(windowID) skipped: you were busy")
-                return false
-            }
+            // Still paused after waiting its turn? Otherwise try again another time.
+            if whenIdle, !UserActivity.isIdle { return false }
             return await self.perform(windowID, destination)
         }
         tail = task
@@ -188,7 +192,9 @@ final class ItemMover {
             if liftedSnapshots >= 3 { break }
         }
         // Aim at where the target is now: the others slide while the item is lifted.
-        let target = frames[destination.targetWindowID] ?? .zero
+        // No target any more: drop where the drag started rather than at (0, 0),
+        // the top-left hot corner.
+        let target = frames[destination.targetWindowID] ?? originalFrame
         event(.leftMouseUp, destination.dropPoint(targetFrame: target))?.post(tap: .cgSessionEventTap)
         usleep(20_000)
         return liftedSnapshots >= 3

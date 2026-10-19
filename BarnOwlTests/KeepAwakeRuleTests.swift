@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import Testing
 @testable import BarnOwl
@@ -186,5 +187,30 @@ struct SessionCarryOverTests {
         let session = KeepAwakeController.Session.whileAppRunning(bundleIdentifier: "com.example", name: "Example")
         let data = try JSONEncoder().encode(KeepAwakeController.SavedSession(session: session, saved: now))
         #expect(try JSONDecoder().decode(KeepAwakeController.SavedSession.self, from: data).session == session)
+    }
+}
+
+struct SmallFixesTests {
+    /// "awake 0.2" is a minute, not "until you stop it".
+    @Test func tinyDurationsAreAMinute() {
+        #expect(CommandParser.duration(from: "0.2") == 1)
+        #expect(CommandParser.duration(from: "0.001h") == 1)
+    }
+
+    @Test func aOnceFlagIsClaimedOnce() {
+        let once = OnceFlag()
+        #expect(once.claim())
+        #expect(!once.claim())
+    }
+
+    /// Big screenshots are kept at most 2,560 pixels on the long side.
+    @Test func clipboardImagesAreScaledDown() throws {
+        let rep = try #require(NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: 6000, pixelsHigh: 3000,
+                                                bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false,
+                                                colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0))
+        let tiff = try #require(rep.tiffRepresentation)
+        let png = try #require(ClipboardHistory.png(from: tiff))
+        let scaled = try #require(NSBitmapImageRep(data: png))
+        #expect(max(scaled.pixelsWide, scaled.pixelsHigh) == 2560)
     }
 }

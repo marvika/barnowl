@@ -544,14 +544,26 @@ enum CleanupRunner {
             process.standardInput = FileHandle.nullDevice
             pipe.fileHandleForReading.readabilityHandler = { handle in output.append(handle.availableData) }
             process.terminationHandler = { finished in
+                // Not readDataToEndOfFile: a tool the shell started (brew) can
+                // still hold the pipe open after a timeout, and that would wait
+                // for it forever. What it printed has been collected already.
                 pipe.fileHandleForReading.readabilityHandler = nil
-                output.append(pipe.fileHandleForReading.readDataToEndOfFile())
                 continuation.resume(returning: (finished.terminationStatus,
                                                 output.text.trimmingCharacters(in: .whitespacesAndNewlines)))
             }
             do {
                 try process.run()
-                DispatchQueue.global().asyncAfter(deadline: .now() + timeout) { if process.isRunning { process.terminate() } }
+                let pid = process.processIdentifier
+                DispatchQueue.global().asyncAfter(deadline: .now() + timeout) {
+                    guard process.isRunning else { return }
+                    // The tool itself first (the shell's children), then the shell.
+                    let children = Process()
+                    children.executableURL = URL(fileURLWithPath: "/usr/bin/pkill")
+                    children.arguments = ["-TERM", "-P", String(pid)]
+                    try? children.run()
+                    children.waitUntilExit()
+                    process.terminate()
+                }
             } catch {
                 continuation.resume(returning: (-1, error.localizedDescription))
             }
