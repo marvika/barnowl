@@ -317,29 +317,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         closedLid?.quit()
     }
 
-    /// Closed-lid mode used to be one switch that stayed on, set with a
-    /// password. Now it follows keep awake, which needs the rule: offer to set
-    /// it up once, or turn the old switch off.
+    /// Versions up to 0.11.2 switched closed-lid mode with pmset, which can
+    /// leave sleep disabled for good. Turn that off, silently if the old rule
+    /// still allows it, otherwise asking once.
     private func migrateClosedLidMode() {
-        // Set up before (the rule is there) but not working: that's for the
-        // closed-lid controller's warning, not another set-up offer.
-        guard !DemoMode.isOn, Preferences.closedLidMode,
-              !FileManager.default.fileExists(atPath: ClosedLidMode.rulePath),
-              !ClosedLidMode.canSwitchWithoutPassword else { return }
+        guard !DemoMode.isOn else { return }
         Task { @MainActor in
+            let stillOff = await Task.detached { ClosedLidMode.cleanUpLegacySilently() }.value
+            guard stillOff else { return }
             try? await Task.sleep(for: .seconds(2))
             NSApp.activate()
             let alert = NSAlert()
-            alert.messageText = "Closed-lid mode now follows keep awake"
-            alert.informativeText = "Your Mac will keep running with the lid closed only while Barn Owl keeps it awake, and sleep as usual otherwise. To switch it by itself, Barn Owl needs your password once."
-            alert.addButton(withTitle: "Set Up")
+            alert.messageText = "Your Mac won't sleep with the lid closed"
+            alert.informativeText = "An earlier version of Barn Owl switched this setting with an administrator command, and it's still on. Closed-lid mode now works without one, but turning the old setting off needs your password once."
             alert.addButton(withTitle: "Turn Off")
-            if alert.runModal() == .alertFirstButtonReturn, ClosedLidMode.enableFromSettings() {
-                self.closedLid.sync()
-            } else {
-                Preferences.closedLidMode = false
-                if ClosedLidMode.isEnabled { ClosedLidMode.turnOffWithPassword() }
-            }
+            alert.addButton(withTitle: "Not Now")
+            if alert.runModal() == .alertFirstButtonReturn { ClosedLidMode.cleanUpLegacyWithPassword() }
         }
     }
 

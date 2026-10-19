@@ -25,6 +25,7 @@ enum PrefKey {
     static let keepAwakeNotify = "keepAwakeNotify"
     static let showKeepAwakeIcon = "showKeepAwakeIcon"
     static let closedLidMode = "closedLidMode"
+    static let closedLidLocks = "closedLidLocks"
     static let changeShowDuration = "changeShowDuration"
     static let changeLookInterval = "changeLookInterval"
     static let presenterAutomatic = "presenterAutomatic"
@@ -110,6 +111,9 @@ enum Preferences {
     static var keepAwakeNotify: Bool { defaults.bool(forKey: PrefKey.keepAwakeNotify) }
     static var showKeepAwakeIcon: Bool { defaults.bool(forKey: PrefKey.showKeepAwakeIcon) }
     /// Whether Barn Owl turned closed-lid mode on (so it should turn it off again).
+    /// Lock the screen when the lid closes in closed-lid mode. Off by
+    /// default, as in Amphetamine.
+    static var closedLidLocks: Bool { defaults.bool(forKey: PrefKey.closedLidLocks) }
     static var closedLidMode: Bool {
         get { defaults.bool(forKey: PrefKey.closedLidMode) }
         set { defaults.set(newValue, forKey: PrefKey.closedLidMode) }

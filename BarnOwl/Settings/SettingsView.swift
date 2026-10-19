@@ -566,6 +566,7 @@ private struct KeepAwakePane: View {
     @State private var startMinutes = 60
     @State private var editingRule: KeepAwakeRule?
     @State private var closedLid = Preferences.closedLidMode
+    @AppStorage(PrefKey.closedLidLocks) private var closedLidLocks = false
 
     private var keepAwake: KeepAwakeController { model.keepAwake }
 
@@ -697,27 +698,25 @@ private struct KeepAwakePane: View {
 
             Section {
                 Toggle(isOn: Binding(get: { closedLid }, set: { enabled in
-                    if enabled {
-                        // One password, for a rule that lets Barn Owl switch it by itself.
-                        guard ClosedLidMode.enableFromSettings() else { return }
-                        Preferences.closedLidMode = true
-                    } else {
-                        Preferences.closedLidMode = false
-                        // Removing the rule asks for the password; if that's
-                        // cancelled, at least let the Mac sleep again.
-                        if !ClosedLidMode.uninstall() { ClosedLidMode.apply(false) }
-                    }
-                    closedLid = Preferences.closedLidMode
+                    Preferences.closedLidMode = enabled
+                    closedLid = enabled
                     model.closedLid?.sync()
                 })) {
                     BadgeLabel(title: "Keep running with the lid closed",
-                               subtitle: "While Barn Owl keeps your Mac awake, even without an external display.",
+                               subtitle: "While Barn Owl keeps your Mac awake, even on battery without an external display.",
                                symbol: "laptopcomputer", color: .gray)
+                }
+                if closedLid {
+                    Toggle(isOn: $closedLidLocks) {
+                        BadgeLabel(title: "Lock the screen when the lid closes",
+                                   subtitle: "So whoever opens it next needs your password.",
+                                   symbol: "lock.fill", color: .gray)
+                    }
                 }
             } header: {
                 Text("Closed-lid mode")
             } footer: {
-                Text("Close the lid while keep awake is on and your Mac keeps running, with the screen locked; otherwise it sleeps as usual. Turning this on asks for your password once, to let Barn Owl switch this one setting (pmset disablesleep) by itself; turning it off asks again and removes that permission. A closed Mac that keeps running gets warm, so don't put it in a bag like this.")
+                Text("Close the lid while keep awake is on and your Mac keeps running, on battery too; otherwise it sleeps as usual. No password needed. A closed Mac that keeps running gets warm, so don't put it in a bag like this.")
             }
         }
         .sheet(item: $editingRule) { rule in
