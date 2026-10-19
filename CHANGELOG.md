@@ -3,7 +3,7 @@
 All notable changes to Barn Owl. Versions follow [semantic versioning](https://semver.org);
 before 1.0, a minor version can change behaviour.
 
-## Unreleased
+## 0.11.1
 
 - **Fixes crashes at launch.** Moving the pointer over the owl made macOS
   throw an error each time (Barn Owl answered to the wrong names), which
