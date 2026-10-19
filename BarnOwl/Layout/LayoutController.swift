@@ -68,6 +68,9 @@ struct CorrectionLimiter: Sendable {
     var limit = 2
     var window: TimeInterval = 120
     private var history: [String: [Date]] = [:]
+    /// Icons that wouldn't stay put: left alone until the user moves them
+    /// (macOS keeps some, like Control Center's, where it wants them).
+    private(set) var givenUp: Set<String> = []
 
     init(limit: Int = 2, window: TimeInterval = 120) {
         self.limit = limit
@@ -75,10 +78,14 @@ struct CorrectionLimiter: Sendable {
     }
 
     /// Whether another correction of `key` is allowed now; records it if so.
+    /// Once an icon has needed `limit` corrections in `window`, it's given up
+    /// on for good, rather than dragged again every couple of minutes.
     mutating func allow(_ key: String, now: Date = Date()) -> Bool {
+        guard !givenUp.contains(key) else { return false }
         let recent = (history[key] ?? []).filter { now.timeIntervalSince($0) < window }
         guard recent.count < limit else {
-            history[key] = recent
+            history[key] = nil
+            givenUp.insert(key)
             return false
         }
         history[key] = recent + [now]
@@ -88,6 +95,7 @@ struct CorrectionLimiter: Sendable {
     /// The user moved it on purpose: start counting afresh.
     mutating func reset(_ key: String) {
         history[key] = nil
+        givenUp.remove(key)
     }
 }
 
@@ -248,8 +256,8 @@ final class LayoutController {
             lastError = "Couldn't find where to put \(item.name)."
             return
         }
-        if !(await mover.move(item.windowID, to: destination)) {
-            lastError = "Couldn't move \(item.name). Try again, or ⌘-drag it in the menu bar."
+        if !(await mover.move(item.windowID, to: destination, whenIdle: isCorrection)) {
+            if !isCorrection { lastError = "Couldn't move \(item.name). Try again, or ⌘-drag it in the menu bar." }
         }
     }
 
@@ -292,7 +300,10 @@ final class LayoutController {
         remembered = result.remembered
         lastWindowIDs = Dictionary(snapshot.map { ($0.key, $0.windowID) }, uniquingKeysWith: { a, _ in a })
         hasBaseline = true
+        // Corrections borrow the pointer for a moment: only while the user isn't using it.
+        guard !result.moves.isEmpty, UserActivity.isIdle else { return }
         for move in result.moves {
+            if limiter.givenUp.contains(move.key) { continue }
             guard limiter.allow(move.key) else {
                 Log.menuBar.error("Gave up keeping \(move.key, privacy: .public) in \(move.row.storageValue, privacy: .public): it didn't stay there")
                 continue
@@ -349,7 +360,7 @@ final class LayoutController {
         guard let item = scanner.items.first(where: { $0.key == key }) else { return }
         let row = groups.group(containing: key).map { LayoutRow.group($0.id) } ?? remembered[key] ?? .hidden
         guard let destination = await destination(for: row, before: nil, moving: item) else { return }
-        await mover.move(item.windowID, to: destination)
+        await mover.move(item.windowID, to: destination, whenIdle: true)
         scanner.updateFrames()
     }
 
