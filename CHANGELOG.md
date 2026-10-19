@@ -3,7 +3,7 @@
 All notable changes to Barn Owl. Versions follow [semantic versioning](https://semver.org);
 before 1.0, a minor version can change behaviour.
 
-## Unreleased
+## 0.11.0
 
 - Without Screen Recording, icons whose name shows their state ("Wi‑Fi,
   connected", "OneDrive · Syncing") no longer count as new icons each time it
