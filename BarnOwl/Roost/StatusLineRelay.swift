@@ -231,7 +231,9 @@ enum StatusLineRelay {
         guard descriptor >= 0 else { return }
         dup2(descriptor, STDIN_FILENO)
         close(descriptor)
-        let args = ["/bin/sh", "-c", original].map { strdup($0) } + [nil]
+        let words: [String] = ["/bin/sh", "-c", original]
+        var args: [UnsafeMutablePointer<CChar>?] = words.map { strdup($0) }
+        args.append(nil)
         execv("/bin/sh", args)
     }
 
