@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/images/hero.png" alt="Barn Owl: a tidy menu bar with the Perch and the keep-awake panel open" width="900">
+  <img src="docs/images/hero.png" alt="Barn Owl on a Mac at dusk: the island at the notch asking a question from a coding agent, the quick panel keeping the Mac awake with owlets and plan limits, and the Roost's pixel tree" width="900">
 </p>
 
 <h1 align="center">Barn Owl</h1>
