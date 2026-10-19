@@ -127,6 +127,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             self?.closedLid.sync()
         }
         closedLid.sync()
+        // The setting can change in setup or Settings: catch up right away.
+        NotificationCenter.default.addObserver(forName: UserDefaults.didChangeNotification, object: nil,
+                                               queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.closedLid?.sync() }
+        }
         migrateClosedLidMode()
         updateToggleIcon()
 

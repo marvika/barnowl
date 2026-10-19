@@ -36,7 +36,8 @@ enum ClosedLidMode {
 
     /// Whether the rule is installed, so it can be switched without a password.
     static var canSwitchWithoutPassword: Bool {
-        run("/usr/bin/sudo", ["-n", "-l", pmset, "-a", "disablesleep", "1"]).status == 0
+        if DemoMode.isOn { return true }
+        return run("/usr/bin/sudo", ["-n", "-l", pmset, "-a", "disablesleep", "1"]).status == 0
     }
 
     /// The rule for one account: these two exact commands, nothing more. Nil
@@ -54,6 +55,8 @@ enum ClosedLidMode {
     /// it failed.
     @discardableResult
     static func install() -> Bool {
+        // The demo copy (Scripts/demo.sh) pretends; it never touches the system.
+        if DemoMode.isOn { return true }
         guard let rule = rule(for: NSUserName()) else { return false }
         // The per-user temporary folder only this account can write to.
         let draft = FileManager.default.temporaryDirectory.appending(path: "barnowl-rule-\(UUID().uuidString)")
@@ -74,6 +77,7 @@ enum ClosedLidMode {
     /// Lets the Mac sleep again and removes the rule, asking for a password.
     @discardableResult
     static func uninstall() -> Bool {
+        if DemoMode.isOn { return true }
         let done = runAsAdministrator("\(pmset) -a disablesleep 0; /bin/rm -f \(rulePath)")
         if done { Log.keepAwake.info("Closed-lid mode removed") }
         return done
@@ -83,7 +87,7 @@ enum ClosedLidMode {
     /// asking. Needs the rule; does nothing if it's already that way.
     @discardableResult
     static func apply(_ enabled: Bool) -> Bool {
-        guard enabled != isEnabled else { return true }
+        guard !DemoMode.isOn, enabled != isEnabled else { return true }
         let status = run("/usr/bin/sudo", ["-n", pmset, "-a", "disablesleep", enabled ? "1" : "0"]).status
         Log.keepAwake.info("Lid closed: \(enabled ? "keeps running" : "sleeps as usual")\(status == 0 ? "" : " (failed)")")
         return status == 0
@@ -185,6 +189,14 @@ final class ClosedLidController {
 
 /// The MacBook's lid, and locking the screen.
 enum Lid {
+    /// Whether this Mac has a lid at all (a MacBook, not an iMac or Mac mini).
+    static var exists: Bool {
+        let root = IOServiceGetMatchingService(kIOMainPortDefault, IOServiceMatching("IOPMrootDomain"))
+        guard root != 0 else { return false }
+        defer { IOObjectRelease(root) }
+        return IORegistryEntryCreateCFProperty(root, "AppleClamshellState" as CFString, kCFAllocatorDefault, 0) != nil
+    }
+
     /// Whether the lid is closed (false on a Mac without one).
     static var isClosed: Bool {
         let root = IOServiceGetMatchingService(kIOMainPortDefault, IOServiceMatching("IOPMrootDomain"))

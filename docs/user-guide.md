@@ -211,7 +211,8 @@ Each rule can let the display sleep or keep it on.
   adds a rule (`/private/etc/sudoers.d/barnowl`) that lets your account run
   exactly `pmset -a disablesleep 1` and `pmset -a disablesleep 0` without a
   password, nothing else. Turning the setting off asks again and removes the
-  rule. This is how Amphetamine's Power Protect works too. A closed Mac that
+  rule. On a MacBook, the setup guide offers this too. This is how
+  Amphetamine's Power Protect works. A closed Mac that
   keeps running gets warm, so don't put it in a bag like that.
 
 ## Quick panel and toggles

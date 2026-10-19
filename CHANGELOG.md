@@ -11,8 +11,9 @@ before 1.0, a minor version can change behaviour.
   otherwise it sleeps as usual. Before, it stayed on until you turned it off.
   Turning it on asks for your password once, to add a rule that lets your
   account run exactly `pmset -a disablesleep 1` and `pmset -a disablesleep 0`
-  without a password; turning it off removes the rule. If you had it on,
-  Barn Owl offers to set this up, or to turn it off.
+  without a password; turning it off removes the rule. On a MacBook, the
+  setup guide offers it as one of its choices. If you had it on, Barn Owl
+  offers to set this up, or to turn it off.
 
 ## 0.10.2
 
