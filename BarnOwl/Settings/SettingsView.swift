@@ -699,7 +699,7 @@ private struct KeepAwakePane: View {
                 Toggle(isOn: Binding(get: { closedLid }, set: { enabled in
                     if enabled {
                         // One password, for a rule that lets Barn Owl switch it by itself.
-                        guard ClosedLidMode.canSwitchWithoutPassword || ClosedLidMode.install() else { return }
+                        guard ClosedLidMode.enableFromSettings() else { return }
                         Preferences.closedLidMode = true
                     } else {
                         Preferences.closedLidMode = false

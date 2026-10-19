@@ -3,6 +3,16 @@
 All notable changes to Barn Owl. Versions follow [semantic versioning](https://semver.org);
 before 1.0, a minor version can change behaviour.
 
+## Unreleased
+
+- **Closed-lid mode on company-managed Macs.** Some Macs' administrator
+  settings ask for a password for every change of this kind, which overrides
+  the rule Barn Owl adds, so it couldn't switch closed-lid mode off and the Mac
+  stopped sleeping with the lid closed. Barn Owl now checks that switching
+  really works without a password before turning it on, explains when it
+  can't, stops retrying, and if sleep is ever left disabled, says so and offers
+  to fix it.
+
 ## 0.11.1
 
 - **Fixes crashes at launch.** Moving the pointer over the owl made macOS

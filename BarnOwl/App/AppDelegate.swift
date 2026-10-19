@@ -321,7 +321,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// password. Now it follows keep awake, which needs the rule: offer to set
     /// it up once, or turn the old switch off.
     private func migrateClosedLidMode() {
-        guard !DemoMode.isOn, Preferences.closedLidMode, !ClosedLidMode.canSwitchWithoutPassword else { return }
+        // Set up before (the rule is there) but not working: that's for the
+        // closed-lid controller's warning, not another set-up offer.
+        guard !DemoMode.isOn, Preferences.closedLidMode,
+              !FileManager.default.fileExists(atPath: ClosedLidMode.rulePath),
+              !ClosedLidMode.canSwitchWithoutPassword else { return }
         Task { @MainActor in
             try? await Task.sleep(for: .seconds(2))
             NSApp.activate()
@@ -330,7 +334,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             alert.informativeText = "Your Mac will keep running with the lid closed only while Barn Owl keeps it awake, and sleep as usual otherwise. To switch it by itself, Barn Owl needs your password once."
             alert.addButton(withTitle: "Set Up")
             alert.addButton(withTitle: "Turn Off")
-            if alert.runModal() == .alertFirstButtonReturn, ClosedLidMode.install() {
+            if alert.runModal() == .alertFirstButtonReturn, ClosedLidMode.enableFromSettings() {
                 self.closedLid.sync()
             } else {
                 Preferences.closedLidMode = false
