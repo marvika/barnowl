@@ -203,9 +203,10 @@ Each rule can let the display sleep or keep it on.
 - **Stop when battery is below** 5, 10 (the default), 20 or 30%.
 - **Notify me when a session ends.**
 - **Closed-lid mode:** while keep awake is on, the Mac keeps running with
-  the lid closed, on battery too and without an external display, and the
-  screen locks as the lid closes (not with an external display, where a
-  closed lid is normal). Whenever keep awake is off, or Barn Owl quits, the
+  the lid closed, on battery too and without an external display. If you
+  like, the screen locks as the lid closes (**Lock the screen when the lid
+  closes**, off by default; never with an external display, where a closed
+  lid is normal). Whenever keep awake is off, or Barn Owl quits, the
   Mac sleeps on lid close as usual. It asks macOS's power manager directly,
   as Amphetamine does, so it needs no password, also on company-managed Macs.
   The setup guide offers it on a MacBook. A closed Mac that keeps running

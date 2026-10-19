@@ -225,7 +225,7 @@ private struct PreferencesStep: View {
                 }
             }
             if hasLid {
-                Text("Close the lid while keep awake is on and your Mac keeps running, with the screen locked; the rest of the time it sleeps as usual.")
+                Text("Close the lid while keep awake is on and your Mac keeps running; the rest of the time it sleeps as usual.")
                     .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             }
         }

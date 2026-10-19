@@ -126,11 +126,13 @@ final class ClosedLidController {
         applied = false
     }
 
-    /// Closing the lid while the Mac keeps running, with no other display,
-    /// locks the screen, so a running Mac in a bag isn't open to whoever
-    /// opens it.
+    /// If the user wants it: closing the lid while the Mac keeps running,
+    /// with no other display, locks the screen.
     private func watchLid() {
-        guard lidTask == nil else { return }
+        guard lidTask == nil, Preferences.closedLidLocks else {
+            if !Preferences.closedLidLocks { stopWatchingLid() }
+            return
+        }
         lidTask = Task { [weak self] in
             var wasClosed = Lid.isClosed
             while !Task.isCancelled {

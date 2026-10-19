@@ -85,7 +85,7 @@ awake, and the time left counts down beside it.
   display, during calls, on weekdays 08:00–17:00. Combine conditions as you
   like.
 - **Keep me available** stops Teams and Slack from marking you Away.
-- **Closed-lid mode** keeps a MacBook running with the lid shut while it's awake, and locks the screen.
+- **Closed-lid mode** keeps a MacBook running with the lid shut while it's awake, on battery too.
 - It stops below a battery level you choose.
 
 The same panel has one-click toggles for presenter mode, dark mode, the
