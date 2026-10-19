@@ -41,6 +41,20 @@ enum PrefKey {
     static let dropTrayTab = "dropTrayTab"
     static let nestKeepsDraggedFiles = "nestKeepsDraggedFiles"
     static let keepAwakeCountdown = "keepAwakeCountdown"
+    static let agentsEnabled = "agentsEnabled"
+    static let agentsMenuBar = "agentsMenuBar"
+    static let agentsNotifyNeedsYou = "agentsNotifyNeedsYou"
+    static let agentsNotifyDone = "agentsNotifyDone"
+    static let agentsNotifyAfterMinutes = "agentsNotifyAfterMinutes"
+    static let agentsEditor = "agentsEditor"
+    static let agentsHideScripted = "agentsHideScripted"
+    static let agentsHideScratch = "agentsHideScratch"
+    static let agentsRuleAdded = "agentsRuleAdded"
+    static let agentsRuleKeepsScreen = "agentsRuleKeepsScreen"
+    static let agentsShowLimits = "agentsShowLimits"
+    static let agentsLimitAlerts = "agentsLimitAlerts"
+    static let agentsIsland = "agentsIsland"
+    static let roostSky = "roostSky"
 }
 
 enum Preferences {
@@ -82,6 +96,19 @@ enum Preferences {
             PrefKey.dropTrayTab: true,
             PrefKey.nestKeepsDraggedFiles: false,
             PrefKey.keepAwakeCountdown: true,
+            PrefKey.agentsEnabled: true,
+            PrefKey.agentsMenuBar: true,
+            PrefKey.agentsNotifyNeedsYou: true,
+            PrefKey.agentsNotifyDone: true,
+            PrefKey.agentsNotifyAfterMinutes: 3,
+            PrefKey.agentsEditor: "",
+            PrefKey.agentsHideScripted: true,
+            PrefKey.agentsHideScratch: true,
+            PrefKey.agentsRuleAdded: false,
+            PrefKey.agentsShowLimits: true,
+            PrefKey.agentsLimitAlerts: true,
+            PrefKey.agentsIsland: IslandMode.attention.rawValue,
+            PrefKey.roostSky: RoostSky.follow.rawValue,
         ])
     }
 
@@ -152,6 +179,36 @@ enum Preferences {
     static var nestKeepsDraggedFiles: Bool { defaults.bool(forKey: PrefKey.nestKeepsDraggedFiles) }
     /// Show the time left next to the owl during a timed session.
     static var keepAwakeCountdown: Bool { defaults.bool(forKey: PrefKey.keepAwakeCountdown) }
+    /// Show coding agents as owlets, and keep awake while they work.
+    static var agentsEnabled: Bool { defaults.bool(forKey: PrefKey.agentsEnabled) }
+    /// A small owlet beside the owl in the menu bar while agents are out.
+    static var agentsMenuBar: Bool { defaults.bool(forKey: PrefKey.agentsMenuBar) }
+    static var agentsNotifyNeedsYou: Bool { defaults.bool(forKey: PrefKey.agentsNotifyNeedsYou) }
+    static var agentsNotifyDone: Bool { defaults.bool(forKey: PrefKey.agentsNotifyDone) }
+    /// Only tasks at least this long get a "done" notification.
+    static var agentsNotifyAfterMinutes: Int { max(0, defaults.integer(forKey: PrefKey.agentsNotifyAfterMinutes)) }
+    /// The bundle ID of the editor that opens projects; empty means the first installed.
+    static var agentsEditor: String { defaults.string(forKey: PrefKey.agentsEditor) ?? "" }
+    /// Hide sessions run from scripts, CI and the Agent SDK.
+    static var agentsHideScripted: Bool { defaults.bool(forKey: PrefKey.agentsHideScripted) }
+    /// Hide sessions in temporary folders and the Claude app's scratch workspaces.
+    static var agentsHideScratch: Bool { defaults.bool(forKey: PrefKey.agentsHideScratch) }
+    /// Whether the "an agent is working" rule has been offered once already.
+    static var agentsRuleAdded: Bool {
+        get { defaults.bool(forKey: PrefKey.agentsRuleAdded) }
+        set { defaults.set(newValue, forKey: PrefKey.agentsRuleAdded) }
+    }
+    static var agentsRuleKeepsScreen: Bool {
+        get { defaults.bool(forKey: PrefKey.agentsRuleKeepsScreen) }
+        set { defaults.set(newValue, forKey: PrefKey.agentsRuleKeepsScreen) }
+    }
+    /// Show plan limits (Claude's and Codex's 5-hour and weekly windows).
+    static var agentsShowLimits: Bool { defaults.bool(forKey: PrefKey.agentsShowLimits) }
+    /// Tell me at 80% and when a window resets.
+    static var agentsLimitAlerts: Bool { defaults.bool(forKey: PrefKey.agentsLimitAlerts) }
+    static var agentsIsland: IslandMode {
+        IslandMode(rawValue: defaults.string(forKey: PrefKey.agentsIsland) ?? "") ?? .attention
+    }
     static var hasShownWelcome: Bool {
         get { defaults.bool(forKey: PrefKey.hasShownWelcome) }
         set { defaults.set(newValue, forKey: PrefKey.hasShownWelcome) }

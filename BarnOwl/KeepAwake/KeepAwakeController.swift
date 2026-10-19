@@ -46,6 +46,8 @@ final class KeepAwakeController {
     @ObservationIgnored private var observers: [NSObjectProtocol] = []
     @ObservationIgnored private var appsObservation: NSKeyValueObservation?
     @ObservationIgnored private var lastNudge = Date.distantPast
+    /// Whether a coding agent is working, from the AgentWatcher.
+    @ObservationIgnored var agentsWorking: () -> Bool = { false }
 
     init(rules: RuleStore) {
         self.rules = rules
@@ -216,7 +218,10 @@ final class KeepAwakeController {
             }
         }
 
-        let rule = rules.rules.first { $0.holds(in: snapshot) }
+        // Of the rules that hold, one that keeps the screen on wins: the
+        // screen may sleep only if every rule that holds allows it.
+        let holding = rules.rules.filter { $0.holds(in: snapshot) }
+        let rule = holding.first { !$0.allowDisplaySleep } ?? holding.first
         if rule != activeRule {
             activeRule = rule
             Log.keepAwake.info("Active rule: \(rule?.title ?? "none")")
@@ -247,6 +252,7 @@ final class KeepAwakeController {
             batteryPercent: power.batteryPercent,
             microphoneInUse: needsMicrophone && SystemConditions.isMicrophoneInUse,
             downloading: needsDownloads && SystemConditions.isDownloading,
+            agentWorking: agentsWorking(),
             weekday: now.weekday ?? 2,
             minuteOfDay: (now.hour ?? 0) * 60 + (now.minute ?? 0))
     }
@@ -348,7 +354,10 @@ enum KeepAwakeFormatter {
     @MainActor
     static func status(of controller: KeepAwakeController) -> String {
         if let session = controller.session { return status(for: session) }
-        if let rule = controller.activeRule { return "Awake because \(rule.phrase)" }
+        if let rule = controller.activeRule {
+            return rule.allowDisplaySleep && !controller.presenting ? "Screen can sleep: \(rule.phrase)"
+                : "Screen on: \(rule.phrase)"
+        }
         if controller.presenting { return "Awake while you present" }
         if controller.stoppedForBattery { return "Stopped: battery low" }
         return "Off. Your Mac sleeps as usual."

@@ -2,6 +2,8 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<key>BarnOwlAppGroup</key>
+	<string>$(TeamIdentifierPrefix)io.github.marvika.BarnOwl</string>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>en</string>
 	<key>CFBundleDisplayName</key>
@@ -40,11 +42,11 @@
 	<key>LSUIElement</key>
 	<true/>
 	<key>NSAppleEventsUsageDescription</key>
-	<string>Barn Owl asks System Events to switch between light and dark mode.</string>
+	<string>Barn Owl asks System Events to switch between light and dark mode, and Terminal or iTerm to bring an agent's tab to the front when you choose Show.</string>
 	<key>NSDesktopFolderUsageDescription</key>
-	<string>The Barn looks through your Desktop to show what takes up space. Nothing is changed unless you choose to.</string>
+	<string>The Barn looks through your Desktop to show what takes up space, and the Roost looks for the project an agent is working in there. Nothing is changed unless you choose to.</string>
 	<key>NSDocumentsFolderUsageDescription</key>
-	<string>The Barn looks through your Documents to show what takes up space. Nothing is changed unless you choose to.</string>
+	<string>The Barn looks through your Documents to show what takes up space, and the Roost looks for the project an agent is working in there. Nothing is changed unless you choose to.</string>
 	<key>NSDownloadsFolderUsageDescription</key>
 	<string>The Barn looks through your Downloads to show what takes up space and to find old installers. Nothing is changed unless you choose to.</string>
 	<key>NSHumanReadableCopyright</key>

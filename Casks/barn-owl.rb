@@ -24,6 +24,8 @@ cask "barn-owl" do
 
   zap trash: [
     "~/Library/Application Support/Barn Owl",
+    "~/Library/Containers/io.github.marvika.BarnOwl.Widget",
+    "~/Library/Group Containers/2S5J2CYWPZ.io.github.marvika.BarnOwl",
     "~/Library/Caches/io.github.marvika.BarnOwl",
     "~/Library/HTTPStorages/io.github.marvika.BarnOwl",
     "~/Library/Preferences/io.github.marvika.BarnOwl.plist",

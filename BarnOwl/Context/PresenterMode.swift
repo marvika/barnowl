@@ -39,12 +39,24 @@ final class PresenterMode {
         self.layout = layout
     }
 
+    /// Watches for screen sharing, but only while automatic presenter mode is on.
     func start() {
-        task = Task { [weak self] in
-            while !Task.isCancelled {
-                try? await Task.sleep(for: .seconds(2))
-                await self?.checkSharing()
+        applySettings()
+    }
+
+    func applySettings() {
+        if Preferences.presenterAutomatic, task == nil {
+            task = Task { [weak self] in
+                while !Task.isCancelled {
+                    try? await Task.sleep(for: .seconds(2))
+                    await self?.checkSharing()
+                }
             }
+        } else if !Preferences.presenterAutomatic, task != nil {
+            task?.cancel()
+            task = nil
+            // Started by a share it can no longer see end: end it now.
+            if isPresenting, startedAutomatically { Task { await set(false, automatically: true) } }
         }
     }
 
@@ -122,6 +134,8 @@ final class PresenterMode {
         let ownCaptureRecently = Date().timeIntervalSince(max(images.lastCapture, OwnCaptures.last)) < 10
         // Off the main thread: a busy Control Center mustn't freeze Barn Owl.
         let indicator = await Task.detached { Self.isScreenBeingShared }.value
+        // Automatic turned off while we looked: don't start a session nobody will end.
+        guard Preferences.presenterAutomatic, !Task.isCancelled else { return }
         sharing.observe(indicator: indicator, ownCaptureRecently: ownCaptureRecently)
         if !indicator { stoppedDuringShare = false }
         if sharing.isSharing && !isPresenting && !stoppedDuringShare {

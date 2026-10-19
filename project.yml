@@ -16,6 +16,9 @@ packages:
     from: 2.9.0
 settings:
   base:
+    # One version for the app and its widget.
+    MARKETING_VERSION: 0.11.3
+    CURRENT_PROJECT_VERSION: 18
     SWIFT_VERSION: "6.0"
     MACOSX_DEPLOYMENT_TARGET: "26.0"
 targets:
@@ -30,6 +33,7 @@ targets:
     dependencies:
       - package: KeyboardShortcuts
       - package: Sparkle
+      - target: BarnOwlWidget
     settings:
       base:
         PRODUCT_NAME: Barn Owl
@@ -39,11 +43,28 @@ targets:
         CODE_SIGN_ENTITLEMENTS: BarnOwl/Resources/BarnOwl.entitlements
         ENABLE_HARDENED_RUNTIME: YES
         SWIFT_OBJC_BRIDGING_HEADER: BarnOwl/Support/BarnOwl-Bridging-Header.h
-        MARKETING_VERSION: 0.11.3
-        CURRENT_PROJECT_VERSION: 18
         GENERATE_INFOPLIST_FILE: NO
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+  # The Roost on the desktop. It reads what the app writes to their shared group folder.
+  BarnOwlWidget:
+    type: app-extension
+    platform: macOS
+    sources:
+      - path: BarnOwlWidget
+      - path: BarnOwl/Roost/RoostSnapshot.swift
+      - path: BarnOwl/Roost/OwletRenderer.swift
+      - path: BarnOwl/Roost/OwletArt.swift
+      - path: BarnOwl/Roost/PocketScene.swift
+    settings:
+      base:
+        PRODUCT_NAME: Barn Owl Widget
+        PRODUCT_BUNDLE_IDENTIFIER: io.github.marvika.BarnOwl.Widget
+        INFOPLIST_FILE: BarnOwlWidget/Info.plist
+        CODE_SIGN_ENTITLEMENTS: BarnOwlWidget/BarnOwlWidget.entitlements
+        ENABLE_HARDENED_RUNTIME: YES
+        GENERATE_INFOPLIST_FILE: NO
+        SKIP_INSTALL: YES
   BarnOwlTests:
     type: bundle.unit-test
     platform: macOS

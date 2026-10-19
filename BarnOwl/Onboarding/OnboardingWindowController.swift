@@ -11,9 +11,15 @@ final class OnboardingWindowController: NSObject, NSWindowDelegate {
         self.model = model
     }
 
-    func show() {
+    func show(at step: OnboardingView.Step? = nil) {
+        // A given step starts the guide afresh there.
+        if step != nil, let window {
+            window.delegate = nil
+            window.close()
+            self.window = nil
+        }
         if window == nil {
-            let view = OnboardingView(model: model) { [weak self] in self?.close() }
+            let view = OnboardingView(model: model, start: step ?? .welcome) { [weak self] in self?.close() }
             let window = NSWindow(contentViewController: NSHostingController(rootView: view))
             window.styleMask = [.titled, .closable, .fullSizeContentView]
             window.titlebarAppearsTransparent = true

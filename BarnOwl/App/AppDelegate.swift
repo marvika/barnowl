@@ -11,6 +11,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var settingsWindow: SettingsWindowController!
     private var barnWindow: BarnWindowController!
     private var barnWatch: BarnWatch!
+    private var roostWindow: RoostWindowController!
+    /// Whether agents were keeping the Mac awake at the last change.
+    private var agentsKeptAwake = false
+    private let recapWindow = RecapWindowController()
+    private var treeWindow: TreeWindowController!
+    private var island: IslandController!
     private var onboardingWindow: OnboardingWindowController!
     private var scanner: ItemScanner!
     private let images = ItemImageCache()
@@ -72,11 +78,51 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         model.openSettingsWindow = { [weak self] in self?.settingsWindow.show() }
         barnWindow = BarnWindowController(barn: model.barn)
         model.showBarn = { [weak self] in self?.barnWindow.show() }
+        roostWindow = RoostWindowController(model: model)
+        model.showRoost = { [weak self] id in self?.roostWindow.show(selecting: id) }
+        treeWindow = TreeWindowController(model: model)
+        model.showTree = { [weak self] in self?.treeWindow.show() }
+        model.showRecap = { [weak self] week in
+            OpenPanel.shared.closeAll()
+            self?.recapWindow.show(week: week)
+        }
         barnWatch = BarnWatch(barn: model.barn) { [weak self] in self?.barnWindow.show() }
         barnWatch.start()
         quickPanel = QuickPanelController(model: model)
         quickPanel.syncOwlIcon()
         model.watcher.onSurface = { [weak self] frame in self?.quickPanel.glance(toward: frame) }
+        keepAwake.agentsWorking = { [weak self] in self?.model.agents.keepsAwake ?? false }
+        island = IslandController(model: model)
+        model.agents.islandCanShow = { [weak self] in self?.island.canShow ?? false }
+        model.agents.onChange = { [weak self] in
+            guard let self else { return }
+            // Keep awake only cares when "an agent is working" flips; its
+            // 15 s tick catches the grace running out.
+            let working = self.model.agents.keepsAwake
+            if working != self.agentsKeptAwake {
+                self.agentsKeptAwake = working
+                self.keepAwake.evaluate()
+            }
+            // The rule arrives with the first agent, not for everyone.
+            if !Preferences.agentsRuleAdded, !self.model.agents.all.isEmpty { self.addAgentRuleOnce() }
+            self.quickPanel.syncOwlIcon()
+            self.island.update()
+        }
+        AgentWatcher.openFromNotification = { [weak self] id in
+            // Gone since? Then show the Roost instead.
+            guard let session = self?.model.agents.session(withID: id) else {
+                self?.roostWindow.show()
+                return
+            }
+            AgentActions.show(session)
+        }
+        addAgentRuleOnce()
+        // After an update or a move, point Claude Code's status line relay at this copy.
+        Task.detached(priority: .utility) {
+            StatusLineRelay.repointIfNeeded()
+            IslandAnswers.repointIfNeeded()
+        }
+        model.agents.applySettings()
         keepAwake.start()
         keepAwake.restoreSavedSession()
         model.watcher.start()
@@ -94,6 +140,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         clipboardPanel = ClipboardPanelController(clipboard: model.clipboard)
         dropTray = DropTray(clipboard: model.clipboard)
         dropTray.start()
+        island.nestHeight = { [weak self] in self?.dropTray.occupiedHeight ?? 0 }
+        dropTray.onModeChange = { [weak self] in self?.island.update() }
         model.showClipboard = { [weak self] in self?.clipboardPanel.show() }
         KeyboardShortcuts.onKeyUp(for: .clipboard) { [weak self] in self?.clipboardPanel.toggle() }
         sections.onScreensChanged = { [weak self] in
@@ -108,6 +156,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         model.presenter.onChange = { [weak self] _ in
             self?.bar.close()
             self?.updateToggleIcon()
+            self?.island.update()
         }
 
         if let button = items.toggle.button {
@@ -198,7 +247,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// barnowl://open?app=NAME, barnowl://place?app=NAME&row=hidden, barnowl://watch?app=NAME,
     /// barnowl://icon?app=NAME&label=TEXT, barnowl://presenter, barnowl://show, barnowl://toggle,
     /// barnowl://show-all, barnowl://hide, barnowl://keep-awake?minutes=60 (also 2h; 0 or none = indefinitely),
-    /// barnowl://keep-awake/stop. For Shortcuts, Raycast and scripts.
+    /// barnowl://keep-awake/stop, barnowl://roost. For Shortcuts, Raycast and scripts.
     func application(_ application: NSApplication, open urls: [URL]) {
         // A link that launches Barn Owl can arrive before launch has finished.
         guard model != nil else {
@@ -214,9 +263,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 model.showSettings(pane)
             case ("search", _): search.show()
             case ("clipboard", _): clipboardPanel.show()
-            case ("nest", _): dropTray.toggleOpen()
+            case ("nest", _):
+                // barnowl://nest?clear=1 empties the demo's Nest, for screenshots of the notch.
+                if DemoMode.isOn, query?.first(where: { $0.name == "clear" })?.value == "1" {
+                    dropTray.clear()
+                } else {
+                    dropTray.toggleOpen()
+                }
             case ("stage", _): DemoStage.toggle()
             case ("barn", _): barnWindow.show()
+            case ("island", _):
+                // barnowl://island?open=1 (or 0): open or close it, as hovering would
+                island?.setOpen(query?.first { $0.name == "open" }?.value != "0")
+            case ("roost", _):
+                // barnowl://roost, ?session=<id> to show one, ?view=now|tree, ?close=1
+                let value = { (name: String) in query?.first { $0.name == name }?.value }
+                if value("close") == "1" {
+                    roostWindow.close()
+                } else {
+                    if let view = value("view") { UserDefaults.standard.set(view == "tree", forKey: "roostShowsTree") }
+                    roostWindow.show(selecting: value("session"))
+                }
             case ("quick", _):
                 quickPanel.toggle(under: (quickPanel.owlItem ?? items.toggle).button?.window?.frame)
             case ("presenter", _):
@@ -276,7 +343,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                         Log.app.error("No menu bar item for \(app)")
                     }
                 }
-            case ("setup", _): onboardingWindow.show()
+            case ("setup", _):
+                // barnowl://setup, or ?step=agents to open the guide at one step
+                onboardingWindow.show(at: query?.first { $0.name == "step" }?.value.flatMap(OnboardingView.Step.init(name:)))
             case ("show", _):
                 // Like the arrow, but never hides what's already showing.
                 if sections.state == .collapsed, !bar.isOpen { revealHiddenIcons() }
@@ -315,6 +384,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Never leave the Mac unable to sleep after Barn Owl is gone. Keep
         // awake starts again with Barn Owl, and closed-lid mode with it.
         closedLid?.quit()
+        guard let model, Preferences.agentsEnabled, !DemoMode.isOn else { return }
+        DailyLog.shared.saveNow()
+        model.agents.widget.stop()
+        if model.agents.answering { IslandAnswers.listen(false) }
     }
 
     /// Versions up to 0.11.2 switched closed-lid mode with pmset, which can
@@ -388,7 +461,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private var lastDisplayProfiles: Bool?
 
+    /// "Keep awake while an agent is working" is on by default: added once,
+    /// and yours to switch off or delete like any rule.
+    private func addAgentRuleOnce() {
+        guard !DemoMode.isOn else { return }
+        if !Preferences.agentsRuleAdded {
+            guard !model.agents.all.isEmpty else { return }
+            Preferences.agentsRuleAdded = true
+            Preferences.agentsRuleKeepsScreen = true
+            guard !keepAwake.rules.rules.contains(where: { $0.conditions.contains(.agentWorking) }) else { return }
+            keepAwake.rules.add(KeepAwakeRule(conditions: [.agentWorking]))
+        } else if !Preferences.agentsRuleKeepsScreen {
+            // Test builds added it letting the screen sleep; keep the screen on, as it now does.
+            Preferences.agentsRuleKeepsScreen = true
+            for var rule in keepAwake.rules.rules where rule.conditions == [.agentWorking] && rule.allowDisplaySleep {
+                rule.allowDisplaySleep = false
+                keepAwake.rules.update(rule)
+            }
+        }
+    }
+
     private func preferencesChanged() {
+        if Preferences.agentsEnabled != model.agents.isRunning, !DemoMode.isOn { model.agents.applySettings() }
+        model.presenter.applySettings()
+        island?.update()
         if Preferences.displayProfiles != lastDisplayProfiles {
             if lastDisplayProfiles != nil { Task { await model.layout.updateProfile() } }
             lastDisplayProfiles = Preferences.displayProfiles

@@ -4,7 +4,7 @@ import SwiftUI
 /// Settings laid out like System Settings: a sidebar of panes, each a
 /// grouped form.
 enum SettingsPane: String, CaseIterable, Identifiable {
-    case layout, general, menuBar, appearance, keepAwake, toggles, clipboard, shortcuts, about
+    case layout, general, menuBar, appearance, keepAwake, agents, toggles, clipboard, shortcuts, about
     var id: Self { self }
 
     var title: String {
@@ -15,6 +15,7 @@ enum SettingsPane: String, CaseIterable, Identifiable {
         case .appearance: "Appearance"
         case .clipboard: "Clipboard"
         case .keepAwake: "Keep Awake"
+        case .agents: "Agents"
         case .toggles: "Toggles"
         case .shortcuts: "Shortcuts"
         case .about: "About"
@@ -29,6 +30,7 @@ enum SettingsPane: String, CaseIterable, Identifiable {
         case .appearance: "paintpalette.fill"
         case .clipboard: "doc.on.clipboard.fill"
         case .keepAwake: "eyes"
+        case .agents: "bird.fill"
         case .toggles: "switch.2"
         case .shortcuts: "keyboard.fill"
         case .about: "info"
@@ -43,6 +45,7 @@ enum SettingsPane: String, CaseIterable, Identifiable {
         case .appearance: .pink
         case .clipboard: .teal
         case .keepAwake: .orange
+        case .agents: .brown
         case .toggles: .green
         case .shortcuts: .purple
         case .about: .secondary
@@ -76,6 +79,7 @@ struct SettingsView: View {
                 case .appearance: AppearancePane(appearance: model.appearance)
                 case .clipboard: ClipboardPane(model: model)
                 case .keepAwake: KeepAwakePane(model: model)
+                case .agents: AgentsPane(model: model)
                 case .toggles: TogglesPane()
                 case .shortcuts: ShortcutsPane()
                 case .about: AboutPane()
@@ -363,6 +367,11 @@ private struct OwlPalettePicker: View {
 private struct GeneralPane: View {
     let model: AppModel
     @State private var launchAtLogin = LaunchAtLogin.isEnabled
+    @AppStorage(PrefKey.agentsEnabled) private var agents = true
+    @AppStorage(PrefKey.clipboardEnabled) private var clipboard = true
+    @AppStorage(PrefKey.dropTrayEnabled) private var nest = true
+    @AppStorage(PrefKey.presenterAutomatic) private var presenter = true
+    @AppStorage(PrefKey.barnLowSpaceWarning) private var diskWarning = true
 
     var body: some View {
         Form {
@@ -373,6 +382,34 @@ private struct GeneralPane: View {
                 }
                 .accessibilityLabel("Open at login")
                 .onChange(of: launchAtLogin) { _, enabled in LaunchAtLogin.set(enabled) { launchAtLogin = $0 } }
+            }
+            Section {
+                Toggle(isOn: $agents) {
+                    BadgeLabel(title: "Coding agents",
+                               subtitle: "Owlets for Claude Code, Codex and others, and keep awake while they work.",
+                               symbol: "bird.fill", color: .brown)
+                }
+                Toggle(isOn: $clipboard) {
+                    BadgeLabel(title: "Clipboard history", subtitle: "Everything you copy, a shortcut away.",
+                               symbol: "doc.on.clipboard.fill", color: .teal)
+                }
+                Toggle(isOn: $nest) {
+                    BadgeLabel(title: "The Nest", subtitle: "A shelf under the notch for files you drag.",
+                               symbol: "tray.and.arrow.down.fill", color: .orange)
+                }
+                Toggle(isOn: $presenter) {
+                    BadgeLabel(title: "Automatic presenter mode",
+                               subtitle: "Hides your icons while you share your screen.",
+                               symbol: "sunglasses.fill", color: .indigo)
+                }
+                Toggle(isOn: $diskWarning) {
+                    BadgeLabel(title: "Disk space warnings", subtitle: "A note when your disk is nearly full.",
+                               symbol: "externaldrive.fill", color: .gray)
+                }
+            } header: {
+                Text("Features")
+            } footer: {
+                Text("A feature that's off doesn't run at all. Menu bar hiding and keep awake are always on.")
             }
             Section {
                 @Bindable var updater = model.updater
@@ -555,6 +592,7 @@ private struct MenuBarPane: View {
 // MARK: - Keep awake
 
 private struct KeepAwakePane: View {
+    @AppStorage(PrefKey.agentsEnabled) private var agentsEnabled = true
     let model: AppModel
     @AppStorage(PrefKey.keepAwakeAllowDisplaySleep) private var allowDisplaySleep = false
     @AppStorage(PrefKey.keepAwakeHotkeyMinutes) private var defaultMinutes = 0
@@ -624,6 +662,7 @@ private struct KeepAwakePane: View {
                         VStack(alignment: .leading, spacing: 1) {
                             Text(rule.title)
                             Text(keepAwake.activeRule?.id == rule.id ? "Keeping your Mac awake now"
+                                 : !agentsEnabled && rule.conditions.contains(.agentWorking) ? "Agents are off in Settings → General"
                                  : rule.allowDisplaySleep ? "Display may sleep" : "Display stays on")
                                 .font(.caption).foregroundStyle(.secondary)
                         }
@@ -760,6 +799,7 @@ private struct RuleEditorSheet: View {
                 check(.externalDisplay)
                 check(.microphoneInUse)
                 check(.downloading)
+                if Preferences.agentsEnabled || rule.conditions.contains(.agentWorking) { check(.agentWorking) }
                 appCondition
                 scheduleCondition
             }
