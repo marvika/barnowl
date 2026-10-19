@@ -59,7 +59,9 @@ final class ClipboardPanelController {
     func close() {
         outsideClicks.stop()
         OpenPanel.shared.closed(self)
+        let wasOpen = panel != nil
         panel?.dismiss()
         panel = nil
+        if wasOpen { FocusReturn.afterPanelCloses(to: previousApp) }
     }
 }

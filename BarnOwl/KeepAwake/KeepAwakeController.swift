@@ -12,7 +12,7 @@ import UserNotifications
 @MainActor
 @Observable
 final class KeepAwakeController {
-    enum Session: Equatable {
+    enum Session: Equatable, Codable {
         case indefinite
         case until(Date)
         case whileAppRunning(bundleIdentifier: String, name: String)
@@ -20,6 +20,10 @@ final class KeepAwakeController {
     }
 
     private(set) var session: Session?
+    /// Set when Barn Owl quits only to come straight back (an update), so the
+    /// session carries on in the new version.
+    static var saveSessionOnQuit = false
+    private static let savedSessionKey = "savedKeepAwakeSession"
     /// When the current timed session started (or was last extended), for
     /// the countdown ring.
     private(set) var sessionStart: Date?
@@ -30,7 +34,9 @@ final class KeepAwakeController {
     /// Presenter mode keeps the Mac (and display) awake while presenting.
     private(set) var presenting = false
 
-    var isActive: Bool { session != nil || activeRule != nil || presenting }
+    /// Whether the Mac is being kept awake. Not below the battery cutoff,
+    /// presenting included.
+    var isActive: Bool { (session != nil || activeRule != nil || presenting) && !stoppedForBattery }
     @ObservationIgnored var onChange: (() -> Void)?
 
     @ObservationIgnored let rules: RuleStore
@@ -80,7 +86,40 @@ final class KeepAwakeController {
         onChange?()
     }
 
+    /// Saves the running session for the next launch, a minute or two from now.
+    func saveSession() {
+        guard let session, let data = try? JSONEncoder().encode(SavedSession(session: session, saved: Date())) else { return }
+        UserDefaults.standard.set(data, forKey: Self.savedSessionKey)
+    }
+
+    /// Picks up a session saved just before an update relaunch. Anything
+    /// older than ten minutes, already over, or for an app that's gone is dropped.
+    func restoreSavedSession() {
+        guard let data = UserDefaults.standard.data(forKey: Self.savedSessionKey) else { return }
+        UserDefaults.standard.removeObject(forKey: Self.savedSessionKey)
+        guard let saved = try? JSONDecoder().decode(SavedSession.self, from: data),
+              let session = Self.resumable(saved, now: Date()) else { return }
+        Log.keepAwake.info("Carrying on the keep-awake session from before the update")
+        start(session)
+    }
+
+    struct SavedSession: Codable {
+        let session: Session
+        let saved: Date
+    }
+
+    nonisolated static func resumable(_ saved: SavedSession, now: Date) -> Session? {
+        guard now.timeIntervalSince(saved.saved) < 600 else { return nil }
+        if case .until(let end) = saved.session, end <= now { return nil }
+        return saved.session
+    }
+
+    /// The longest session or extension: a year. Anything longer would only
+    /// come from a typo, and very large numbers overflow.
+    nonisolated static let longestMinutes = 525_600
+
     func start(minutes: Int) {
+        let minutes = min(minutes, Self.longestMinutes)
         start(minutes > 0 ? .until(Date().addingTimeInterval(TimeInterval(minutes * 60))) : .indefinite)
     }
 
@@ -96,7 +135,7 @@ final class KeepAwakeController {
 
     nonisolated static func extended(_ session: Session, by minutes: Int, now: Date = Date()) -> Session? {
         guard case .until(let end) = session, minutes > 0 else { return nil }
-        return .until(max(end, now).addingTimeInterval(TimeInterval(minutes * 60)))
+        return .until(max(end, now).addingTimeInterval(TimeInterval(min(minutes, longestMinutes)) * 60))
     }
 
     /// How much of a timed session is left, 1 at the start to 0 at the end.
@@ -149,7 +188,7 @@ final class KeepAwakeController {
         // Low battery ends everything, so a forgotten session can't drain it.
         let threshold = Preferences.keepAwakeStopBelowBattery
         if Self.batteryTooLow(threshold: threshold, onAC: snapshot.onAC, percent: snapshot.batteryPercent) {
-            if session != nil || activeRule != nil {
+            if session != nil || activeRule != nil || (presenting && !stoppedForBattery) {
                 stoppedForBattery = true
                 if session != nil { endSession(reason: "Battery is below \(threshold)%, so your Mac can sleep again.") }
                 activeRule = nil
@@ -332,6 +371,6 @@ enum KeepAwakeFormatter {
     }
 
     static func durationLabel(minutes: Int) -> String {
-        minutes == 0 ? "Indefinitely" : remaining(TimeInterval(minutes * 60))
+        minutes == 0 ? "Indefinitely" : remaining(TimeInterval(minutes) * 60)
     }
 }

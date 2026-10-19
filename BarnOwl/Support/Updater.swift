@@ -1,6 +1,7 @@
 import AppKit
 import Observation
 import Sparkle
+import UserNotifications
 
 /// Checks for new releases with Sparkle. The feed (appcast.xml in the
 /// repository) and the key that signs updates are in Info.plist.
@@ -55,6 +56,11 @@ extension Updater: SPUUpdaterDelegate {
     // "Include anonymous system profile" in Sparkle's first prompt.
     nonisolated func allowedSystemProfileKeys(for updater: SPUUpdater) -> [String]? { [] }
 
+    // Quitting to install an update: keep awake carries on in the new version.
+    nonisolated func updaterWillRelaunchApplication(_ updater: SPUUpdater) {
+        MainActor.assumeIsolated { KeepAwakeController.saveSessionOnQuit = true }
+    }
+
     #if DEBUG
     // A development build checks only when asked, so a release never offers
     // to replace the copy being worked on.
@@ -67,11 +73,32 @@ extension Updater: SPUUpdaterDelegate {
 extension Updater: SPUStandardUserDriverDelegate {
     nonisolated var supportsGentleScheduledUpdateReminders: Bool { true }
 
-    // Barn Owl has no Dock icon or main window to badge, so an update found in
-    // the background would sit unseen behind other windows. Bring it forward.
+    // Barn Owl has no Dock icon to badge, so an update found in the background
+    // would sit unseen behind other windows. Pulling it to the front would
+    // take the keyboard mid-sentence (a Return could hit Install), so it says
+    // so in a notification instead; clicking that brings the window forward.
     nonisolated func standardUserDriverWillHandleShowingUpdate(_ handleShowingUpdate: Bool, forUpdate update: SUAppcastItem,
                                                                state: SPUUserUpdateState) {
         guard handleShowingUpdate, !state.userInitiated else { return }
-        MainActor.assumeIsolated { NSApp.activate() }
+        let version = update.displayVersionString
+        MainActor.assumeIsolated { UpdateNotice.post(version: version) }
+    }
+}
+
+/// "Barn Owl 1.2 is ready", as a notification rather than a window that
+/// takes the keyboard. Clicking it brings the update window forward.
+enum UpdateNotice {
+    nonisolated static let category = "update"
+
+    @MainActor static func post(version: String) {
+        let center = UNUserNotificationCenter.current()
+        center.requestAuthorization(options: [.alert]) { granted, _ in
+            guard granted else { return }
+            let content = UNMutableNotificationContent()
+            content.title = "Barn Owl \(version) is ready"
+            content.body = "Click to see what's new and install it."
+            content.categoryIdentifier = category
+            center.add(UNNotificationRequest(identifier: "update-\(version)", content: content, trigger: nil))
+        }
     }
 }

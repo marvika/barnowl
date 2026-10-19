@@ -8,6 +8,8 @@ final class SearchPanelController {
     private let outsideClicks = OutsideClickMonitor()
     private var resizeObserver: NSObjectProtocol?
     private var top: CGFloat = 0
+    /// The app the user was in, to hand the keyboard back to.
+    private var previousApp: NSRunningApplication?
 
     var isOpen: Bool { panel?.isVisible ?? false }
 
@@ -20,6 +22,8 @@ final class SearchPanelController {
     }
 
     func show() {
+        let front = NSWorkspace.shared.frontmostApplication
+        if front != .current { previousApp = front }
         model.refreshPermissions()
         model.scanner.refresh()
         // A fresh view each time resets the query and focus.
@@ -61,7 +65,9 @@ final class SearchPanelController {
     func close() {
         outsideClicks.stop()
         OpenPanel.shared.closed(self)
+        let wasOpen = panel != nil
         panel?.dismiss()
         panel = nil
+        if wasOpen { FocusReturn.afterPanelCloses(to: previousApp) }
     }
 }

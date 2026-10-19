@@ -199,3 +199,19 @@ struct ItemImage: View {
             ?? NSWorkspace.shared.icon(for: .application)
     }
 }
+
+/// Search and the clipboard make Barn Owl the active app so their fields can
+/// take typing. When they close, the keyboard goes back to the app the user
+/// was in, unless one of Barn Owl's own windows (Settings, the Barn) is open.
+enum FocusReturn {
+    @MainActor static func afterPanelCloses(to app: NSRunningApplication? = nil) {
+        guard NSApp.isActive else { return }
+        let ownWindowOpen = NSApp.windows.contains { $0.isVisible && !($0 is NSPanel) && $0.canBecomeMain }
+        guard !ownWindowOpen else { return }
+        if let app, !app.isTerminated, app != .current {
+            app.activate()
+        } else {
+            NSApp.deactivate()
+        }
+    }
+}

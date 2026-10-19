@@ -74,8 +74,12 @@ final class BarnWatch: NSObject, UNUserNotificationCenterDelegate {
     /// Clicking a Barn notification opens the Barn.
     nonisolated func userNotificationCenter(_ center: UNUserNotificationCenter,
                                             didReceive response: UNNotificationResponse) async {
-        guard response.notification.request.content.categoryIdentifier == Self.lowSpaceCategory else { return }
-        await MainActor.run { openBarn() }
+        switch response.notification.request.content.categoryIdentifier {
+        case Self.lowSpaceCategory: await MainActor.run { openBarn() }
+        // The update window is already showing, behind: bring it forward.
+        case UpdateNotice.category: await MainActor.run { NSApp.activate() }
+        default: break
+        }
     }
 
     /// Shown even while Barn Owl is the active app.

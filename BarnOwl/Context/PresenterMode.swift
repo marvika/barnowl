@@ -23,7 +23,7 @@ final class PresenterMode {
     @ObservationIgnored private let scanner: ItemScanner
     @ObservationIgnored private let mover: ItemMover
     @ObservationIgnored private let layout: LayoutController
-    @ObservationIgnored private var sharingChecks = 0
+    @ObservationIgnored private var sharing = SharingWatch()
     /// Set when presenting is turned off by hand during a share.
     @ObservationIgnored private var stoppedDuringShare = false
     /// Icons moved out of view for presenting, to put back afterwards.
@@ -58,7 +58,7 @@ final class PresenterMode {
         isPresenting = presenting
         startedAutomatically = presenting && automatically
         // Turned off by hand during a share: stay off until that share ends.
-        if !presenting, !automatically, sharingChecks >= 2 { stoppedDuringShare = true }
+        if !presenting, !automatically, sharing.isSharing { stoppedDuringShare = true }
         Log.app.info("Presenter mode \(presenting ? "on" : "off")\(automatically ? " (screen sharing)" : "")")
         onChange?(presenting)
         sections.collapse()
@@ -120,13 +120,12 @@ final class PresenterMode {
         // Barn Owl's own icon pictures light up the same indicator for a few
         // seconds; ignore it then, and require it to stay on for two checks.
         let ownCaptureRecently = Date().timeIntervalSince(max(images.lastCapture, OwnCaptures.last)) < 10
-        let indicator = !ownCaptureRecently && Self.isScreenBeingShared
-        sharingChecks = indicator ? sharingChecks + 1 : 0
-        if !indicator && !ownCaptureRecently { stoppedDuringShare = false }
-        let sharing = sharingChecks >= 2
-        if sharing && !isPresenting && !stoppedDuringShare {
+        let indicator = Self.isScreenBeingShared
+        sharing.observe(indicator: indicator, ownCaptureRecently: ownCaptureRecently)
+        if !indicator { stoppedDuringShare = false }
+        if sharing.isSharing && !isPresenting && !stoppedDuringShare {
             await set(true, automatically: true)
-        } else if !indicator && !ownCaptureRecently && isPresenting && startedAutomatically {
+        } else if !indicator && isPresenting && startedAutomatically {
             await set(false, automatically: true)
         }
     }
@@ -159,5 +158,33 @@ final class PresenterMode {
     nonisolated static func describesSharing(_ description: String) -> Bool {
         let lowered = description.lowercased()
         return lowered.contains("screen") && (lowered.contains("in use") || lowered.contains("sharing"))
+    }
+}
+
+/// Decides from macOS's screen-recording indicator whether a share has
+/// started. The indicator also lights for things that capture the screen all
+/// the time (DisplayLink, screen recorders, Barn Owl's own icon pictures), so:
+/// a capture already going when Barn Owl starts isn't a share until it has
+/// stopped once, Barn Owl's own captures don't count, and it must stay on for
+/// two checks in a row.
+struct SharingWatch: Sendable {
+    private var started = false
+    /// On since Barn Owl started: a capture that runs all the time.
+    private(set) var steadyCapture = false
+    private var checks = 0
+
+    var isSharing: Bool { checks >= 2 }
+
+    mutating func observe(indicator: Bool, ownCaptureRecently: Bool) {
+        // Barn Owl photographs icons at launch, which lights the indicator
+        // too: take the baseline at the first look without that.
+        if !started {
+            guard !ownCaptureRecently else { return }
+            started = true
+            steadyCapture = indicator
+        }
+        if !indicator { steadyCapture = false }
+        let counts = indicator && !ownCaptureRecently && !steadyCapture
+        checks = counts ? checks + 1 : 0
     }
 }

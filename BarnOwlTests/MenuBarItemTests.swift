@@ -165,7 +165,26 @@ struct ItemKeyTests {
     @Test func keysUseBundleAndWindowNameAndNumberRepeats() {
         let keyed = ItemKey.assign([item("a", window: "Item-0", x: 1), item("a", window: "Item-0", x: 2),
                                     item("b", window: nil, title: "Status", x: 3)])
-        #expect(keyed.map(\.key) == ["a/Item-0", "a/Item-0#2", "b/Status"])
+        #expect(keyed.map(\.key) == ["a/Item-0", "a/Item-0#2", "b/item"])
+    }
+
+    /// Without Screen Recording there's no window name. An icon whose title
+    /// changes with its state must keep its key, or it reads as a new icon
+    /// and gets moved.
+    @Test func keysWithoutWindowNamesSurviveStatusChanges() {
+        let before = ItemKey.assign([
+            item("com.apple.controlcenter", window: nil, title: "Wi-Fi, connected", x: 1),
+            item("com.apple.controlcenter", window: nil, title: "Battery, 80 percent", x: 2),
+            item("com.microsoft.OneDrive", window: nil, title: "OneDrive · Backed up", x: 3),
+        ])
+        let after = ItemKey.assign([
+            item("com.apple.controlcenter", window: nil, title: "Wi-Fi, not connected", x: 1),
+            item("com.apple.controlcenter", window: nil, title: "Battery, 79 percent", x: 2),
+            item("com.microsoft.OneDrive", window: nil, title: "OneDrive · Syncing 3 files", x: 3),
+        ])
+        #expect(before.map(\.key) == after.map(\.key))
+        #expect(before.map(\.key) == ["com.apple.controlcenter/Wi-Fi", "com.apple.controlcenter/Battery",
+                                      "com.microsoft.OneDrive/item"])
     }
 
     @Test func clockAndControlCenterCantMove() {
