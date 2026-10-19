@@ -165,12 +165,16 @@ enum CommandParser {
         if ["forever", "indefinitely", "always", "∞"].contains(word) { return 0 }
         let lower = word.lowercased()
         let number = lower.prefix { $0.isNumber || $0 == "." || $0 == "," }.replacingOccurrences(of: ",", with: ".")
-        guard let value = Double(number), value > 0 else { return nil }
+        guard let value = Double(number), value > 0, value.isFinite else { return nil }
         let unit = lower.dropFirst(number.count)
+        let minutes: Double
         switch unit {
-        case "", "m", "min", "mins", "minutes": return Int(value.rounded())
-        case "h", "hr", "hrs", "hour", "hours", "t", "time", "timer": return Int((value * 60).rounded())
+        case "", "m", "min", "mins", "minutes": minutes = value
+        case "h", "hr", "hrs", "hour", "hours", "t", "time", "timer": minutes = value * 60
         default: return nil
         }
+        // "awake 99999999999999999999" is a typo, not a plan: a huge number
+        // would overflow; a year is plenty.
+        return Int(min(minutes, Double(KeepAwakeController.longestMinutes)).rounded())
     }
 }

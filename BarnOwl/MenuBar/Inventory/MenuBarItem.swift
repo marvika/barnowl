@@ -205,18 +205,35 @@ enum HiddenIconsDisplay: String, CaseIterable, Identifiable, Sendable {
 }
 
 enum ItemKey {
-    /// "com.example.app/Item-0", with "#2", "#3"… for repeats. Falls back to
-    /// the Accessibility title when the window name isn't readable (no Screen
-    /// Recording permission).
+    /// "com.example.app/Item-0", with "#2", "#3"… for repeats.
+    ///
+    /// The window name needs Screen Recording. Without it, the key must still
+    /// stay the same while the icon's state changes: an Accessibility title
+    /// like "Wi-Fi, connected" or "OneDrive · Syncing" changes all the time,
+    /// and a new key reads as a new icon, which then gets moved. So an app's
+    /// only icon is just "item", and otherwise only the title's first part
+    /// counts ("Wi-Fi").
     static func assign(_ items: [MenuBarItem]) -> [MenuBarItem] {
         var seen: [String: Int] = [:]
+        let perApp = Dictionary(grouping: items, by: { $0.bundleIdentifier ?? $0.appName }).mapValues(\.count)
         return items.map { item in
             var item = item
-            let base = "\(item.bundleIdentifier ?? item.appName)/\(item.windowName ?? item.title ?? "item")"
+            let app = item.bundleIdentifier ?? item.appName
+            let name = item.windowName ?? (perApp[app] == 1 ? "item" : stem(of: item.title) ?? "item")
+            let base = "\(app)/\(name)"
             let count = (seen[base] ?? 0) + 1
             seen[base] = count
             item.key = count == 1 ? base : "\(base)#\(count)"
             return item
         }
+    }
+
+    /// The part of a title that names the icon, before any state: "Wi-Fi"
+    /// from "Wi-Fi, connected", "OneDrive" from "OneDrive · Syncing".
+    static func stem(of title: String?) -> String? {
+        guard let title else { return nil }
+        let first = title.components(separatedBy: CharacterSet(charactersIn: ",·—–:"))
+            .first?.trimmingCharacters(in: .whitespaces) ?? ""
+        return first.isEmpty ? nil : first
     }
 }

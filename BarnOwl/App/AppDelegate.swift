@@ -87,6 +87,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         quickPanel.syncOwlIcon()
         model.watcher.onSurface = { [weak self] frame in self?.quickPanel.glance(toward: frame) }
         keepAwake.start()
+        keepAwake.restoreSavedSession()
         model.watcher.start()
         gestures = RevealGestures(statusItems: items, isCollapsed: { [weak self] in
             self?.sections.state == .collapsed && self?.bar.isOpen == false
@@ -308,6 +309,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationWillTerminate(_ notification: Notification) {
+        if KeepAwakeController.saveSessionOnQuit { keepAwake.saveSession() }
         keepAwake.stop()
         // Never leave the Mac unable to sleep after Barn Owl is gone. But an
         // update or a restart brings it straight back: keep the setting then

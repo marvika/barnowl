@@ -41,6 +41,51 @@ struct PictureSignatureTests {
     }
 }
 
+struct SharingWatchTests {
+    /// DisplayLink, a screen recorder: on before Barn Owl started, and on for good.
+    @Test func aCaptureRunningSinceLaunchIsntAShare() {
+        var watch = SharingWatch()
+        for _ in 0..<10 { watch.observe(indicator: true, ownCaptureRecently: false) }
+        #expect(!watch.isSharing)
+    }
+
+    @Test func aCaptureThatStartsLaterIsAShareAfterTwoChecks() {
+        var watch = SharingWatch()
+        watch.observe(indicator: false, ownCaptureRecently: false)
+        watch.observe(indicator: true, ownCaptureRecently: false)
+        #expect(!watch.isSharing)
+        watch.observe(indicator: true, ownCaptureRecently: false)
+        #expect(watch.isSharing)
+    }
+
+    @Test func aSteadyCaptureCountsAgainOnceItHasStopped() {
+        var watch = SharingWatch()
+        watch.observe(indicator: true, ownCaptureRecently: false)
+        watch.observe(indicator: false, ownCaptureRecently: false)
+        watch.observe(indicator: true, ownCaptureRecently: false)
+        watch.observe(indicator: true, ownCaptureRecently: false)
+        #expect(watch.isSharing)
+    }
+
+    /// At launch Barn Owl photographs the icons, lighting the indicator
+    /// itself. DisplayLink running underneath must still count as steady.
+    @Test func theBaselineWaitsForBarnOwlsOwnPictures() {
+        var watch = SharingWatch()
+        watch.observe(indicator: true, ownCaptureRecently: true)
+        watch.observe(indicator: true, ownCaptureRecently: true)
+        for _ in 0..<5 { watch.observe(indicator: true, ownCaptureRecently: false) }
+        #expect(!watch.isSharing)
+    }
+
+    @Test func barnOwlsOwnPicturesDontCountAsAShare() {
+        var watch = SharingWatch()
+        watch.observe(indicator: false, ownCaptureRecently: false)
+        watch.observe(indicator: true, ownCaptureRecently: true)
+        watch.observe(indicator: true, ownCaptureRecently: true)
+        #expect(!watch.isSharing)
+    }
+}
+
 struct PresenterDetectionTests {
     @Test func readsControlCenterDescriptions() {
         #expect(PresenterMode.describesSharing("Control Center, Screen Recording is in use"))
