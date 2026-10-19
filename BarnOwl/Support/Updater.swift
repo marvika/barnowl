@@ -55,12 +55,6 @@ extension Updater: SPUUpdaterDelegate {
     // "Include anonymous system profile" in Sparkle's first prompt.
     nonisolated func allowedSystemProfileKeys(for updater: SPUUpdater) -> [String]? { [] }
 
-    // Quitting to install an update and open the new version: settings that
-    // are switched off on quit, like closed-lid mode, stay as they are.
-    nonisolated func updaterWillRelaunchApplication(_ updater: SPUUpdater) {
-        MainActor.assumeIsolated { ClosedLidMode.keepOnQuit = true }
-    }
-
     #if DEBUG
     // A development build checks only when asked, so a release never offers
     // to replace the copy being worked on.

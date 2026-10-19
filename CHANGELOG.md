@@ -3,6 +3,17 @@
 All notable changes to Barn Owl. Versions follow [semantic versioning](https://semver.org);
 before 1.0, a minor version can change behaviour.
 
+## Unreleased
+
+- **Closed-lid mode now follows keep awake,** like Amphetamine with Power
+  Protect. Close the lid while keep awake is on and your Mac keeps running,
+  with the screen locked (unless an external display is connected);
+  otherwise it sleeps as usual. Before, it stayed on until you turned it off.
+  Turning it on asks for your password once, to add a rule that lets your
+  account run exactly `pmset -a disablesleep 1` and `pmset -a disablesleep 0`
+  without a password; turning it off removes the rule. If you had it on,
+  Barn Owl offers to set this up, or to turn it off.
+
 ## 0.10.2
 
 - Closed-lid mode stays on through updates, and through restarts when Barn

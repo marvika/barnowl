@@ -18,6 +18,9 @@ final class AppModel {
     let appearance = MenuBarAppearance()
     let clipboard = ClipboardHistory()
     let updater = Updater()
+    /// Keeps closed-lid mode in step with keep awake; Settings asks it to
+    /// catch up when the setting changes.
+    @ObservationIgnored var closedLid: ClosedLidController?
     let barn = BarnModel()
     @ObservationIgnored var showBarn: () -> Void = {}
     @ObservationIgnored var showSetup: () -> Void = {}

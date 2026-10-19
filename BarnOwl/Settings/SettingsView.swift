@@ -565,7 +565,7 @@ private struct KeepAwakePane: View {
     @AppStorage(PrefKey.keepAwakeCountdown) private var countdown = true
     @State private var startMinutes = 60
     @State private var editingRule: KeepAwakeRule?
-    @State private var closedLid = ClosedLidMode.isEnabled
+    @State private var closedLid = Preferences.closedLidMode
 
     private var keepAwake: KeepAwakeController { model.keepAwake }
 
@@ -697,19 +697,27 @@ private struct KeepAwakePane: View {
 
             Section {
                 Toggle(isOn: Binding(get: { closedLid }, set: { enabled in
-                    if ClosedLidMode.set(enabled) {
-                        Preferences.closedLidMode = enabled
+                    if enabled {
+                        // One password, for a rule that lets Barn Owl switch it by itself.
+                        guard ClosedLidMode.canSwitchWithoutPassword || ClosedLidMode.install() else { return }
+                        Preferences.closedLidMode = true
+                    } else {
+                        Preferences.closedLidMode = false
+                        // Removing the rule asks for the password; if that's
+                        // cancelled, at least let the Mac sleep again.
+                        if !ClosedLidMode.uninstall() { ClosedLidMode.apply(false) }
                     }
-                    closedLid = ClosedLidMode.isEnabled
+                    closedLid = Preferences.closedLidMode
+                    model.closedLid?.sync()
                 })) {
                     BadgeLabel(title: "Keep running with the lid closed",
-                               subtitle: "Even without an external display. Asks for your password to switch.",
+                               subtitle: "While Barn Owl keeps your Mac awake, even without an external display.",
                                symbol: "laptopcomputer", color: .gray)
                 }
             } header: {
                 Text("Closed-lid mode")
             } footer: {
-                Text("A closed Mac that keeps running gets warm and uses battery. Don't put it in a bag like this. It stays on through updates, and through restarts if Barn Owl opens at login; it turns off when you quit Barn Owl.")
+                Text("Close the lid while keep awake is on and your Mac keeps running, with the screen locked; otherwise it sleeps as usual. Turning this on asks for your password once, to let Barn Owl switch this one setting (pmset disablesleep) by itself; turning it off asks again and removes that permission. A closed Mac that keeps running gets warm, so don't put it in a bag like this.")
             }
         }
         .sheet(item: $editingRule) { rule in

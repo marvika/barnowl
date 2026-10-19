@@ -21,22 +21,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var gestures: RevealGestures!
     private var clipboardPanel: ClipboardPanelController!
     private var dropTray: DropTray!
+    private var closedLid: ClosedLidController!
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         // Unit tests run inside the app; don't touch the real menu bar then.
         guard ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] == nil else { return }
         if !DemoMode.isOn { Migration.runIfNeeded() }
         Preferences.registerDefaults()
-        // Closed-lid mode may have been switched off while Barn Owl wasn't running.
-        if Preferences.closedLidMode, !ClosedLidMode.isEnabled { Preferences.closedLidMode = false }
-        // Restarting, shutting down or logging out: if Barn Owl opens again at
-        // login, it's back before the Mac is in a bag.
-        NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.willPowerOffNotification,
-                                                          object: nil, queue: .main) { _ in
-            MainActor.assumeIsolated {
-                if LaunchAtLogin.isEnabled { ClosedLidMode.keepOnQuit = true }
-            }
-        }
 
         items = StatusItems()
         sections = SectionController(items: items, engine: HidingEngineFactory.make(items: items))
@@ -128,10 +119,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             self?.updateToggleIcon()
             self?.sectionsMoved(revealed: state != .collapsed)
         }
+        closedLid = ClosedLidController(keepAwake: keepAwake)
+        model.closedLid = closedLid
         keepAwake.onChange = { [weak self] in
             self?.updateToggleIcon()
             self?.quickPanel.syncOwlIcon()
+            self?.closedLid.sync()
         }
+        closedLid.sync()
+        migrateClosedLidMode()
         updateToggleIcon()
 
         KeyboardShortcuts.onKeyUp(for: .toggleHiddenItems) { [weak self] in self?.revealHiddenIcons() }
@@ -309,13 +305,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationWillTerminate(_ notification: Notification) {
         keepAwake.stop()
-        // Never leave the Mac unable to sleep after Barn Owl is gone. But an
-        // update or a restart brings it straight back: keep the setting then
-        // (and don't ask for a password in the middle of it).
-        if ClosedLidMode.keepOnQuit {
-            Log.keepAwake.info("Leaving closed-lid mode as it is: Barn Owl is coming back")
-        } else if Preferences.closedLidMode, ClosedLidMode.isEnabled {
-            if ClosedLidMode.set(false) { Preferences.closedLidMode = false }
+        // Never leave the Mac unable to sleep after Barn Owl is gone. Keep
+        // awake starts again with Barn Owl, and closed-lid mode with it.
+        closedLid?.quit()
+    }
+
+    /// Closed-lid mode used to be one switch that stayed on, set with a
+    /// password. Now it follows keep awake, which needs the rule: offer to set
+    /// it up once, or turn the old switch off.
+    private func migrateClosedLidMode() {
+        guard !DemoMode.isOn, Preferences.closedLidMode, !ClosedLidMode.canSwitchWithoutPassword else { return }
+        Task { @MainActor in
+            try? await Task.sleep(for: .seconds(2))
+            NSApp.activate()
+            let alert = NSAlert()
+            alert.messageText = "Closed-lid mode now follows keep awake"
+            alert.informativeText = "Your Mac will keep running with the lid closed only while Barn Owl keeps it awake, and sleep as usual otherwise. To switch it by itself, Barn Owl needs your password once."
+            alert.addButton(withTitle: "Set Up")
+            alert.addButton(withTitle: "Turn Off")
+            if alert.runModal() == .alertFirstButtonReturn, ClosedLidMode.install() {
+                self.closedLid.sync()
+            } else {
+                Preferences.closedLidMode = false
+                if ClosedLidMode.isEnabled { ClosedLidMode.turnOffWithPassword() }
+            }
         }
     }
 
