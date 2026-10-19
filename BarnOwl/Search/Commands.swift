@@ -175,6 +175,7 @@ enum CommandParser {
         }
         // "awake 99999999999999999999" is a typo, not a plan: a huge number
         // would overflow; a year is plenty.
-        return Int(min(minutes, Double(KeepAwakeController.longestMinutes)).rounded())
+        // At least a minute: rounding "0.2" down to 0 would mean "until you stop it".
+        return max(1, Int(min(minutes, Double(KeepAwakeController.longestMinutes)).rounded()))
     }
 }

@@ -3,6 +3,31 @@
 All notable changes to Barn Owl. Versions follow [semantic versioning](https://semver.org);
 before 1.0, a minor version can change behaviour.
 
+## Unreleased
+
+- **Fixes crashes at launch.** Moving the pointer over the owl made macOS
+  throw an error each time (Barn Owl answered to the wrong names), which
+  could leave it in a broken state and crash a moment later.
+- **Setup no longer takes over the pointer.** Finishing setup, and Refresh
+  Pictures in Settings, used to drag every hidden icon into view and back to
+  photograph it; now they show all icons for a moment instead, and nothing
+  moves.
+- Barn Owl never borrows the pointer while you use it: an icon it brought out
+  for you goes back once you pause, and moves it makes by itself wait without
+  holding up the ones you ask for.
+- Closed-lid mode can no longer end up on after keep awake quickly starts and
+  stops.
+- The "can't hide icons yet" alert only appears when you click the arrow, not
+  out of nowhere.
+- Big copies (whole log files, 6K screenshots) no longer slow Barn Owl down:
+  text over a megabyte isn't kept, images are scaled down, and history is saved
+  in the background.
+- Dark Mode and presenter checks no longer freeze Barn Owl while macOS asks
+  for permission or Control Center is busy.
+- Clicking the covered desktop no longer takes the keyboard from your app.
+- A clean-up that times out can't hang; "awake 0.2" means a minute, not
+  forever; and a few rarer cases that could crash or loop are guarded.
+
 ## 0.11.0
 
 - Without Screen Recording, icons whose name shows their state ("Wi‑Fi,

@@ -55,7 +55,13 @@ final class DesktopCover {
         windows = [:]
         for screen in NSScreen.screens {
             guard let id = screen.displayID else { continue }
-            let window = NSWindow(contentRect: screen.frame, styleMask: .borderless, backing: .buffered, defer: false)
+            // A non-activating panel: clicking the covered desktop doesn't make
+            // Barn Owl the active app and take the keyboard from yours. (It
+            // still catches the click, so hidden icons can't be opened blind.)
+            let window = NSPanel(contentRect: screen.frame, styleMask: [.borderless, .nonactivatingPanel],
+                                 backing: .buffered, defer: false)
+            window.becomesKeyOnlyIfNeeded = true
+            window.hidesOnDeactivate = false
             // Just above the desktop icons, far below ordinary windows.
             window.level = NSWindow.Level(rawValue: Int(CGWindowLevelForKey(.desktopIconWindow)) + 1)
             window.collectionBehavior = [.canJoinAllSpaces, .stationary, .ignoresCycle, .fullScreenNone]

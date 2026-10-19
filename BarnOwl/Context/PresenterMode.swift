@@ -120,7 +120,8 @@ final class PresenterMode {
         // Barn Owl's own icon pictures light up the same indicator for a few
         // seconds; ignore it then, and require it to stay on for two checks.
         let ownCaptureRecently = Date().timeIntervalSince(max(images.lastCapture, OwnCaptures.last)) < 10
-        let indicator = Self.isScreenBeingShared
+        // Off the main thread: a busy Control Center mustn't freeze Barn Owl.
+        let indicator = await Task.detached { Self.isScreenBeingShared }.value
         sharing.observe(indicator: indicator, ownCaptureRecently: ownCaptureRecently)
         if !indicator { stoppedDuringShare = false }
         if sharing.isSharing && !isPresenting && !stoppedDuringShare {
@@ -141,9 +142,12 @@ final class PresenterMode {
         var bar: CFTypeRef?
         guard AXUIElementCopyAttributeValue(app, "AXExtrasMenuBar" as CFString, &bar) == .success, let bar
         else { return false }
+        let barElement = bar as! AXUIElement
+        AXUIElementSetMessagingTimeout(barElement, 0.2)
         var children: CFTypeRef?
-        AXUIElementCopyAttributeValue(bar as! AXUIElement, kAXChildrenAttribute as CFString, &children)
+        AXUIElementCopyAttributeValue(barElement, kAXChildrenAttribute as CFString, &children)
         for child in (children as? [AXUIElement]) ?? [] {
+            AXUIElementSetMessagingTimeout(child, 0.2)
             var identifier: CFTypeRef?
             AXUIElementCopyAttributeValue(child, kAXIdentifierAttribute as CFString, &identifier)
             guard (identifier as? String) == "com.apple.menuextra.controlcenter" else { continue }
