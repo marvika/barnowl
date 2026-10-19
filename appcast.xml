@@ -10,6 +10,104 @@
         <language>en</language>
         <!-- Releases, newest first -->
         <item>
+            <title>Barn Owl 0.12.0</title>
+            <link>https://github.com/marvika/barnowl/releases/tag/v0.12.0</link>
+            <pubDate>Mon, 19 Oct 2026 23:30:07 +0000</pubDate>
+            <sparkle:version>19</sparkle:version>
+            <sparkle:shortVersionString>0.12.0</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>26.0</sparkle:minimumSystemVersion>
+            <sparkle:fullReleaseNotesLink>https://github.com/marvika/barnowl/releases/tag/v0.12.0</sparkle:fullReleaseNotesLink>
+            <description sparkle:format="markdown"><![CDATA[
+- **The Roost: your coding agents as owlets.** Claude Code (in a terminal,
+  the Claude app's Code tab or the Agent SDK), Codex, Copilot CLI, OpenCode,
+  Gemini CLI and a few others each get a pixel owlet that shows what it's
+  doing: typing, searching, running a command, thinking, waiting for its
+  helpers, stuck, napping, or waving when it needs you. Each agent has its
+  own colour, and a session's helpers sit beside it.
+- **In the menu bar and the quick panel.** While agents work, a small owlet
+  sits beside the owl, with a dot when one needs you. The quick panel shows
+  every owlet on a branch in a little night scene, a card for the one that
+  needs you with what it asks and an Answer button, one line for the rest,
+  and your plan limits as moons.
+- **The Roost window.** **Now** shows what needs you as cards holding the
+  actual question or command, with a countdown on a question; who's working,
+  with their teams of helpers; what's done today; and who's napping. Beside
+  it, today hour by hour, your plan limits, time by repository and a flight
+  log. **Tree** puts every owlet on one pixel tree, a branch per repository,
+  with nappers curled up in the hollow and finished ones asleep in the nest,
+  under a sky that follows the time of day and the real moon (or one you
+  pick in Settings → Agents). Pop the tree out into its own window and keep
+  it on top. Open the Roost from the quick panel, by searching for "roost",
+  or with `barnowl://roost`.
+- **Show and Answer take you there:** to the very Terminal or iTerm tab the
+  session runs in (macOS asks once whether Barn Owl may control it), or the
+  very chat in the Claude app. Right-click an owlet to open its project in
+  your editor, Terminal or Finder, or to hide or mute it.
+- **The island at the notch.** When an agent needs you, gets stuck or
+  finishes, a small island grows out of the notch (or hangs from the top of
+  the screen). Hover to read the whole question or command. Choose Off, When
+  One Needs You (the default) or While Agents Work in Settings → Agents. It
+  stays away while you present or use an app full screen, doesn't ask about
+  a session whose app is already in front, and leaves muted repositories
+  alone.
+- **Answer Claude Code from the island,** off by default: Allow Once, Deny,
+  Always Allow, or one of a question's options, without switching apps.
+  Turning it on adds two hooks to `~/.claude/settings.json`, after showing
+  you the exact change and saving a backup. Nothing is allowed without your
+  click, Always Allow adds only the rule Claude Code itself suggests (shown
+  with exactly what it covers), and the usual prompt takes over whenever
+  Barn Owl isn't running, you're in that session's app, or ten minutes pass.
+- **Notifications** when an agent needs you, gets stuck after three failed
+  commands in a row, or finishes a task that took a few minutes, but only
+  when the island can't show it or you've been away.
+- **Plan limits:** Claude's and Codex's 5-hour and weekly windows, with a
+  forecast and a note at 80% and when a window resets. Claude's come from
+  the Claude app's own usage history, Codex's from its session logs. For
+  Claude's reset times, turn on Settings → Agents → Reset times for Claude:
+  Claude Code's status line passes them on, and still looks as it did. An
+  old reading says "as of". Barn Owl never asks a server and never reads a
+  login.
+- **Keep awake while an agent is working,** a new rule added the first time
+  Barn Owl sees an agent: your Mac and its screen stay awake while one works
+  and for five minutes after. A session waiting for you keeps it awake for
+  five minutes only. With closed-lid mode on, a closed MacBook keeps running
+  too.
+- **A desktop widget,** small or medium: the Roost under a glass dome, its
+  sky following the time of day. If Barn Owl hasn't updated it for 20
+  minutes, it says "As of" with the time.
+- **Your week in the Roost.** From Friday afternoon to Sunday, after a week
+  with at least an hour of agent work, the quick panel offers a recap card
+  to copy, save or share. Repository names stay hidden unless you show them.
+- The setup guide has a new step for coding agents and the island.
+- **What Barn Owl reads:** the agents' own session files in `~/.claude` and
+  `~/.codex`, and the Claude app's session records and usage history. It
+  shows each session's title, state, folder and branch and, while one waits
+  for you, the command, file or question. It never keeps your prompts or
+  replies, never reads logins, and nothing leaves your Mac. macOS may ask
+  once whether Barn Owl can see your Desktop or Documents folder, when an
+  agent works in a project there.
+- **Turn features off in Settings → General → Features:** coding agents,
+  clipboard history, the Nest, automatic presenter mode and disk space
+  warnings. A feature that's off now doesn't run at all; before, the
+  clipboard, the Nest and presenter mode still checked in the background.
+  With coding agents off, Settings → Agents offers to remove Barn Owl's
+  entries from Claude Code's settings.
+- When more than one rule holds and one of them keeps the screen on, the
+  screen now stays on; before, the first rule in the list decided. The
+  quick panel says "Screen on" or "Screen can sleep", and which rule.
+- A rule saved by a newer version of Barn Owl no longer makes an older one
+  lose all your rules; it skips just that one.
+- On a small screen, the middle of the quick panel scrolls, so its footer
+  stays in reach.
+- Barn Owl no longer looks over the whole menu bar every time a helper
+  process starts or quits (browsers and test runs start many): only when an
+  app that can have a menu bar icon does, and once per burst. Less CPU while
+  you work.
+- The owl on the Perch no longer gets cut off by the menu bar.
+]]></description>
+            <enclosure url="https://github.com/marvika/barnowl/releases/download/v0.12.0/BarnOwl-0.12.0.zip" sparkle:edSignature="TTUXT4Z1f3io7hBLYrE/2R0s8T0Hzr8xZt6SrAZG7ewPMRIwwIwHb25+u51j8B8wrwyfODhpl+pdIu1NEnJYBA==" length="10875003" type="application/octet-stream"/>
+        </item>
+        <item>
             <title>Barn Owl 0.11.3</title>
             <link>https://github.com/marvika/barnowl/releases/tag/v0.11.3</link>
             <pubDate>Mon, 19 Oct 2026 13:15:05 +0000</pubDate>
