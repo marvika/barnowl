@@ -218,7 +218,7 @@ private struct PreferencesStep: View {
                             symbol: "laptopcomputer", color: .indigo) {
                         Toggle("", isOn: Binding(get: { closedLid }, set: { enabled in
                             if enabled {
-                                guard ClosedLidMode.canSwitchWithoutPassword || ClosedLidMode.install() else { return }
+                                guard ClosedLidMode.enableFromSettings() else { return }
                                 Preferences.closedLidMode = true
                             } else {
                                 Preferences.closedLidMode = false
