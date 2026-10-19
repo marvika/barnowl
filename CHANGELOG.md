@@ -3,7 +3,7 @@
 All notable changes to Barn Owl. Versions follow [semantic versioning](https://semver.org);
 before 1.0, a minor version can change behaviour.
 
-## Unreleased
+## 0.11.2
 
 - **Closed-lid mode on company-managed Macs.** Some Macs' administrator
   settings ask for a password for every change of this kind, which overrides
