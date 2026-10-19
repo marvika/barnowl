@@ -1,6 +1,6 @@
 cask "barn-owl" do
-  version "0.11.0"
-  sha256 "3b4521e13426a1ac313156a71ec6adc7aadd34713619d0ec5f5fc236109a737e"
+  version "0.11.1"
+  sha256 "d26e5e3e08d3cfa2b182bed76b6d6c4bf0a3cc86d01afabb8bc52750dbc64401"
 
   url "https://github.com/marvika/barnowl/releases/download/v#{version}/BarnOwl-#{version}.zip"
   name "Barn Owl"
