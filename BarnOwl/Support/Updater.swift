@@ -56,6 +56,11 @@ extension Updater: SPUUpdaterDelegate {
     // "Include anonymous system profile" in Sparkle's first prompt.
     nonisolated func allowedSystemProfileKeys(for updater: SPUUpdater) -> [String]? { [] }
 
+    // Quitting to install an update: keep awake carries on in the new version.
+    nonisolated func updaterWillRelaunchApplication(_ updater: SPUUpdater) {
+        MainActor.assumeIsolated { KeepAwakeController.saveSessionOnQuit = true }
+    }
+
     #if DEBUG
     // A development build checks only when asked, so a release never offers
     // to replace the copy being worked on.
@@ -77,11 +82,6 @@ extension Updater: SPUStandardUserDriverDelegate {
         guard handleShowingUpdate, !state.userInitiated else { return }
         let version = update.displayVersionString
         MainActor.assumeIsolated { UpdateNotice.post(version: version) }
-    }
-
-    // Quitting to install an update: keep awake carries on in the new version.
-    nonisolated func updaterWillRelaunchApplication(_ updater: SPUUpdater) {
-        MainActor.assumeIsolated { KeepAwakeController.saveSessionOnQuit = true }
     }
 }
 

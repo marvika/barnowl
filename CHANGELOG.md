@@ -5,6 +5,20 @@ before 1.0, a minor version can change behaviour.
 
 ## Unreleased
 
+- Without Screen Recording, icons whose name shows their state ("Wi‑Fi,
+  connected", "OneDrive · Syncing") no longer count as new icons each time it
+  changes, so they stay where you put them.
+- Presenter mode no longer starts for apps that capture the screen all the
+  time (DisplayLink, screen recorders), and the battery cutoff now lets the
+  Mac sleep while presenting too.
+- Closing Search or the clipboard hands the keyboard back to the app you
+  were in.
+- Updates found in the background say so in a notification instead of
+  jumping in front of what you're typing, and a running keep-awake session
+  carries on after the update.
+- A very long number in search ("awake 99999999999999999999") no longer
+  crashes Barn Owl; sessions are capped at a year.
+- Turning clipboard history off clears it right away, on disk too.
 - **Closed-lid mode now follows keep awake,** like Amphetamine with Power
   Protect. Close the lid while keep awake is on and your Mac keeps running,
   with the screen locked (unless an external display is connected);

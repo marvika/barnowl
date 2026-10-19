@@ -95,6 +95,27 @@ final class ClipboardHistory {
                 self?.check()
             }
         }
+        // Turning the history off, or "remember after quitting" off, takes
+        // effect at once: in memory and on disk, not at the next copy.
+        appliedSettings = (Preferences.clipboardEnabled, Preferences.clipboardRemember)
+        settingsObserver = NotificationCenter.default.addObserver(
+            forName: UserDefaults.didChangeNotification, object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.applySettings() }
+        }
+    }
+
+    @ObservationIgnored private var settingsObserver: NSObjectProtocol?
+    @ObservationIgnored private var appliedSettings: (enabled: Bool, remember: Bool)?
+
+    func applySettings() {
+        let now = (enabled: Preferences.clipboardEnabled, remember: Preferences.clipboardRemember)
+        defer { appliedSettings = now }
+        guard let before = appliedSettings, before != now else { return }
+        if before.enabled, !now.enabled {
+            clear()
+        } else if before.remember, !now.remember {
+            save()
+        }
     }
 
     private func check() {

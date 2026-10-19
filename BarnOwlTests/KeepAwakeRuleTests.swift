@@ -143,3 +143,48 @@ struct KeepAwakeExtendTests {
         #expect(CommandParser.commands(for: "awake +1h") == [.extendKeepAwake(minutes: 60)])
     }
 }
+
+struct KeepAwakeLimitsTests {
+    /// "awake 99999999999999999999" used to crash: a typo is capped at a year.
+    @Test(arguments: ["99999999999999999999", "99999999999999999999h", "525601"])
+    func hugeDurationsAreCapped(word: String) throws {
+        let minutes = try #require(CommandParser.duration(from: word))
+        #expect(minutes <= KeepAwakeController.longestMinutes)
+    }
+
+    @Test func ordinaryDurationsAreUnchanged() {
+        #expect(CommandParser.duration(from: "90") == 90)
+        #expect(CommandParser.duration(from: "1.5h") == 90)
+        #expect(CommandParser.duration(from: "forever") == 0)
+    }
+
+    @Test func extendingByAHugeAmountDoesntOverflow() {
+        let now = Date(timeIntervalSince1970: 1_000_000)
+        let extended = KeepAwakeController.extended(.until(now), by: Int.max / 2, now: now)
+        guard case .until(let end) = extended else { Issue.record("not extended"); return }
+        #expect(end.timeIntervalSince(now) <= Double(KeepAwakeController.longestMinutes) * 60)
+    }
+}
+
+struct SessionCarryOverTests {
+    private let now = Date(timeIntervalSince1970: 1_000_000)
+
+    @Test func aSessionCarriesOverAnUpdate() {
+        let session = KeepAwakeController.Session.until(now.addingTimeInterval(3600))
+        let saved = KeepAwakeController.SavedSession(session: session, saved: now.addingTimeInterval(-30))
+        #expect(KeepAwakeController.resumable(saved, now: now) == session)
+    }
+
+    @Test func oldOrFinishedSessionsDont() {
+        let stale = KeepAwakeController.SavedSession(session: .indefinite, saved: now.addingTimeInterval(-3600))
+        let over = KeepAwakeController.SavedSession(session: .until(now.addingTimeInterval(-1)), saved: now)
+        #expect(KeepAwakeController.resumable(stale, now: now) == nil)
+        #expect(KeepAwakeController.resumable(over, now: now) == nil)
+    }
+
+    @Test func sessionsSurviveBeingSaved() throws {
+        let session = KeepAwakeController.Session.whileAppRunning(bundleIdentifier: "com.example", name: "Example")
+        let data = try JSONEncoder().encode(KeepAwakeController.SavedSession(session: session, saved: now))
+        #expect(try JSONDecoder().decode(KeepAwakeController.SavedSession.self, from: data).session == session)
+    }
+}
