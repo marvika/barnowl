@@ -3,6 +3,13 @@
 All notable changes to Barn Owl. Versions follow [semantic versioning](https://semver.org);
 before 1.0, a minor version can change behaviour.
 
+## Unreleased
+
+- Barn Owl no longer borrows your pointer while you're working. Icons it puts
+  back in place, or shows because they changed, now wait until you pause, and
+  an icon macOS won't let it keep in place (like Control Center's Display)
+  is left alone instead of being dragged back every couple of minutes.
+
 ## 0.10.2
 
 - Closed-lid mode stays on through updates, and through restarts when Barn

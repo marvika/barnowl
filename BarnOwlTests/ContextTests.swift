@@ -85,16 +85,25 @@ struct CorrectionLimiterTests {
         #expect(first && second && !third && other)
     }
 
-    @Test func allowsAgainLaterOrAfterAManualMove() {
+    @Test func allowsSpacedOutCorrections() {
         var limiter = CorrectionLimiter(limit: 2, window: 120)
         let start = Date(timeIntervalSince1970: 0)
         _ = limiter.allow("a", now: start)
-        _ = limiter.allow("a", now: start)
         let later = limiter.allow("a", now: start.addingTimeInterval(200))
-        _ = limiter.allow("b", now: start)
-        _ = limiter.allow("b", now: start)
-        limiter.reset("b")
-        let afterReset = limiter.allow("b", now: start.addingTimeInterval(1))
-        #expect(later && afterReset)
+        #expect(later)
+    }
+
+    /// An icon macOS keeps putting back isn't dragged again every couple of
+    /// minutes: it's left alone until the user moves it themselves.
+    @Test func givesUpForGoodUntilAManualMove() {
+        var limiter = CorrectionLimiter(limit: 2, window: 120)
+        let start = Date(timeIntervalSince1970: 0)
+        _ = limiter.allow("display", now: start)
+        _ = limiter.allow("display", now: start)
+        let refused = limiter.allow("display", now: start.addingTimeInterval(5))
+        let muchLater = limiter.allow("display", now: start.addingTimeInterval(3600))
+        limiter.reset("display")
+        let afterReset = limiter.allow("display", now: start.addingTimeInterval(3601))
+        #expect(!refused && !muchLater && afterReset)
     }
 }
