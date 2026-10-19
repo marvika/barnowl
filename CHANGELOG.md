@@ -3,6 +3,16 @@
 All notable changes to Barn Owl. Versions follow [semantic versioning](https://semver.org);
 before 1.0, a minor version can change behaviour.
 
+## Unreleased
+
+- **Closed-lid mode now works like Amphetamine's:** on battery, without an
+  external display, and with no password or set-up, also on company-managed
+  Macs. Barn Owl asks macOS's power manager directly not to sleep when the
+  lid closes, only while keep awake is on. The old way (`pmset disablesleep`
+  and a sudoers rule) is gone; if it left sleep disabled, Barn Owl turns it
+  off, silently where it can. A leftover rule file is harmless; remove it
+  with `sudo rm /private/etc/sudoers.d/barnowl` if you like.
+
 ## 0.11.2
 
 - **Closed-lid mode on company-managed Macs.** Some Macs' administrator

@@ -214,24 +214,18 @@ private struct PreferencesStep: View {
                 }
                 if hasLid {
                     CardRow(title: "Keep running with the lid closed",
-                            subtitle: "While Barn Owl keeps your Mac awake. Asks for your password once.",
+                            subtitle: "While Barn Owl keeps your Mac awake, on battery too.",
                             symbol: "laptopcomputer", color: .indigo) {
                         Toggle("", isOn: Binding(get: { closedLid }, set: { enabled in
-                            if enabled {
-                                guard ClosedLidMode.enableFromSettings() else { return }
-                                Preferences.closedLidMode = true
-                            } else {
-                                Preferences.closedLidMode = false
-                                if !ClosedLidMode.uninstall() { ClosedLidMode.apply(false) }
-                            }
-                            closedLid = Preferences.closedLidMode
+                            Preferences.closedLidMode = enabled
+                            closedLid = enabled
                         }))
                         .labelsHidden().toggleStyle(.switch)
                     }
                 }
             }
             if hasLid {
-                Text("Close the lid while keep awake is on and your Mac keeps running, with the screen locked; the rest of the time it sleeps as usual. Your password lets Barn Owl switch this one setting by itself.")
+                Text("Close the lid while keep awake is on and your Mac keeps running, with the screen locked; the rest of the time it sleeps as usual.")
                     .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             }
         }

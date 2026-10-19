@@ -203,17 +203,13 @@ Each rule can let the display sleep or keep it on.
 - **Stop when battery is below** 5, 10 (the default), 20 or 30%.
 - **Notify me when a session ends.**
 - **Closed-lid mode:** while keep awake is on, the Mac keeps running with
-  the lid closed, even without an external display, and the screen locks as
-  the lid closes (not with an external display, where a closed lid is normal).
-  Whenever keep awake is off, or Barn Owl quits, the Mac sleeps on lid close
-  as usual. macOS only allows this through `pmset disablesleep`, which needs
-  an administrator, so turning the setting on asks for your password once and
-  adds a rule (`/private/etc/sudoers.d/barnowl`) that lets your account run
-  exactly `pmset -a disablesleep 1` and `pmset -a disablesleep 0` without a
-  password, nothing else. Turning the setting off asks again and removes the
-  rule. On a MacBook, the setup guide offers this too. This is how
-  Amphetamine's Power Protect works. A closed Mac that
-  keeps running gets warm, so don't put it in a bag like that.
+  the lid closed, on battery too and without an external display, and the
+  screen locks as the lid closes (not with an external display, where a
+  closed lid is normal). Whenever keep awake is off, or Barn Owl quits, the
+  Mac sleeps on lid close as usual. It asks macOS's power manager directly,
+  as Amphetamine does, so it needs no password, also on company-managed Macs.
+  The setup guide offers it on a MacBook. A closed Mac that keeps running
+  gets warm, so don't put it in a bag like that.
 
 ## Quick panel and toggles
 
