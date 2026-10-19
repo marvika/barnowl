@@ -89,12 +89,7 @@ final class ClipboardHistory {
     }
 
     func start() {
-        task = Task { [weak self] in
-            while !Task.isCancelled {
-                try? await Task.sleep(for: .milliseconds(500))
-                self?.check()
-            }
-        }
+        applyWatching()
         // Turning the history off, or "remember after quitting" off, takes
         // effect at once: in memory and on disk, not at the next copy.
         appliedSettings = (Preferences.clipboardEnabled, Preferences.clipboardRemember)
@@ -107,7 +102,24 @@ final class ClipboardHistory {
     @ObservationIgnored private var settingsObserver: NSObjectProtocol?
     @ObservationIgnored private var appliedSettings: (enabled: Bool, remember: Bool)?
 
+    /// Looks at the clipboard twice a second, but only while the history is on.
+    private func applyWatching() {
+        if Preferences.clipboardEnabled, task == nil {
+            changeCount = NSPasteboard.general.changeCount // what's there now isn't a new copy
+            task = Task { [weak self] in
+                while !Task.isCancelled {
+                    try? await Task.sleep(for: .milliseconds(500))
+                    self?.check()
+                }
+            }
+        } else if !Preferences.clipboardEnabled {
+            task?.cancel()
+            task = nil
+        }
+    }
+
     func applySettings() {
+        applyWatching()
         let now = (enabled: Preferences.clipboardEnabled, remember: Preferences.clipboardRemember)
         defer { appliedSettings = now }
         guard let before = appliedSettings, before != now else { return }

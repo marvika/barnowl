@@ -56,8 +56,28 @@ Still to verify: display profiles with a real external display.
 - Shortcuts actions, a `barnowl` command and more `barnowl://` links
 - App icon and `Scripts/install.sh` (Release build in /Applications)
 
+## v0.12: The Roost (done)
+
+- Coding agents as owlets: Claude Code (terminal, the Claude app's Code tab,
+  the Agent SDK) and Codex from their own session files; Copilot CLI,
+  OpenCode, Gemini CLI and others from a libproc process scan
+- An owlet beside the owl in the menu bar, and an Owlets card in the quick
+  panel with the one that needs you and plan limits as moons
+- The Roost window: Now (needs you, working, done, napping, today, by repo,
+  flight log) and Tree (a branch per repository, a sky that follows the time
+  of day), with a pop-out tree that can stay on top
+- Show and Answer go to the exact Terminal or iTerm tab, or the exact chat in
+  the Claude app
+- The island at the notch, and answering Claude Code from it through its
+  hooks (opt-in)
+- Notifications only when the island can't show it or you're away
+- Plan limits from the Claude app's usage history and Codex's logs, with
+  Claude's reset times from an opt-in status line relay
+- Keep awake while an agent is working, as a rule
+- A desktop widget and a weekly recap card
+- Settings → General → Features, to turn whole features off
+
 ## Later
 
-- Notarization and automatic updates (need a Developer ID certificate)
 - Test on macOS 27 and place Barn Owl's own icons there
 - Verify display profiles and closed-lid mode on real hardware

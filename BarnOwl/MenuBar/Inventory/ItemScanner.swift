@@ -40,11 +40,12 @@ final class ItemScanner {
         guard !DemoMode.isOn else { return }
         // KVO rather than launch notifications: macOS doesn't post those for
         // LSUIElement apps, and most menu bar apps are one.
+        // Helper processes (browser renderers, test hosts, simulators' parts)
+        // come and go all the time but can't own an icon, so only apps that
+        // can count, and a burst of launches makes one scan, not one each.
+        owners = Self.possibleOwners(NSWorkspace.shared.runningApplications)
         appsObservation = NSWorkspace.shared.observe(\.runningApplications) { [weak self] _, _ in
-            Task { @MainActor in
-                try? await Task.sleep(for: .seconds(1.5))
-                self?.refresh()
-            }
+            Task { @MainActor in self?.appsChanged() }
         }
         // Apps also add and remove icons without launching or quitting (an
         // icon that blinks for unread messages is re-added each time). A cheap
@@ -58,6 +59,38 @@ final class ItemScanner {
             }
         }
         refresh()
+    }
+
+    @ObservationIgnored private var owners: Set<pid_t> = []
+    @ObservationIgnored private var appsTask: Task<Void, Never>?
+    @ObservationIgnored private var firstPendingChange: Date?
+
+    /// Apps that can have a menu bar icon: not background-only helpers.
+    nonisolated static func possibleOwners(_ apps: [NSRunningApplication]) -> Set<pid_t> {
+        Set(apps.filter { $0.activationPolicy != .prohibited }.map(\.processIdentifier))
+    }
+
+    /// Waits for launches and quits to settle for 1.5 seconds, but never
+    /// longer than 10 seconds in all, then scans once.
+    private func appsChanged() {
+        let now = Self.possibleOwners(NSWorkspace.shared.runningApplications)
+        guard now != owners else { return }
+        owners = now
+        let first = firstPendingChange ?? Date()
+        firstPendingChange = first
+        appsTask?.cancel()
+        let wait = Self.settleDelay(sinceFirstChange: Date().timeIntervalSince(first))
+        appsTask = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(wait))
+            guard !Task.isCancelled, let self else { return }
+            self.firstPendingChange = nil
+            self.refresh()
+        }
+    }
+
+    nonisolated static func settleDelay(sinceFirstChange elapsed: TimeInterval, quiet: TimeInterval = 1.5,
+                                        longest: TimeInterval = 10) -> TimeInterval {
+        max(0, min(quiet, longest - elapsed))
     }
 
     /// Starts a scan, or queues one if a scan is already running.

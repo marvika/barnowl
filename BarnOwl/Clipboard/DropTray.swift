@@ -41,6 +41,24 @@ final class DropTray {
     }
 
     func start() {
+        applyWatching()
+        // The clipboard panel's Nest tab changes the shelf too: show or hide
+        // the tab to match, after the change has landed.
+        clipboard.onShelfChange = { [weak self] in
+            guard let self, !self.changingShelf else { return }
+            Task { self.refresh() }
+        }
+        settle()
+    }
+
+    /// Listens for drags only while the Nest is on.
+    private func applyWatching() {
+        guard Preferences.dropTrayEnabled else {
+            monitors.forEach(NSEvent.removeMonitor)
+            monitors.removeAll()
+            return
+        }
+        guard monitors.isEmpty else { return }
         // Drags happen in other apps, so global monitors: a mouse-down marks
         // the drag pasteboard's state, and a drag that changes it with file
         // URLs is a file drag.
@@ -54,13 +72,6 @@ final class DropTray {
         if let up = NSEvent.addGlobalMonitorForEvents(matching: .leftMouseUp, handler: { [weak self] _ in
             MainActor.assumeIsolated { self?.mouseUp() }
         }) { monitors.append(up) }
-        // The clipboard panel's Nest tab changes the shelf too: show or hide
-        // the tab to match, after the change has landed.
-        clipboard.onShelfChange = { [weak self] in
-            guard let self, !self.changingShelf else { return }
-            Task { self.refresh() }
-        }
-        settle()
     }
 
     private func changeShelf(_ change: () -> Void) {
@@ -175,6 +186,7 @@ final class DropTray {
     /// After a settings change: update the resting state, but never in the
     /// middle of a drag or while open.
     func refresh() {
+        applyWatching()
         if mode == .hidden || mode == .tab { settle() }
     }
 
@@ -186,9 +198,19 @@ final class DropTray {
         set(showTab ? .tab : .hidden)
     }
 
+    /// How far the Nest reaches below the menu bar right now, for the agents' island.
+    var occupiedHeight: CGFloat {
+        guard mode != .hidden, let panel, panel.isVisible else { return 0 }
+        return max(0, panel.frame.height - FloatingPanel.shadowInset * 2)
+    }
+
+    var onModeChange: (() -> Void)?
+
     private func set(_ newMode: Mode) {
         if newMode == .open || newMode == .tab { changeShelf { clipboard.pruneShelf() } }
+        let old = mode
         mode = newMode
+        defer { if newMode != old { onModeChange?() } }
         if newMode == .hidden {
             outsideClicks.stop()
             panel?.orderOut(nil)
@@ -214,7 +236,10 @@ final class DropTray {
         // The glass draws its own edge; a window shadow would outline the
         // panel's full (larger, transparent) frame.
         panel.hasShadow = false
-        panel.onResize = { [weak self] in self?.place($0) }
+        panel.onResize = { [weak self] in
+            self?.place($0)
+            self?.onModeChange?()
+        }
         return panel
     }
 

@@ -13,6 +13,7 @@ enum AppCommand: Hashable, Sendable, Identifiable {
     case sleepDisplay
     case clipboard
     case barn
+    case roost
     case showAllIcons
     case settings(SettingsPaneID)
 
@@ -32,6 +33,7 @@ enum AppCommand: Hashable, Sendable, Identifiable {
         case .sleepDisplay: "Sleep display"
         case .clipboard: "Clipboard history"
         case .barn: "Free up disk space"
+        case .roost: "Open the Roost: your coding agents"
         case .showAllIcons: "Show all menu bar icons"
         case .settings(let pane): pane == .layout ? "Arrange menu bar icons" : "\(pane.title) settings"
         }
@@ -49,6 +51,7 @@ enum AppCommand: Hashable, Sendable, Identifiable {
         case .sleepDisplay: "moon.fill"
         case .clipboard: "doc.on.clipboard"
         case .barn: "externaldrive.fill"
+        case .roost: "bird.fill"
         case .showAllIcons: "eye.circle"
         case .settings(let pane): pane == .layout ? "square.grid.3x1.below.line.grid.1x2" : "gearshape"
         }
@@ -68,6 +71,7 @@ enum AppCommand: Hashable, Sendable, Identifiable {
         case .sleepDisplay: ["sleep", "display", "screen", "lock"]
         case .clipboard: ["clipboard", "paste", "copy", "history", "nest", "shelf"]
         case .barn: ["barn", "disk", "storage", "space", "free", "tidy", "junk", "cache", "full", "cleanup"]
+        case .roost: ["roost", "agents", "owlets", "claude", "codex", "sessions", "tree"]
         case .showAllIcons: ["show", "all", "icons", "reveal"]
         case .settings(let pane): ["settings", "preferences", pane.rawValue.lowercased()] + pane.extraKeywords
         }
@@ -116,6 +120,7 @@ enum CommandParser {
 
         var all: [AppCommand] = [.stopKeepAwake, .presenter, .darkMode, .microphone, .desktopIcons,
                                      .hiddenFiles, .sleepDisplay, .clipboard, .barn, .showAllIcons]
+        if Preferences.agentsEnabled { all.append(.roost) }
         all += SettingsPaneID.allCases.map(AppCommand.settings)
 
         var results: [AppCommand] = []

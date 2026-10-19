@@ -8,3 +8,4 @@ Config/Local.xcconfig
 
 # Local Claude Code config and skills (e.g. the REA skill)
 .claude/
+__pycache__/

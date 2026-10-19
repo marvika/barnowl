@@ -11,8 +11,12 @@ struct QuickPanelView: View {
         VStack(alignment: .leading, spacing: 14) {
             KeepAwakeCard(model: model, close: close)
             Divider()
-            TogglesGrid(model: model)
-            DiskGlance(model: model, close: close)
+            // On a small screen the middle scrolls, so the footer is always in reach.
+            ViewThatFits(in: .vertical) {
+                middle
+                ScrollView { middle }.scrollIndicators(.automatic)
+            }
+            .frame(maxHeight: Self.roomForMiddle)
             Divider()
             footer
         }
@@ -20,6 +24,21 @@ struct QuickPanelView: View {
         .frame(width: 340)
         .owlPanel()
         .padding(FloatingPanel.shadowInset)
+    }
+
+    private var middle: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            TogglesGrid(model: model)
+            // Agents off: no card at all, not even the weekly recap.
+            if Preferences.agentsEnabled { OwletsCard(model: model, close: close) }
+            DiskGlance(model: model, close: close)
+        }
+    }
+
+    /// The screen's height less the keep-awake card, the footer and margins.
+    private static var roomForMiddle: CGFloat {
+        let screen = NSScreen.main?.visibleFrame.height ?? 900
+        return max(240, screen - 330)
     }
 
     private var footer: some View {
@@ -117,7 +136,7 @@ private struct KeepAwakeCard: View {
                 }
             }
 
-            let rules = keepAwake.rules.rules
+            let rules = keepAwake.rules.rules.filter { Preferences.agentsEnabled || !$0.conditions.contains(.agentWorking) }
             if !rules.isEmpty {
                 VStack(alignment: .leading, spacing: 4) {
                     HStack {

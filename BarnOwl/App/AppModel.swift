@@ -22,7 +22,15 @@ final class AppModel {
     /// catch up when the setting changes.
     @ObservationIgnored var closedLid: ClosedLidController?
     let barn = BarnModel()
+    /// The coding agents on this Mac, as owlets.
+    let agents = AgentWatcher()
     @ObservationIgnored var showBarn: () -> Void = {}
+    /// Opens the Roost, showing one session if given.
+    @ObservationIgnored var showRoost: (String?) -> Void = { _ in }
+    /// Opens the tree in its own window.
+    @ObservationIgnored var showTree: () -> Void = {}
+    /// Opens the week's recap card.
+    @ObservationIgnored var showRecap: (WeekSummary) -> Void = { _ in }
     @ObservationIgnored var showSetup: () -> Void = {}
     @ObservationIgnored var openSettingsWindow: () -> Void = {}
     @ObservationIgnored var showSearch: () -> Void = {}
@@ -78,6 +86,7 @@ final class AppModel {
         case .sleepDisplay: QuickToggles.sleepDisplay()
         case .clipboard: showClipboard()
         case .barn: showBarn()
+        case .roost: showRoost(nil)
         case .showAllIcons: sections.showAll()
         case .settings(let pane): showSettings(SettingsPane(rawValue: pane.rawValue))
         }

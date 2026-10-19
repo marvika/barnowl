@@ -32,9 +32,11 @@ echo "› Preparing demo settings and files"
 mkdir -p "/tmp/Barn Owl Demo"
 for f in "Project Brief.pdf" "Roadmap.key" "Screenshot.png"; do : > "/tmp/Barn Owl Demo/$f"; done
 defaults delete "$domain" 2>/dev/null || true
-python3 - "$domain" "${1:-}" <<'PY'
+screen=$(osascript -e 'tell application "Finder" to get bounds of window of desktop' | tr -d ' ')
+python3 - "$domain" "${1:-}" "$screen" <<'PY'
 import json, plistlib, subprocess, sys, uuid
 domain, mode = sys.argv[1], sys.argv[2]
+_, _, screen_width, screen_height = (int(v) for v in sys.argv[3].split(","))
 group = str(uuid.UUID("0D3E0000-0000-4000-8000-00000000C0DE"))
 settings = {
     "BarnOwlDemo": True,
@@ -60,6 +62,8 @@ settings = {
     "NSStatusItem Preferred Position BarnOwlGroup-" + group: 0.6,
     "NSStatusItem Preferred Position BarnOwlSeparator": 1.0,
     "NSStatusItem Preferred Position BarnOwlAlwaysHidden": 10000.0,
+    # The Roost opens right of the notch, inside what record-roost.sh films.
+    "NSWindow Frame BarnOwlRoost": f"{screen_width - 1120} {screen_height - 100 - 700} 1100 700 0 0 {screen_width} {screen_height}",
 }
 subprocess.run(["defaults", "import", domain, "-"], input=plistlib.dumps(settings), check=True)
 PY

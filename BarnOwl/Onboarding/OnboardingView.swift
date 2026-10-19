@@ -2,16 +2,28 @@ import KeyboardShortcuts
 import ServiceManagement
 import SwiftUI
 
-/// First-run setup: six short steps under a dusk sky, with the owl along.
+/// First-run setup: seven short steps under a dusk sky, with the owl along.
 struct OnboardingView: View {
     enum Step: Int, CaseIterable {
-        case welcome, display, arrange, shortcuts, preferences, done
+        case welcome, display, arrange, shortcuts, preferences, agents, done
+
+        /// "agents" in barnowl://setup?step=agents
+        init?(name: String) {
+            guard let step = Self.allCases.first(where: { "\($0)" == name }) else { return nil }
+            self = step
+        }
     }
 
     let model: AppModel
     let finish: () -> Void
 
-    @State private var step: Step = .welcome
+    @State private var step: Step
+
+    init(model: AppModel, start: Step = .welcome, finish: @escaping () -> Void) {
+        self.model = model
+        self.finish = finish
+        _step = State(initialValue: start)
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -22,6 +34,7 @@ struct OnboardingView: View {
                 case .display: DisplayStep(model: model)
                 case .shortcuts: shortcuts
                 case .preferences: preferences
+                case .agents: AgentsStep()
                 case .done: done
                 }
             }
@@ -61,6 +74,9 @@ struct OnboardingView: View {
                 BadgeLabel(title: "Handy helpers",
                            subtitle: "Search, quick toggles, clipboard history and a nest for your files.",
                            symbol: "sparkles", color: .teal)
+                BadgeLabel(title: "Your coding agents, as owlets",
+                           subtitle: "See which agents are working, and know the moment Claude Code needs you.",
+                           symbol: "bird.fill", color: .orange)
             }
             .padding(.top, 6)
         }
@@ -237,6 +253,67 @@ private struct PreferencesStep: View {
         } set: { value in
             autoRehide = value > 0
             if value > 0 { autoRehideDelay = value }
+        }
+    }
+}
+
+/// Coding agents as owlets: what they are, and the two choices that matter.
+struct AgentsStep: View {
+    @AppStorage(PrefKey.agentsEnabled) private var enabled = true
+    @AppStorage(PrefKey.agentsIsland) private var island = IslandMode.attention
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            StepHeader(title: "Your coding agents, as owlets",
+                       subtitle: "Claude Code, Codex and others each get an owlet. Everything stays on your Mac, and Barn Owl never reads your login.")
+            Branch()
+            Card {
+                CardRow(title: "Show coding agents", subtitle: "In the quick panel, with the Roost a click away.",
+                        symbol: "bird.fill", color: .orange) {
+                    Toggle("", isOn: $enabled).labelsHidden().toggleStyle(.switch)
+                }
+                CardRow(title: "At the notch", subtitle: "A small island when an agent needs you.",
+                        symbol: "capsule.fill", color: .indigo) {
+                    Picker("", selection: $island) {
+                        ForEach(IslandMode.allCases) { Text($0.title).tag($0) }
+                    }
+                    .labelsHidden().fixedSize()
+                    .disabled(!enabled)
+                }
+            }
+            Label("Answering from the island and your plan limits are in Settings → Agents.", systemImage: "lightbulb")
+                .font(.callout).foregroundStyle(.secondary)
+        }
+    }
+
+    /// The owlets you'll meet, on a branch.
+    private struct Branch: View {
+        private let owlets: [(sprite: String, palette: String, label: String)] = [
+            (OwletState.typing.sprite, "golden", "Working"),
+            // One colour: elsewhere colour means which agent, not which state.
+            (OwletState.needsYou.sprite, "golden", "Needs you"),
+            (OwletState.done.sprite, "golden", "Done"),
+            (OwletState.napping.sprite, "golden", "Napping"),
+        ]
+
+        var body: some View {
+            VStack(spacing: 6) {
+                HStack(alignment: .bottom, spacing: 34) {
+                    ForEach(owlets, id: \.label) { owlet in
+                        OwletSprite(sprite: owlet.sprite, palette: owlet.palette, scale: 2)
+                    }
+                }
+                OwletBranch(scale: 2).frame(width: 440)
+                HStack(spacing: 34) {
+                    ForEach(owlets, id: \.label) { owlet in
+                        Text(owlet.label).font(.caption).foregroundStyle(.secondary).frame(width: 64)
+                    }
+                }
+            }
+            .frame(maxWidth: .infinity)
+            .environment(\.owletsMove, Preferences.owlMoves)
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel("Owlets working, needing you, done and napping")
         }
     }
 }

@@ -78,6 +78,9 @@ final class BarnWatch: NSObject, UNUserNotificationCenterDelegate {
         case Self.lowSpaceCategory: await MainActor.run { openBarn() }
         // The update window is already showing, behind: bring it forward.
         case UpdateNotice.category: await MainActor.run { NSApp.activate() }
+        case AgentWatcher.notificationCategory:
+            let id = response.notification.request.content.userInfo["session"] as? String ?? ""
+            await MainActor.run { AgentWatcher.openFromNotification?(id) }
         default: break
         }
     }

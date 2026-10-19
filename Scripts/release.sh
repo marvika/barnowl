@@ -42,6 +42,11 @@ if grep -q "<sparkle:version>$build</sparkle:version>" appcast.xml; then
   echo "✗ appcast.xml already has build $build. Bump CURRENT_PROJECT_VERSION in project.yml."
   [[ $mode == --dry-run ]] || exit 1
 fi
+if grep -q "<sparkle:shortVersionString>$version</sparkle:shortVersionString>" appcast.xml \
+   || git rev-parse -q --verify "refs/tags/v$version" >/dev/null; then
+  echo "✗ Version $version is already released. Bump MARKETING_VERSION in project.yml."
+  [[ $mode == --dry-run ]] || exit 1
+fi
 
 # The update window shows this version's section of the changelog.
 notes=$(awk -v v="$version" '$0 == "## " v {on=1; next} /^## / {on=0} on' CHANGELOG.md | sed -e '/./,$!d')
@@ -80,14 +85,24 @@ $sign --preserve-metadata=entitlements "$app"
 
 echo "› Checking the signature"
 codesign --verify --deep --strict "$app"
-codesign -dvv "$app" 2>&1 | grep -E "^(Authority=Developer ID Application|Timestamp=|Runtime Version=)" \
-  || { echo "✗ Not signed with a Developer ID, a timestamp and the hardened runtime"; exit 1; }
+signature=$(codesign -dvv "$app" 2>&1)
+for line in "Authority=Developer ID Application" "Timestamp=" "Runtime Version="; do
+  [[ $signature == *$'\n'"$line"* ]] || { echo "✗ Not signed with a Developer ID, a timestamp and the hardened runtime"; exit 1; }
+done
 if codesign -d --entitlements - "$app" 2>/dev/null | grep -q get-task-allow; then
   echo "✗ The app has the get-task-allow entitlement, which notarization rejects"; exit 1
 fi
-for helper in "$sparkle" "$sparkle"/Versions/B/{Autoupdate,Updater.app,XPCServices/*.xpc}; do
+for helper in "$sparkle" "$sparkle"/Versions/B/{Autoupdate,Updater.app,XPCServices/*.xpc} "$app"/Contents/PlugIns/*.appex; do
   [[ $(codesign -dvv "$helper" 2>&1) == *$'\n'"Authority=Developer ID Application"* ]] \
     || { echo "✗ ${helper#$app/} isn't signed with the Developer ID"; exit 1; }
+done
+# The widget must keep its sandbox and the app group, with the team ID filled in.
+for widget in "$app"/Contents/PlugIns/*.appex(N); do
+  entitlements=$(codesign -d --entitlements - "$widget" 2>/dev/null)
+  [[ $entitlements == *app-sandbox* && $entitlements == *"$team.io.github.marvika.BarnOwl"* \
+     && $entitlements != *get-task-allow* && $entitlements != *TeamIdentifierPrefix* ]] \
+    || { echo "✗ ${widget#$app/} lost its sandbox or app group"; exit 1; }
+  [[ $(codesign -dvv "$widget" 2>&1) == *$'\n'"Timestamp="* ]] || { echo "✗ ${widget#$app/} has no timestamp"; exit 1; }
 done
 
 rm -rf "$dist" && mkdir -p "$dist"

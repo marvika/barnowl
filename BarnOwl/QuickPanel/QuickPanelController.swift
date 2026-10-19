@@ -20,6 +20,9 @@ final class QuickPanelController: NSObject {
     private var glanceTask: Task<Void, Never>?
     private var wakeObserver: NSObjectProtocol?
     private var syncing = false
+    private var lastNeededYou = false
+    /// Whether the owl last carried an owlet, which makes it wider.
+    private var hadBadge = false
 
     var isOpen: Bool { panel?.isVisible ?? false }
 
@@ -49,8 +52,11 @@ final class QuickPanelController: NSObject {
         animateEyes(to: awake ? (lastMinute ? 0.45 : 1) : 0)
         awake && Preferences.owlMoves ? startBlinking() : stopBlinking()
         render()
-        item.button?.setAccessibilityLabel(awake ? "Barn Owl, keeping your Mac awake" : "Barn Owl")
-        item.button?.toolTip = "Keep Awake: \(KeepAwakeFormatter.status(of: model.keepAwake))"
+        var label = awake ? "Barn Owl, keeping your Mac awake" : "Barn Owl"
+        if owletBadge == "needs" { label += ". An agent needs you" }
+        item.button?.setAccessibilityLabel(label)
+        item.button?.toolTip = "Keep Awake: \(KeepAwakeFormatter.status(of: model.keepAwake))" + agentsTooltip
+        glanceAtOwletIfNeeded()
         // Time left next to the owl, like Amphetamine.
         if Preferences.keepAwakeCountdown, let end = model.keepAwake.endDate {
             item.button?.title = " " + KeepAwakeFormatter.countdown(end.timeIntervalSinceNow)
@@ -65,14 +71,62 @@ final class QuickPanelController: NSObject {
         }
     }
 
+    private var agentsTooltip: String {
+        let owlets = model.agents.visible
+        guard !owlets.isEmpty else { return "" }
+        var parts: [String] = []
+        let working = owlets.filter { $0.state.isWorking }.count
+        if working > 0 { parts.append("\(working) working") }
+        if let needs = owlets.first(where: { $0.state.needsYou }) { parts.append("\(needs.placeName) needs you") }
+        if parts.isEmpty { return "" }
+        return "\nAgents: " + parts.joined(separator: " · ")
+    }
+
     private func setEyes(_ value: CGFloat) {
         openness = value
         render()
     }
 
     private func render() {
-        owlItem?.button?.image = MenuBarOwl.image(openness: openness, look: look, winkRight: winking,
-                                                  shades: model.presenter.isPresenting)
+        let owl = MenuBarOwl.image(openness: openness, look: look, winkRight: winking,
+                                   shades: model.presenter.isPresenting)
+        let badge = owletBadge
+        owlItem?.button?.image = OwletBadge.compose(owl, owlet: badge)
+        // The owl just got wider or narrower, so every icon to its left moved:
+        // look again where they are (the notch may hide one now).
+        if (badge != nil) != hadBadge {
+            hadBadge = badge != nil
+            Task { [weak self] in
+                try? await Task.sleep(for: .milliseconds(300))
+                self?.model.scanner.updateFrames()
+            }
+        }
+    }
+
+    /// One owlet beside the owl while agents work, with a dot when one needs
+    /// you or is stuck.
+    private var owletBadge: String? {
+        guard Preferences.agentsMenuBar else { return nil }
+        let owlets = model.agents.visible
+        if owlets.contains(where: { $0.state.needsYou || $0.state == .stuck }) { return "needs" }
+        if owlets.contains(where: { $0.state.isWorking }) { return "typing" }
+        return nil
+    }
+
+    /// The owl looks over at the owlet once when one starts needing you.
+    private func glanceAtOwletIfNeeded() {
+        let needs = owletBadge == "needs"
+        defer { lastNeededYou = needs }
+        guard needs, !lastNeededYou, Preferences.owlMoves else { return }
+        glanceTask?.cancel()
+        glanceTask = Task { [weak self] in
+            self?.look = 1
+            self?.render()
+            try? await Task.sleep(for: .milliseconds(700))
+            guard !Task.isCancelled else { return }
+            self?.look = 0
+            self?.render()
+        }
     }
 
     /// Glances toward an icon that just popped into view (show on change).

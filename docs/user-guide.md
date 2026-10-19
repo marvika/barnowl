@@ -12,6 +12,7 @@
 - [Search and commands](#search-and-commands)
 - [Clipboard history and the Nest](#clipboard-history-and-the-nest)
 - [The Barn: disk space](#the-barn-disk-space)
+- [Coding agents](#coding-agents)
 - [Appearance](#appearance)
 - [The owl](#the-owl)
 - [Automation](#automation)
@@ -29,6 +30,16 @@ Barn Owl asks for two permissions in **System Settings → Privacy & Security**:
 |---|---|---|
 | Accessibility | Listing, moving and opening menu bar icons | Hiding still works; the Perch, search, arranging and groups don't |
 | Screen Recording | Real pictures of hidden icons | You see app icons instead of the real icons |
+
+macOS asks for a few more only when you first use something that needs them:
+
+| Permission | What it's for | Without it |
+|---|---|---|
+| Automation: Terminal, iTerm | Bringing an agent's exact tab to the front when you choose Show or Answer | The app comes to the front, but not the tab |
+| Automation: System Events | The Dark Mode toggle | Dark Mode can't switch from Barn Owl |
+| Notifications | Telling you an agent needs you when the island can't, a keep-awake session ended, an update is ready, or the disk is nearly full | No notifications; the quick panel and the island still show everything |
+| Desktop, Documents | The Barn looking through them; finding the repository of an agent working there | The Barn skips them; an owlet is named after its folder rather than its repository |
+| Full Disk Access (optional) | The Barn looking in the Trash, Mail, Safari and iPhone backups | See [Full Disk Access](#full-disk-access) |
 
 macOS applies Screen Recording only after Barn Owl restarts. The setup guide
 and Settings offer a **Relaunch Barn Owl** button for that.
@@ -187,10 +198,12 @@ custom one:
 - an external display is connected
 - the microphone is in use (calls)
 - files are downloading
+- an agent is working (see [Coding agents](#keep-awake-while-an-agent-is-working))
 - a particular app is running
 - a schedule, for example weekdays 08:00–17:00
 
-Each rule can let the display sleep or keep it on.
+Each rule can let the display sleep or keep it on. When several rules hold
+and one of them keeps the display on, it stays on.
 
 ### Options
 
@@ -227,6 +240,9 @@ Besides keep awake, the quick panel has one-click toggles:
 
 Choose which toggles appear in Settings → Toggles.
 
+While coding agents are out, the quick panel also has an **Owlets** card;
+see [Coding agents](#in-the-menu-bar-and-the-quick-panel).
+
 ## Search and commands
 
 Press **⌃⌥⌘M**. Type part of an icon's name to find it, hidden or not, and
@@ -245,6 +261,7 @@ You can also type a command:
 | `mute` | Mute or unmute the microphone |
 | `desktop`, `hidden files`, `sleep` | The other toggles |
 | `clipboard` | Clipboard history |
+| `roost`, `agents` | The Roost |
 | `arrange` | Settings → Layout |
 | `settings`, `rules`, `shortcuts`… | That Settings pane |
 
@@ -367,6 +384,415 @@ default, at most once a day, when less than 10 GB or a twentieth of the disk
 is free), and **Look for things to tidy once a week** (off by default). Both
 only tell you; nothing is cleaned without you.
 
+## Coding agents
+
+Barn Owl shows the coding agents running on your Mac as pixel **owlets**:
+Claude Code, Codex, Copilot CLI, OpenCode, Gemini CLI, and Cursor's agent,
+Droid, Goose, Crush, Aider and Amp. Each owlet shows what its agent is doing,
+and Barn Owl tells you when one needs you. Their home is the **Roost**.
+
+Start an agent in any folder and its owlet appears: Claude Code's within a
+second or two, other agents' within 15 seconds (a minute, if none has run for
+a while). Settings → Agents → **On this Mac** lists which agents Barn Owl
+found and how many are running.
+
+How much Barn Owl can tell depends on the agent:
+
+| Agent | What its owlet shows |
+|---|---|
+| Claude Code, in a terminal, the Claude app's Code tab or the Agent SDK | Everything below: what it's doing, its helpers, when it needs you and what it asks, failed commands, pull requests, plan limits |
+| Codex | Working, running commands, editing, stuck, paused for the plan limit, done; and its plan limits |
+| The others | Working or resting, from whether it's using the processor |
+
+To turn the whole feature off, switch off **Coding agents** in Settings →
+General → Features (or **Show coding agents as owlets** in Settings →
+Agents). Off means off: nothing is read or watched, and the owlets, the
+island, the widget and the keep-awake rule all rest.
+
+### What the owlets are doing
+
+Each agent has its own colour, borrowed from the owl's: Claude Code golden,
+Codex and Gemini CLI ghost white, Copilot CLI lilac, OpenCode ember.
+
+| Owlet | Means |
+|---|---|
+| Typing | Editing a file |
+| Searching | Reading or searching files |
+| Running a command | A command, a build or a test run |
+| Thinking | Working on its next step |
+| Browsing | Fetching a page or searching the web |
+| Starting a helper | A helper (subagent) has just hatched |
+| Waiting for its helpers | Its helpers are doing the work |
+| Fixing | Still at it after three failed commands in a row |
+| Needs you | Waiting for your permission. On the tree, a lantern hangs beside it |
+| Has a question | Waiting for your answer |
+| Stuck | Stopped after three failed commands in a row. On the tree, a small rain cloud |
+| Paused for the plan limit | Having tea until the limit resets |
+| Offline | Can't reach the internet |
+| Your turn | Finished a turn that took two minutes or more, in the last hour |
+| Shipped | Just opened a pull request |
+| Resting | Waiting for your next prompt |
+| Napping | Idle for over ten minutes |
+
+A Claude Code session's **helpers** (subagents) sit beside it: up to five as
+hatchlings, more as a small flock.
+
+### In the menu bar and the quick panel
+
+While any agent works, a small owlet sits beside the owl in the menu bar,
+with a dot when one needs you or is stuck, and the owl glances at it. Point
+at the owl to see how many are working and which needs you. Turn the owlet
+off in Settings → Agents.
+
+The quick panel has an **Owlets** card:
+
+- **Every owlet on a branch,** in a small night scene. Owlets that have
+  napped a while curl up together at the end, and "+3" says how many more
+  there are. Point at an owlet to see what it's doing, click it to go to it,
+  and right-click it for more.
+- **The one that most needs you** (or is stuck, or just finished): what it's
+  asking, how long it has waited (for a question, how long is left), and
+  **Answer** or **Show**.
+- **One line for the rest:** "3 busy (12 helpers) · 1 stuck · docs shipped
+  2 min ago".
+- **Your plan limits** as moons (see below).
+- **Your week in the Roost,** from Friday afternoon to Sunday (see below).
+- **Hidden (2)** shows owlets you've hidden, until the panel closes.
+
+**Roost ›** opens the Roost.
+
+### The Roost
+
+Open it with **Roost ›** in the quick panel, by searching for "roost" or
+"agents", from Settings → Agents, with `barnowl://roost`, or by clicking the
+widget. The top says how many owlets are out and how many need you. With
+more than one repository, a menu there lets you show just one of them.
+
+**Now** is the workbench:
+
+- **Needs you:** the first one as a card with the actual question and its
+  numbered options, or the whole command, file or address. It says how long
+  it has waited, or for a question, a ring counts down the time left to
+  answer. **Answer in Terminal** (or iTerm, or Claude), or press Return.
+  Others waiting get a line each.
+- **Working:** each owlet on its own twig, with what it's doing and for how
+  long. A small team of helpers sits on a sub-twig with their roles; a big
+  brood shows as squares, lilac working and green done. Double-click a row
+  to go to it.
+- **Done today:** owlets that finished or shipped, and sessions that ended
+  today.
+- **Napping:** one quiet row; **See All** opens it.
+- **Today**, on the right: how long agents worked and the most at once, an
+  hour-by-hour chart (lavender for work, amber for time spent waiting on
+  you), your plan limits, and time by repository. **Open the full flight
+  log** draws a line per repository through the day: working, waiting for
+  you, and paused for a plan limit.
+
+Today's numbers carry on across restarts of Barn Owl.
+
+**Tree** puts every owlet on one pixel tree, a branch per repository. A
+branch grows leafier the more work it saw today. The owlet that needs you
+sits on top with a lantern, one that's stuck has a rain cloud, nappers curl
+up in the hollow of the trunk, and owlets that finished today sleep in the
+nest in the crown. Click an owlet to see it beside the tree: its state,
+where it runs, its folder and branch, when it started, what its last turn
+changed ("6 files changed · tests pass"), and its helpers with their tasks.
+Double-click to go to it.
+
+The sky follows the time of day and tonight's real moon. To keep it the
+same, pick **Always Dusk**, **Always Night** or **Plain** in Settings →
+Agents → The Roost's sky.
+
+The button at the top right pops the tree out into its own **Roost Tree**
+window, small enough to keep beside your work. Its pin button, **Keep on
+Top**, keeps it above other windows. The owlets hold still while a window is
+hidden behind others, and with Reduce Motion, Still or Low Power Mode on.
+
+### Going to a session
+
+**Show** and **Answer** take you to the session:
+
+- In **Terminal** and **iTerm**, to the very tab it runs in. The first time,
+  macOS asks whether Barn Owl may control that app (Automation).
+- In the **Claude app**, to the very chat.
+- In another app (VS Code, Warp, Ghostty…), that app comes to the front.
+
+Right-click an owlet, anywhere, for **Show**, **Open in** your editor,
+**Open in Terminal**, **Reveal in Finder**, **Hide**, **Mute**, and **Keep
+the Mac Awake While It Works**. Pick the editor in Settings → Agents → Open
+projects in: VS Code, Cursor, Zed, Xcode, Windsurf, IntelliJ IDEA, PyCharm,
+WebStorm, GoLand, Sublime Text, Nova or BBEdit, whichever you have. A session in a worktree
+opens its own folder.
+
+### The island at the notch
+
+When an agent needs you, a small island grows out of the notch, or hangs
+from the top of the screen on a Mac without one. It says who and what in
+one line. Hover over it to open it: the whole question with its options, or
+the whole command (a long one scrolls), and **Answer in Terminal**. When
+more are waiting, it says so, and **and 2 more in the Roost** opens the
+Roost. Clicks pass through everywhere but the island itself.
+
+Choose when it shows in Settings → Agents → Show at the notch:
+
+- **When One Needs You** (the default): when an agent needs you or is stuck,
+  and for a few seconds when one finishes a task.
+- **While Agents Work:** quietly while any agent works, growing when one
+  needs you.
+- **Off.**
+
+It stays away while you present (presenter mode starts by itself when you
+share your screen) and while an app is full screen. It never asks you about a
+session whose app is already in front, and never shows a muted repository or
+a hidden owlet.
+
+### Answering from the island
+
+You can answer Claude Code's permission prompts and questions right in the
+island, without switching apps. It's off by default. Turn it on in Settings
+→ Agents → **Answer from the island** → **Turn On…**. The island needs to be
+on, and Barn Owl needs to be in your Applications folder, so Claude Code can
+always find it.
+
+In the island you then get:
+
+- for a permission prompt: **Deny** and **Allow Once**, and when Claude Code
+  offers its own "don't ask again", **Always allow** followed by exactly what
+  it covers, such as "Always allow npm test commands" or "Always allow
+  www.example.com, this session";
+- for a question: its options;
+- and always **Answer in Terminal** (or whichever app it runs in), to answer
+  there instead.
+
+How it keeps you safe:
+
+- Nothing is allowed without your click. No button is the default, so a
+  stray Return never allows anything, and the buttons only take clicks after
+  a short moment, and again when the request changes.
+- Always allow adds only the rule Claude Code itself suggests, as its own
+  "don't ask again" would, and only when that rule fits on the button.
+- A tool without an obvious target shows its name and every argument, so
+  nothing is allowed unseen.
+
+It steps aside, and Claude Code shows its usual prompt, when:
+
+- Barn Owl isn't running, or quits;
+- you're already in that session's app when it asks, or switch to it;
+- you choose **Answer in Terminal**, or Show or Answer anywhere else;
+- the island can't show it: it's off, you're presenting, or an app is full
+  screen;
+- the session is hidden or its repository muted;
+- you answer somewhere else first, such as in the Claude app;
+- or ten minutes pass.
+
+Questions with several parts, or where you can pick more than one answer,
+always go to the usual prompt.
+
+**What changes.** Before anything changes, Barn Owl shows the hooks setting
+as it is now and as it will be, and saves a copy of
+`~/.claude/settings.json` beside it, as `settings.json.barnowl-backup`. That
+copy is made once, the first time Barn Owl changes the file, and only you
+can read it. Then it adds two hooks to the file, keeping any of yours: one
+for **PermissionRequest** (any tool) and one for **PreToolUse** (only
+AskUserQuestion). Both run the same command:
+
+```
+b='/Applications/Barn Owl.app/Contents/MacOS/Barn Owl'; [ -x "$b" ] && exec "$b" --answer; :
+```
+
+Barn Owl writes the file back neatly formatted, with its keys in
+alphabetical order, so it may look different in an editor even where its
+contents haven't changed.
+
+**To undo it,** click **Turn Off**: Barn Owl removes its two hooks and
+leaves the rest as it is. If you remove Barn Owl without turning it off, no
+harm is done: the command does nothing when Barn Owl is gone, and Claude
+Code asks as usual.
+
+### Notifications
+
+Settings → Agents → Notifications:
+
+- **When an agent needs you:** a permission prompt, a question, or stuck
+  after failures.
+- **When a long task finishes,** where long means at least 3 minutes (2, 5,
+  10 or 30 if you prefer).
+
+Barn Owl only notifies you when the island can't show it (you're presenting,
+an app is full screen, or the island is off) or you've been away from the
+Mac for a couple of minutes, and never for a session whose window is in
+front of you. Click a notification to go to the session. Once a session
+that needed you moves on, its notification goes away.
+
+Muted repositories never notify, nor do owlets hidden for today, or
+scripted and scratch sessions while they're hidden. An owlet hidden until it
+needs you, or a hidden repository, still tells you when it needs you.
+
+**Tell me at 80%, and when a limit resets** adds a note when a plan window
+passes 80%, and another when a window that was that high starts again.
+
+The first time Barn Owl has something to say, macOS asks whether to allow
+its notifications.
+
+### Plan limits
+
+Under the owlets, in the Roost and on the widget, Claude's and Codex's
+5-hour and weekly windows show as moons that wax as you use them and are new
+again when the window resets: "38% · resets 19:30". When a window is filling
+fast, the Roost says when it would run out at the recent pace. A reading
+over half an hour old is faded and dashed, and says when it's from: "43% ·
+as of 16:44".
+
+Where the numbers come from:
+
+- **Claude:** the Claude app's own usage history, which the app saves now
+  and then while it runs. It has no reset times, so a 5-hour reading is
+  shown for five hours at most, and a weekly one for a week, as "as of".
+- **Codex:** its session logs, with reset times, as Codex reports them as it
+  works. They're kept for six hours.
+- **Claude's reset times:** Claude Code's status line, if you turn that on
+  (below).
+
+Barn Owl never asks a server for these, and never reads a login, a token or
+a cookie. Turn plan limits off in Settings → Agents → Show plan limits.
+
+#### Reset times for Claude
+
+Claude Code hands its status line your plan usage, with reset times. Barn
+Owl can take those on the way past. Turn it on in Settings → Agents → Plan
+limits → **Reset times for Claude** → **Turn On…**.
+
+**What changes.** As with answering, Barn Owl first shows the status line
+setting as it is now and as it will be, and saves the backup (once). Then
+the `statusLine` command in `~/.claude/settings.json` becomes:
+
+```
+b='/Applications/Barn Owl.app/Contents/MacOS/Barn Owl'; [ -x "$b" ] && exec "$b" --statusline -- 'your command'; your command
+```
+
+Each time Claude Code updates its status line, Barn Owl saves only the two
+windows' percentages and reset times, then runs your own command with the
+same input. So your status line looks exactly as before, and keeps its
+padding and refresh interval. If Barn Owl is moved or deleted, the command
+runs yours directly. After an update, Barn Owl points it at the new copy by
+itself.
+
+Only Claude Code in a terminal runs a status line. Sessions in the Claude
+app's Code tab don't, so they don't pass on reset times.
+
+**To undo it,** click **Turn Off**: Barn Owl puts back exactly the status
+line you had (or none) and deletes the readings it saved. You can also
+restore `~/.claude/settings.json.barnowl-backup` yourself; it's the file as
+it was before Barn Owl first changed it, so it doesn't have changes you've
+made since.
+
+### Keep awake while an agent is working
+
+The first time Barn Owl sees an agent, it adds a rule to Settings → Keep
+Awake: **An agent is working**. It keeps your Mac and its screen awake while
+any agent works, and for five minutes after the last one stops. A session
+waiting for you keeps it awake for the first five minutes of the wait, not
+all night.
+
+With **closed-lid mode** on, that includes the lid: close your MacBook while
+an agent works and it keeps running, until five minutes after the work
+stops. Don't put it in a bag like that; it gets warm.
+
+It's a rule like any other: let the display sleep, switch it off or delete
+it in Settings → Keep Awake. It stops below your battery level too. Hidden
+owlets still count. To leave one session out, right-click it and switch off
+**Keep the Mac Awake While It Works**; that lasts until the session ends. A
+session that says it's busy but has done nothing for two hours counts as
+napping, so a forgotten one can't keep your Mac up.
+
+### Hiding and muting
+
+Right-click an owlet:
+
+- **Hide → Until It Needs Me:** it comes back when it needs you or is stuck.
+- **Hide → For Today.**
+- **Hide → Always for "repository":** every session in that repository,
+  except when one needs you.
+- **Mute "repository":** its owlets still show, but never notify you and
+  never appear in the island.
+
+Settings → Agents → Hidden and muted lists hidden and muted repositories,
+with **Show Again** and **Unmute**. Two kinds of session are hidden by
+default:
+
+- **Scripted sessions,** run from scripts, CI or the Agent SDK, such as
+  `claude -p`.
+- **Scratch folders:** temporary folders and the Claude app's scratch
+  workspaces.
+
+### The desktop widget
+
+Add **Roost** from the widget gallery (right-click the desktop → Edit
+Widgets, then search for Barn Owl). It comes small or medium: the Roost
+under a glass dome, with owlets that are doing something on its branches,
+nappers in the hollow and the ones home today in the nest, under a sky that
+follows the time of day (or your Roost sky). Beside it, who needs you and
+how many are busy, and the most useful line: what's being asked, what's
+busy, or what came home. The medium one also shows your plan limits.
+
+Click it to open the Roost; in the medium one, click an owlet to open the
+Roost on it. Barn Owl updates the widget when something changes, about once
+a minute at most when an owlet needs you and every five minutes otherwise,
+as macOS allows widgets only so many updates. If it hasn't heard from Barn
+Owl for 20 minutes, it says "As of" with the time. With Barn Owl closed or
+coding agents off, the dome stands empty.
+
+### Your week in the Roost
+
+From Friday at 16:00 through Sunday, after a week with at least an hour of
+agent work, the quick panel offers **Your week in the Roost**. It opens a
+card with the week's hours of agent work, how many repositories and how long
+you were needed, a few highlights (such as the most owlets at once or the
+longest session), when the owlets flew (the night shift in amber), the
+busiest repository, and any owl new to your field guide.
+
+Repository names are hidden ("Tree A") every time it opens; choose **Shown**
+to include them. Pick **Wide** for link previews or **Story** for a phone,
+then **Copy Image**, **Save Image…** or **Share…**. The card holds only
+times and counts, never anything from your prompts, code or branch names.
+
+### Troubleshooting agents
+
+**An owlet is missing.** Check Settings → Agents → On this Mac to see
+whether Barn Owl found the agent. Then check it isn't hidden: **Hidden (2)**
+in the quick panel shows hidden owlets, and scripted sessions and scratch
+folders are hidden by default. Agents other than Claude Code are found by
+their process every 15 seconds, or every minute when none have run for a
+while, so a new one can take a moment. An agent started through a wrapper
+with another name isn't recognised. If you've moved Claude Code's or Codex's
+folder with `CLAUDE_CONFIG_DIR` or `CODEX_HOME` in your shell, Barn Owl,
+which doesn't start from your shell, still looks in `~/.claude` and
+`~/.codex`.
+
+**Show doesn't pick the right tab.** Barn Owl can choose the tab in
+Terminal and iTerm only; other apps just come to the front. Check that Barn
+Owl may control them in System Settings → Privacy & Security → Automation.
+Inside tmux or screen, the tab can't be told apart, so the app just comes to
+the front.
+
+**Plan limits say "as of".** The Claude app saves its usage history only now
+and then, while it runs, so its readings are often older than half an hour.
+Turn on Reset times for Claude for fresh numbers whenever a terminal session
+is working. Codex's numbers arrive as Codex works.
+
+**Reset times show nothing for sessions in the Claude app.** That's
+expected: the Claude app's Code tab has no status line, so only Claude Code
+in a terminal passes them on.
+
+**Turn On… says something's wrong.** If Barn Owl isn't in Applications,
+move it there first. If `~/.claude/settings.json` isn't valid JSON, Barn Owl
+leaves it alone; fix it and try again.
+
+**The island doesn't show.** Check Settings → Agents → Show at the notch,
+and that you aren't presenting or in a full-screen app. It also stays away
+when the session waiting for you is in the app in front, and for muted
+repositories.
+
 ## Appearance
 
 Settings → Appearance:
@@ -390,7 +816,8 @@ The owl in the menu bar has its eyes open while your Mac is kept awake and
 shut when it may sleep. It blinks now and then, its eyes follow your pointer
 when you hover over it, it winks when you Option-click it, it wears shades
 while you present, and its eyes droop in the last minute of a timed session.
-When an icon pops into view because it changed, the owl glances at it.
+When an icon pops into view because it changed, the owl glances at it, and
+when an agent starts needing you, it glances at the owlet beside it.
 
 Inside Barn Owl it has a life of its own:
 
@@ -461,6 +888,8 @@ For Raycast, Alfred, scripts and anything that can open a URL:
 | `barnowl://keep-awake?minutes=60` (0 = indefinitely) | Keep awake |
 | `barnowl://keep-awake/extend?minutes=30` | Add time |
 | `barnowl://keep-awake/stop` | Stop |
+| `barnowl://roost` | The Roost |
+| `barnowl://roost?session=<id>` | The Roost, with one session picked (the widget's links use this; ids look like `claude:<session id>`) |
 | `barnowl://presenter`, `?on=1`, `?on=0` | Presenter mode |
 | `barnowl://open?app=Mail` | Open an app's icon |
 | `barnowl://place?app=Mail&row=hidden` | Move an icon |
@@ -508,8 +937,15 @@ it shouldn't happen.
 they change state. Put it where you want in Layout; Barn Owl remembers it by
 app and name.
 
-**Uninstalling.** Quit Barn Owl (quick panel → power button) and move it to the
-Trash. Its settings are in
-`~/Library/Preferences/io.github.marvika.BarnOwl.plist`, and its pictures and
-clipboard history are in `~/Library/Application Support/Barn Owl`. Remove
-Barn Owl from Accessibility and Screen Recording in Privacy & Security.
+**Uninstalling.** If you turned on answering from the island or Claude's
+reset times, turn them off first in Settings → Agents, so Claude Code's
+settings are as they were. (If you forget, no harm is done: the commands do
+nothing once Barn Owl is gone.) Then quit Barn Owl (quick panel → power
+button) and move it to the Trash. Its settings are in
+`~/Library/Preferences/io.github.marvika.BarnOwl.plist`, and its pictures,
+clipboard history and agent records are in
+`~/Library/Application Support/Barn Owl`. The widget's snapshot is in
+`~/Library/Group Containers/2S5J2CYWPZ.io.github.marvika.BarnOwl`, and the
+backup of Claude Code's settings, if Barn Owl made one, is
+`~/.claude/settings.json.barnowl-backup`. Remove Barn Owl from Accessibility,
+Screen Recording and Automation in Privacy & Security.

@@ -44,11 +44,13 @@ struct PerchView: View {
         .fixedSize(horizontal: false, vertical: true)
         .owlPanel()
         .overlay(alignment: .topTrailing) {
-            // Perched on the edge, watching the icon you point at.
+            // Perched in the corner, watching the icon you point at. It stays
+            // below the menu bar: the Perch sits just under it, and anything
+            // higher gets cut off when the menu bar draws on top.
             if model.accessibilityTrusted, !(hidden.isEmpty && alwaysHidden.isEmpty && behindNotch.isEmpty) {
                 WatchingOwl(snores: false)
                     .frame(width: 30, height: 30)
-                    .offset(x: -16, y: -19)
+                    .offset(x: -12, y: -3)
             }
         }
         .padding(FloatingPanel.shadowInset)

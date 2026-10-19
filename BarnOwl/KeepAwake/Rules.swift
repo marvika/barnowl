@@ -8,6 +8,9 @@ enum RuleCondition: Codable, Hashable, Sendable {
     case onPower
     case microphoneInUse
     case downloading
+    /// A coding agent (Claude Code, Codex…) is working, or stopped less than
+    /// five minutes ago.
+    case agentWorking
     /// Weekdays are 1 = Sunday … 7 = Saturday (Calendar's numbering);
     /// minutes are from midnight.
     case schedule(weekdays: Set<Int>, startMinute: Int, endMinute: Int)
@@ -21,6 +24,7 @@ enum RuleCondition: Codable, Hashable, Sendable {
         case .onPower: "on power adapter"
         case .microphoneInUse: "the microphone is in use (calls)"
         case .downloading: "files are downloading"
+        case .agentWorking: "an agent is working"
         case .schedule(let days, let start, let end):
             "\(Self.dayList(days).lowercased()) \(Self.time(start))–\(Self.time(end))"
         }
@@ -36,6 +40,7 @@ enum RuleCondition: Codable, Hashable, Sendable {
         case .onPower: "bolt.fill"
         case .microphoneInUse: "mic.fill"
         case .downloading: "arrow.down.circle.fill"
+        case .agentWorking: "bird.fill"
         case .schedule: "calendar"
         }
     }
@@ -60,6 +65,7 @@ enum RuleCondition: Codable, Hashable, Sendable {
         case .onPower: snapshot.onAC
         case .microphoneInUse: snapshot.microphoneInUse
         case .downloading: snapshot.downloading
+        case .agentWorking: snapshot.agentWorking
         case .schedule(let days, let start, let end):
             Self.minute(snapshot.minuteOfDay, isWithin: start, end)
                 && days.contains(Self.startDay(of: start, end, at: snapshot.minuteOfDay, on: snapshot.weekday))
@@ -87,6 +93,7 @@ struct ConditionSnapshot: Equatable, Sendable {
     var batteryPercent: Int?
     var microphoneInUse = false
     var downloading = false
+    var agentWorking = false
     var weekday = 2
     var minuteOfDay = 0
 }
@@ -113,6 +120,8 @@ struct KeepAwakeRule: Codable, Identifiable, Hashable, Sendable {
         KeepAwakeRule(conditions: [.onPower, .externalDisplay]),
         KeepAwakeRule(conditions: [.microphoneInUse]),
         KeepAwakeRule(conditions: [.downloading], allowDisplaySleep: true),
+        // You're often watching an agent work, so the screen stays on too.
+        KeepAwakeRule(conditions: [.agentWorking]),
         KeepAwakeRule(conditions: [.schedule(weekdays: [2, 3, 4, 5, 6], startMinute: 8 * 60, endMinute: 17 * 60)]),
     ]
 }
@@ -128,9 +137,16 @@ final class RuleStore {
 
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
-        if let data = defaults.data(forKey: key), let saved = try? JSONDecoder().decode([KeepAwakeRule].self, from: data) {
-            rules = saved
+        // One rule this version can't read (from a newer one) is skipped,
+        // rather than losing every rule.
+        if let data = defaults.data(forKey: key), let saved = try? JSONDecoder().decode([Readable].self, from: data) {
+            rules = saved.compactMap(\.rule)
         }
+    }
+
+    private struct Readable: Decodable {
+        let rule: KeepAwakeRule?
+        init(from decoder: Decoder) throws { rule = try? KeepAwakeRule(from: decoder) }
     }
 
     func add(_ rule: KeepAwakeRule) {
