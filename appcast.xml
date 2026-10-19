@@ -10,6 +10,45 @@
         <language>en</language>
         <!-- Releases, newest first -->
         <item>
+            <title>Barn Owl 0.11.0</title>
+            <link>https://github.com/marvika/barnowl/releases/tag/v0.11.0</link>
+            <pubDate>Mon, 19 Oct 2026 11:58:23 +0000</pubDate>
+            <sparkle:version>15</sparkle:version>
+            <sparkle:shortVersionString>0.11.0</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>26.0</sparkle:minimumSystemVersion>
+            <sparkle:fullReleaseNotesLink>https://github.com/marvika/barnowl/releases/tag/v0.11.0</sparkle:fullReleaseNotesLink>
+            <description sparkle:format="markdown"><![CDATA[
+- Without Screen Recording, icons whose name shows their state ("Wi‑Fi,
+  connected", "OneDrive · Syncing") no longer count as new icons each time it
+  changes, so they stay where you put them.
+- Presenter mode no longer starts for apps that capture the screen all the
+  time (DisplayLink, screen recorders), and the battery cutoff now lets the
+  Mac sleep while presenting too.
+- Closing Search or the clipboard hands the keyboard back to the app you
+  were in.
+- Updates found in the background say so in a notification instead of
+  jumping in front of what you're typing, and a running keep-awake session
+  carries on after the update.
+- A very long number in search ("awake 99999999999999999999") no longer
+  crashes Barn Owl; sessions are capped at a year.
+- Turning clipboard history off clears it right away, on disk too.
+- **Closed-lid mode now follows keep awake,** like Amphetamine with Power
+  Protect. Close the lid while keep awake is on and your Mac keeps running,
+  with the screen locked (unless an external display is connected);
+  otherwise it sleeps as usual. Before, it stayed on until you turned it off.
+  Turning it on asks for your password once, to add a rule that lets your
+  account run exactly `pmset -a disablesleep 1` and `pmset -a disablesleep 0`
+  without a password; turning it off removes the rule. On a MacBook, the
+  setup guide offers it as one of its choices. If you had it on, Barn Owl
+  offers to set this up, or to turn it off.
+- Barn Owl no longer borrows your pointer while you're working. Icons it puts
+  back in place, or shows because they changed, now wait until you pause, and
+  an icon macOS won't let it keep in place (like Control Center's Display)
+  is left alone instead of being dragged back every couple of minutes.
+]]></description>
+            <enclosure url="https://github.com/marvika/barnowl/releases/download/v0.11.0/BarnOwl-0.11.0.zip" sparkle:edSignature="DjlUsnqURwkgApdUD7FHMfBekhGV4CH6/aCAc2wg7DxxzzlssrmIri0wS36iDNg22Mrb7sIZdNEHGjgNK9hsDA==" length="7647480" type="application/octet-stream"/>
+        </item>
+        <item>
             <title>Barn Owl 0.10.2</title>
             <link>https://github.com/marvika/barnowl/releases/tag/v0.10.2</link>
             <pubDate>Sun, 18 Oct 2026 19:48:28 +0000</pubDate>
