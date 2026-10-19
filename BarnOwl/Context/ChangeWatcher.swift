@@ -128,7 +128,7 @@ final class ChangeWatcher {
             }
             let visible = item.section == .visible && !item.isBehindNotch
             if !visible {
-                guard await mover.move(item.windowID, to: .rightOf(divider)) else { continue }
+                guard await mover.move(item.windowID, to: .rightOf(divider), whenIdle: true) else { continue }
             }
             scanner.updateFrames()
             if let current = scanner.items.first(where: { $0.windowID == item.windowID }) {
@@ -158,7 +158,7 @@ final class ChangeWatcher {
         guard item.section != .visible || item.isBehindNotch, item.isMovable,
               let divider = StatusItems.windowID(of: statusItems.separator) else { return }
         surfaced[item.key] = until
-        await mover.move(item.windowID, to: .rightOf(divider))
+        await mover.move(item.windowID, to: .rightOf(divider), whenIdle: true)
         scanner.updateFrames()
         announce(item)
     }

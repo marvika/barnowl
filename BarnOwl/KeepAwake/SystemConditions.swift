@@ -84,8 +84,29 @@ enum SystemConditions {
 
     /// Seconds since the last keyboard or mouse input.
     static var secondsSinceInput: TimeInterval {
-        [CGEventType.mouseMoved, .keyDown, .leftMouseDown, .scrollWheel]
+        [CGEventType.mouseMoved, .keyDown, .leftMouseDown, .rightMouseDown, .leftMouseDragged, .scrollWheel]
             .map { CGEventSource.secondsSinceLastEventType(.combinedSessionState, eventType: $0) }
             .min() ?? 0
+    }
+}
+
+/// Whether the user is in the middle of using the mouse or keyboard, so
+/// Barn Owl can keep its hands off the pointer until they pause.
+enum UserActivity {
+    /// How long without input counts as a pause.
+    static let pause: TimeInterval = 2.5
+
+    @MainActor static var isIdle: Bool {
+        SystemConditions.secondsSinceInput >= pause && !ItemMover.isAnyMouseButtonHeld
+    }
+
+    /// Waits for a pause in the user's input; false if none came in time.
+    @MainActor static func waitUntilIdle(timeout: TimeInterval) async -> Bool {
+        let deadline = Date().addingTimeInterval(timeout)
+        while !isIdle {
+            guard Date() < deadline, !Task.isCancelled else { return false }
+            try? await Task.sleep(for: .milliseconds(250))
+        }
+        return true
     }
 }

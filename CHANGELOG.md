@@ -14,6 +14,10 @@ before 1.0, a minor version can change behaviour.
   without a password; turning it off removes the rule. On a MacBook, the
   setup guide offers it as one of its choices. If you had it on, Barn Owl
   offers to set this up, or to turn it off.
+- Barn Owl no longer borrows your pointer while you're working. Icons it puts
+  back in place, or shows because they changed, now wait until you pause, and
+  an icon macOS won't let it keep in place (like Control Center's Display)
+  is left alone instead of being dragged back every couple of minutes.
 
 ## 0.10.2
 

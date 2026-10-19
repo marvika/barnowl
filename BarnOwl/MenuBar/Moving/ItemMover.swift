@@ -57,13 +57,20 @@ final class ItemMover {
         self.statusItems = statusItems
     }
 
-    /// Moves are queued: one ⌘-drag at a time.
+    /// Moves are queued: one ⌘-drag at a time. A ⌘-drag borrows the pointer
+    /// for a moment, so moves Barn Owl makes on its own (`whenIdle`) wait
+    /// until the user has stopped using the mouse and keyboard, and are
+    /// skipped if they don't within half a minute.
     @discardableResult
-    func move(_ windowID: CGWindowID, to destination: MoveDestination) async -> Bool {
+    func move(_ windowID: CGWindowID, to destination: MoveDestination, whenIdle: Bool = false) async -> Bool {
         let previous = tail
         let task = Task { [weak self] () -> Bool in
             _ = await previous?.value
             guard let self else { return false }
+            if whenIdle, !(await UserActivity.waitUntilIdle(timeout: 30)) {
+                Log.menuBar.info("Move of \(windowID) skipped: you were busy")
+                return false
+            }
             return await self.perform(windowID, destination)
         }
         tail = task
