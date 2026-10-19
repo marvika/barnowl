@@ -62,10 +62,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             Preferences.hasShownWelcome = true
             Task {
                 guard let self else { return }
-                await self.images.capture(await self.scanner.freshItems())
+                // Pictures of every icon, hidden ones too, without moving any.
+                await self.model.layout.refreshPictures()
                 self.sections.collapse()
                 await self.model.layout.applyFirstRunDefaults()
-                await self.model.layout.refreshMissingPictures()
             }
         }
         model.showSetup = { [weak self] in self?.onboardingWindow.show() }

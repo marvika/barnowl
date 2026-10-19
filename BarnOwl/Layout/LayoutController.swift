@@ -313,32 +313,36 @@ final class LayoutController {
         }
     }
 
-    /// Icons hidden behind the notch or off screen can't be photographed. This
-    /// moves each one without a picture into view for a moment, captures it
-    /// and puts it back.
-    func refreshMissingPictures() async {
-        guard let images, ItemImageCache.hasPermission, !isBusy,
-              let divider = StatusItems.windowID(of: statusItems.separator) else { return }
-        let missing = scanner.items.filter { $0.isMovable && !images.hasFreshImage(for: $0) }
-        guard !missing.isEmpty else { return }
+    /// Photographs the icons without moving any of them: shows every icon
+    /// for a moment, as Option-clicking the arrow does, captures the menu bar
+    /// and hides them again. It used to ⌘-drag each icon without a picture
+    /// into view and back, which took the pointer for seconds. Icons behind
+    /// the notch can't be seen this way and keep their app's icon.
+    func refreshPictures() async {
+        guard let images, ItemImageCache.hasPermission, !isBusy else { return }
         isBusy = true
-        defer {
-            isBusy = false
-            scanner.updateFrames()
+        defer { isBusy = false }
+        let before = sections.state
+        if before != .expandedAll {
+            sections.showAll()
+            await Self.waitForMenuBarToSettle()
         }
-        for item in missing {
+        let items = await scanner.freshItems()
+        await images.capture(items)
+        if before == .collapsed { sections.collapse() }
+        scanner.updateFrames()
+        Log.menuBar.info("Refreshed pictures of \(items.count) icons without moving them")
+    }
+
+    /// Waits until the menu bar's icons stop sliding (at most a second and a half).
+    static func waitForMenuBarToSettle() async {
+        var previous: [CGWindowID: CGRect] = [:]
+        for _ in 0..<15 {
+            try? await Task.sleep(for: .milliseconds(100))
             let frames = ItemMover.frames()
-            let start = frames[item.windowID] ?? item.frame
-            let neighbor = frames.filter { $0.key != item.windowID && $0.value.minX >= start.maxX - 1 }
-                .min { $0.value.minX < $1.value.minX }?.key
-            guard await mover.move(item.windowID, to: .rightOf(divider)) else { continue }
-            scanner.updateFrames()
-            if let moved = scanner.items.first(where: { $0.windowID == item.windowID }) {
-                await images.capture([moved], pruning: false)
-            }
-            if let neighbor { await mover.move(item.windowID, to: .leftOf(neighbor)) }
+            if frames == previous { return }
+            previous = frames
         }
-        Log.menuBar.info("Refreshed pictures of \(missing.count) icons")
     }
 
     private func ensureAlwaysHiddenSection() async {

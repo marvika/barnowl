@@ -111,8 +111,8 @@ private struct LayoutPane: View {
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                     Spacer()
-                    Button("Refresh Pictures") { Task { await model.layout.refreshMissingPictures() } }
-                        .help("Briefly brings icons without a picture into view to photograph them.")
+                    Button("Refresh Pictures") { Task { await model.layout.refreshPictures() } }
+                        .help("Shows every icon for a moment to photograph it. Nothing is moved.")
                         .disabled(model.layout.isBusy || !model.screenRecordingAllowed)
                 }
                 LayoutEditorView(model: model)

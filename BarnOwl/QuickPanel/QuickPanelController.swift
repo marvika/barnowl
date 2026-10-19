@@ -97,17 +97,23 @@ final class QuickPanelController: NSObject {
     }
 
     // The eyes follow the pointer across the owl, by a point.
-    @objc func mouseMoved(with event: NSEvent) {
+    //
+    // The tracking area calls these by their AppKit names (mouseMoved: and so
+    // on). This isn't an NSResponder, so Swift's names (mouseMovedWith:) would
+    // not match: AppKit then threw an exception on every pointer movement over
+    // the owl, which could leave its animation state broken and crash later.
+    @objc(mouseMoved:) func mouseMoved(with event: NSEvent) {
         guard let button = owlItem?.button, Preferences.owlMoves else { return }
         let x = button.convert(event.locationInWindow, from: nil).x
         let imageWidth = button.image?.size.width ?? button.bounds.width
+        guard imageWidth > 0, x.isFinite else { return }
         look = max(-1, min(1, (x - imageWidth / 2) / (imageWidth / 2)))
         render()
     }
 
-    @objc func mouseEntered(with event: NSEvent) { mouseMoved(with: event) }
+    @objc(mouseEntered:) func mouseEntered(with event: NSEvent) { mouseMoved(with: event) }
 
-    @objc func mouseExited(with event: NSEvent) {
+    @objc(mouseExited:) func mouseExited(with event: NSEvent) {
         guard look != 0, glanceTask == nil || glanceTask?.isCancelled == true else { return }
         look = 0
         render()

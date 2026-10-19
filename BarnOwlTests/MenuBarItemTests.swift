@@ -266,3 +266,14 @@ struct LayoutKeeperTests {
         }
     }
 }
+
+/// NSTrackingArea calls its owner by AppKit's selector names. A Swift method
+/// named mouseMoved(with:) on a class that isn't an NSResponder gets the
+/// selector mouseMovedWith:, and AppKit then throws on every pointer move.
+@MainActor
+struct TrackingSelectorTests {
+    @Test(arguments: ["mouseMoved:", "mouseEntered:", "mouseExited:"])
+    func theOwlAnswersTrackingAreaCalls(selector: String) {
+        #expect(QuickPanelController.instancesRespond(to: NSSelectorFromString(selector)))
+    }
+}
