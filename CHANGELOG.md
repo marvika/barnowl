@@ -3,7 +3,7 @@
 All notable changes to Barn Owl. Versions follow [semantic versioning](https://semver.org);
 before 1.0, a minor version can change behaviour.
 
-## Unreleased
+## 0.11.3
 
 - **Closed-lid mode now works like Amphetamine's:** on battery, without an
   external display, and with no password or set-up, also on company-managed
