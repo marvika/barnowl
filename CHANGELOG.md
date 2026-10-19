@@ -5,6 +5,15 @@ before 1.0, a minor version can change behaviour.
 
 ## Unreleased
 
+- **Closed-lid mode now follows keep awake,** like Amphetamine with Power
+  Protect. Close the lid while keep awake is on and your Mac keeps running,
+  with the screen locked (unless an external display is connected);
+  otherwise it sleeps as usual. Before, it stayed on until you turned it off.
+  Turning it on asks for your password once, to add a rule that lets your
+  account run exactly `pmset -a disablesleep 1` and `pmset -a disablesleep 0`
+  without a password; turning it off removes the rule. On a MacBook, the
+  setup guide offers it as one of its choices. If you had it on, Barn Owl
+  offers to set this up, or to turn it off.
 - Barn Owl no longer borrows your pointer while you're working. Icons it puts
   back in place, or shows because they changed, now wait until you pause, and
   an icon macOS won't let it keep in place (like Control Center's Display)

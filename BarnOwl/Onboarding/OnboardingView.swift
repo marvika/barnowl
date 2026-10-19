@@ -186,6 +186,8 @@ private struct PreferencesStep: View {
     @AppStorage(PrefKey.autoRehide) private var autoRehide = true
     @AppStorage(PrefKey.autoRehideDelay) private var autoRehideDelay = 10.0
     @State private var launchAtLogin = SMAppService.mainApp.status == .enabled
+    @State private var closedLid = Preferences.closedLidMode
+    private let hasLid = Lid.exists
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -210,6 +212,27 @@ private struct PreferencesStep: View {
                     .labelsHidden()
                     .frame(width: 220)
                 }
+                if hasLid {
+                    CardRow(title: "Keep running with the lid closed",
+                            subtitle: "While Barn Owl keeps your Mac awake. Asks for your password once.",
+                            symbol: "laptopcomputer", color: .indigo) {
+                        Toggle("", isOn: Binding(get: { closedLid }, set: { enabled in
+                            if enabled {
+                                guard ClosedLidMode.canSwitchWithoutPassword || ClosedLidMode.install() else { return }
+                                Preferences.closedLidMode = true
+                            } else {
+                                Preferences.closedLidMode = false
+                                if !ClosedLidMode.uninstall() { ClosedLidMode.apply(false) }
+                            }
+                            closedLid = Preferences.closedLidMode
+                        }))
+                        .labelsHidden().toggleStyle(.switch)
+                    }
+                }
+            }
+            if hasLid {
+                Text("Close the lid while keep awake is on and your Mac keeps running, with the screen locked; the rest of the time it sleeps as usual. Your password lets Barn Owl switch this one setting by itself.")
+                    .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             }
         }
     }

@@ -83,6 +83,27 @@ struct ClosedLidModeTests {
         #expect(!ClosedLidMode.parse(off))
         #expect(!ClosedLidMode.parse("Currently in use:\n sleep 1\n"))
     }
+
+    /// The rule allows exactly the two pmset commands, for one account.
+    @Test func ruleAllowsOnlyTheTwoCommands() throws {
+        let rule = try #require(ClosedLidMode.rule(for: "marius.vika"))
+        let lines = rule.split(separator: "\n").filter { !$0.hasPrefix("#") }
+        #expect(lines == ["marius.vika ALL=(root) NOPASSWD: /usr/bin/pmset -a disablesleep 0, /usr/bin/pmset -a disablesleep 1"])
+    }
+
+    /// A name sudoers could read as more than one account ("ALL", a group,
+    /// a list, another rule) gets no rule at all.
+    @Test(arguments: ["", "ALL", "%admin", "a b", "x,y", "root\nALL", "evil ALL=(ALL) NOPASSWD: ALL #", "1user", "bjørn"])
+    func refusesNamesThatArentPlainAccountNames(name: String) {
+        #expect(ClosedLidMode.rule(for: name) == nil)
+    }
+
+    @Test func ruleFileNameIsOneSudoReads() {
+        // sudo skips files in sudoers.d whose names contain a dot or end in ~.
+        let name = (ClosedLidMode.rulePath as NSString).lastPathComponent
+        #expect(!name.contains(".") && !name.hasSuffix("~"))
+        #expect(ClosedLidMode.rulePath.hasPrefix("/private/etc/sudoers.d/"))
+    }
 }
 
 struct KeepAwakeStatusTests {
