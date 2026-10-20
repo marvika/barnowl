@@ -13,6 +13,8 @@ struct PlanLimit: Identifiable, Hashable, Sendable {
     }
 
     var agent: AgentKind
+    /// The plan, when the agent says which: "Plus", "Pro".
+    var plan: String?
     var window: Window
     /// 0–100.
     var used: Double
@@ -23,6 +25,13 @@ struct PlanLimit: Identifiable, Hashable, Sendable {
     var fullAt: Date?
 
     var id: String { "\(agent.rawValue).\(window.rawValue)" }
+
+    /// Whose limit it is, always said, since each agent's plan is its own:
+    /// "Claude", "Codex Plus".
+    var owner: String {
+        let name = agent == .claude ? "Claude" : agent.name
+        return plan.map { "\(name) \($0)" } ?? name
+    }
     var isHigh: Bool { used >= 80 }
 
     /// Older than half an hour: shown greyed, with its time, never as current.

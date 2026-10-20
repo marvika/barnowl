@@ -3,6 +3,28 @@
 All notable changes to Barn Owl. Versions follow [semantic versioning](https://semver.org);
 before 1.0, a minor version can change behaviour.
 
+## Unreleased
+
+- **Mistral Vibe gets an owlet.** Vibe 3 sessions show what they're doing,
+  from Vibe's own session store: thinking, running a command, editing,
+  searching, on the web, waiting for its helpers, fixing after failed
+  commands, paused for a rate limit, done after a long turn, and when it
+  wants your OK or has a question, with the command or question itself.
+  The owlet takes the session's title, and follows `/clear` into the new
+  session. Vibe's owlets are ember.
+- A new Vibe shows up the moment it starts, not at the next look for
+  processes.
+- **One agent calling another.** When an agent starts another (Claude Code
+  running `vibe -p …` or `codex exec …` for a second opinion), the helper's
+  owlet says who asked: "Asked by Claude Code · Vibe support". It's shown
+  even though it runs from a script.
+- Other agents run for a single prompt (`vibe -p …`, `codex exec …`) count as
+  scripted, like the Agent SDK's sessions, and are hidden unless you show
+  scripted sessions.
+- **Plan limits say whose they are:** "Claude · 5 hours", "Codex Plus ·
+  week", in the quick panel, the Roost and the widget, with the plan where
+  the agent names it. They no longer read as if they applied to every owlet.
+
 ## 0.12.0
 
 - **The Roost: your coding agents as owlets.** Claude Code (in a terminal,

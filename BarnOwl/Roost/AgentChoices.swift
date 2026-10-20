@@ -45,7 +45,8 @@ final class AgentChoices {
     func isHidden(_ session: AgentSession, now: Date = Date()) -> Bool {
         if revealHidden { return false }
         if hiddenFolders.contains(session.place.root.path) { return !session.state.needsYou }
-        if session.isScripted, Preferences.agentsHideScripted { return true }
+        // Another agent's helper is shown, though it runs from a script.
+        if session.isScripted, session.calledBy == nil, Preferences.agentsHideScripted { return true }
         if Preferences.agentsHideScratch, Self.isScratch(session.folder) { return true }
         guard let hidden = hiddenSessions[session.id] else { return false }
         switch hidden.length {
@@ -63,7 +64,7 @@ final class AgentChoices {
     /// tells you when it needs you.
     func mayNotify(_ session: AgentSession, now: Date = Date()) -> Bool {
         if isMuted(session) { return false }
-        if session.isScripted, Preferences.agentsHideScripted { return false }
+        if session.isScripted, session.calledBy == nil, Preferences.agentsHideScripted { return false }
         if Preferences.agentsHideScratch, Self.isScratch(session.folder) { return false }
         if let hidden = hiddenSessions[session.id], hidden.length == .today,
            Calendar.current.isDate(hidden.since, inSameDayAs: now) { return false }

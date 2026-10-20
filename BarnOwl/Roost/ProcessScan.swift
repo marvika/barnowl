@@ -11,12 +11,16 @@ enum ProcessScan {
         let started: Date
         /// CPU time used so far, in seconds, to tell working from idle.
         let cpu: TimeInterval
+        /// Run for one prompt by a script or another agent (`vibe -p …`,
+        /// `codex exec …`) rather than opened by a person.
+        var scripted = false
     }
 
     /// Native agent binaries by process name. Node-hosted ones are matched
     /// on the script they run instead.
     static let binaries: [String: AgentKind] = [
-        "codex": .codex, "opencode": .opencode, "copilot": .copilot, "gemini": .gemini, "cursor-agent": .other,
+        "codex": .codex, "opencode": .opencode, "copilot": .copilot, "gemini": .gemini, "vibe-rs": .vibe,
+        "cursor-agent": .other,
         "droid": .other, "goose": .other, "crush": .other, "aider": .other, "amp": .other,
     ]
 
@@ -41,7 +45,8 @@ enum ProcessScan {
             if words.dropFirst().contains(where: { serverWords.contains($0) }) { continue }
             guard let folder = workingFolder(of: pid) else { continue }
             matches.append((Found(pid: pid, agent: agent, folder: folder, started: startTime(info),
-                                  cpu: cpuTime(of: pid) ?? 0), Int32(info.pbi_ppid)))
+                                  cpu: cpuTime(of: pid) ?? 0, scripted: isScripted(agent, arguments: words)),
+                            Int32(info.pbi_ppid)))
         }
         return outermost(matches)
     }
@@ -62,12 +67,23 @@ enum ProcessScan {
         }.map(\.found)
     }
 
+    static func isScripted(_ agent: AgentKind, arguments: [String]) -> Bool {
+        let words = arguments.dropFirst()
+        switch agent {
+        case .vibe: return words.contains { $0 == "-p" || $0 == "--prompt" || $0 == "--prompt-file" || $0.hasPrefix("--prompt=") }
+        case .codex: return words.first == "exec" || words.first == "e"
+        default: return false
+        }
+    }
+
     static func scriptAgent(arguments: [String]) -> AgentKind? {
         for argument in arguments.dropFirst().prefix(3) {
             let lower = argument.lowercased()
             if lower.contains("@github/copilot") || lower.hasSuffix("/copilot") { return .copilot }
             if lower.contains("gemini-cli") || lower.hasSuffix("/gemini") { return .gemini }
             if lower.contains("@openai/codex") || lower.hasSuffix("/codex") { return .codex }
+            // Editors host Vibe through its ACP server, a Python script.
+            if lower.hasSuffix("/vibe-acp") { return .vibe }
             if lower.hasSuffix("/aider") { return .other }
         }
         return nil

@@ -108,7 +108,7 @@ microphone, desktop icons, hidden files and sleeping the screen.
   <img src="docs/images/roost.gif" alt="An agent asks at the notch, the island opens to its question, the quick panel shows the owlets, then the Roost's Now view and its pixel tree" width="760">
 </p>
 
-Run Claude Code, Codex, Copilot CLI, OpenCode or Gemini CLI, and each session
+Run Claude Code, Codex, Mistral Vibe, Copilot CLI, OpenCode or Gemini CLI, and each session
 gets a pixel **owlet** that shows what it's doing: typing, running a command,
 searching, thinking, napping, or holding up a sign when it needs you. Start
 ten at once and you still see, at a glance, which one is waiting on you.
@@ -319,8 +319,8 @@ only network request is checking GitHub for new versions, which sends
 nothing about you or your Mac. Clipboard history stays on your Mac and never
 saves images to disk.
 
-For coding agents, Barn Owl reads the agents' session files in `~/.claude`
-and `~/.codex`, and the Claude app's session records and usage history. It
+For coding agents, Barn Owl reads the agents' session files in `~/.claude`,
+`~/.codex` and `~/.vibe`, and the Claude app's session records and usage history. It
 shows what an agent is waiting on you for while it waits, never keeps your
 prompts or replies, and never reads a login. It changes Claude Code's
 settings only if you turn on answering from the island or Claude's reset

@@ -538,12 +538,11 @@ private struct MoonTile: View {
     }
 
     private var title: String {
-        let agent = limit.agent == .claude ? "" : limit.agent.name + " "
-        return agent + (limit.window == .session ? "5 hours" : (agent.isEmpty ? "Week" : "week"))
+        "\(limit.owner) · " + (limit.window == .session ? "5 hours" : "week")
     }
 
     private func help(stale: Bool) -> String {
-        var parts = ["\(limit.agent == .claude ? "Claude" : limit.agent.name) \(limit.window.title.lowercased()): \(Int(limit.used.rounded()))% used"]
+        var parts = ["\(limit.owner) plan, \(limit.window.title.lowercased()) limit: \(Int(limit.used.rounded()))% used"]
         if stale { parts.append("as of \(PlanLimit.when(limit.updated))") }
         if let reset = limit.resetsAt { parts.append("resets \(PlanLimit.moment(reset))") }
         if let full = limit.fullAt, !stale { parts.append("at this pace it runs out \(PlanLimit.moment(full))") }

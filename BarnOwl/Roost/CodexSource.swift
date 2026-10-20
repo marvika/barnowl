@@ -62,6 +62,13 @@ enum CodexSource {
                          updated: time)
     }
 
+    /// The plan Codex names beside its limits: "plus" is "Plus".
+    static func plan(_ value: Any?) -> String? {
+        guard let type = value as? String, !type.isEmpty, type.count <= 24,
+              type.allSatisfy({ $0.isLetter || $0.isNumber || $0 == "_" || $0 == "-" }) else { return nil }
+        return type.replacingOccurrences(of: "_", with: " ").capitalized
+    }
+
     struct LogState: Equatable, Sendable {
         var busy = false
         var lastTool: String?
@@ -107,7 +114,9 @@ enum CodexSource {
                 rateLimited = !(limits?["rate_limit_reached_type"] is NSNull) && limits?["rate_limit_reached_type"] != nil
                 if rateLimited { rateLimitedAt = time ?? Date() }
                 if let limits, let time {
+                    let plan = CodexSource.plan(limits["plan_type"])
                     let windows = ["primary", "secondary"].compactMap { CodexSource.limit(limits[$0], at: time) }
+                        .map { limit in var limit = limit; limit.plan = plan; return limit }
                     if !windows.isEmpty { self.limits = windows }
                 }
             case ("event_msg", "item_completed"):

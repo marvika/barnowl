@@ -38,7 +38,7 @@ struct RoostSnapshot: Codable, Equatable, Sendable {
 
     struct Limit: Codable, Equatable, Sendable, Identifiable {
         var id: String
-        /// "5-hour", "Week", "Codex Week"
+        /// "Claude 5-hour", "Codex Plus week"
         var title: String
         var used: Double
         var updated: Date

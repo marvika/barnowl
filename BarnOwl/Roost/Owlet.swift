@@ -2,7 +2,7 @@ import Foundation
 
 /// The coding agents Barn Owl knows how to watch.
 enum AgentKind: String, Codable, CaseIterable, Sendable {
-    case claude, codex, copilot, opencode, gemini, other
+    case claude, codex, copilot, opencode, gemini, vibe, other
 
     var name: String {
         switch self {
@@ -11,6 +11,7 @@ enum AgentKind: String, Codable, CaseIterable, Sendable {
         case .copilot: "Copilot CLI"
         case .opencode: "OpenCode"
         case .gemini: "Gemini CLI"
+        case .vibe: "Mistral Vibe"
         case .other: "Agent"
         }
     }
@@ -21,7 +22,7 @@ enum AgentKind: String, Codable, CaseIterable, Sendable {
         case .claude, .other: "golden"
         case .codex, .gemini: "ghost"
         case .copilot: "lilac"
-        case .opencode: "ember"
+        case .opencode, .vibe: "ember"
         }
     }
 }
@@ -204,6 +205,8 @@ struct AgentSession: Identifiable, Hashable, Sendable {
     var helpers: [AgentHelper] = []
     /// Started by a script, CI or the Agent SDK rather than a person.
     var isScripted = false
+    /// The session that started it, when another agent did ("claude:<id>").
+    var calledBy: String?
     /// How long the last turn ran, for "finished after 47 min".
     var lastTurn: TimeInterval?
     /// What it's waiting on you for, while it waits.

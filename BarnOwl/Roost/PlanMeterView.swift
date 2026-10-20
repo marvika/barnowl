@@ -4,8 +4,6 @@ import SwiftUI
 /// The bar turns amber from 80%, like the disk ring when the disk is nearly full.
 struct PlanMeterRow: View {
     let limit: PlanLimit
-    /// Name the agent when more than one has limits.
-    var showsAgent = true
 
     var body: some View {
         HStack(spacing: 8) {
@@ -24,8 +22,7 @@ struct PlanMeterRow: View {
     }
 
     private var title: String {
-        let window = limit.window == .session ? "5-hour" : "Weekly"
-        return showsAgent ? "\(limit.agent == .claude ? "Claude" : limit.agent.name) · \(window)" : window
+        "\(limit.owner) · " + (limit.window == .session ? "5-hour" : "weekly")
     }
 
     static func help(for limit: PlanLimit, now: Date = Date()) -> String {
@@ -57,11 +54,10 @@ struct PlanMeter: View {
     let limits: [PlanLimit]
 
     var body: some View {
-        let agents = Set(limits.map(\.agent))
         let shown = limits.sorted { $0.used > $1.used }.prefix(2)
         VStack(spacing: 5) {
             ForEach(Array(shown)) { limit in
-                PlanMeterRow(limit: limit, showsAgent: agents.count > 1 || limit.agent != .claude)
+                PlanMeterRow(limit: limit)
             }
         }
     }

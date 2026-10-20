@@ -30,6 +30,12 @@ actor AgentReader {
     private var places: [String: ProjectPlace] = [:]
     /// Codex log per process, so a session keeps its log while it runs.
     private var codexLogs: [Int32: URL] = [:]
+    /// Vibe's journal per process, and its session's title and model.
+    private var vibeFollowers: [Int32: VibeSource.Follower] = [:]
+    private var vibeMeta: [String: (modified: Date, meta: VibeSource.Meta)] = [:]
+    private var vibeLeasesModified: Date?
+    /// Each agent process's parents, for which session started it.
+    private var ancestry: [Int32: [Int32]] = [:]
     private var logFolders: [URL: String] = [:]
     private var agents: [ProcessScan.Found] = []
     private var cpuBefore: [Int32: (cpu: TimeInterval, at: Date)] = [:]
@@ -57,14 +63,24 @@ actor AgentReader {
         let place: ProjectPlace
         /// Codex's log, when one matched.
         let codex: CodexSource.LogState?
+        /// Vibe's session, once it has one (after the first prompt).
+        var vibe: VibeRead? = nil
         /// For agents without a log: whether it used the CPU since the last scan.
         let busy: Bool
+        /// The session that started it, when another agent did: "claude:<id>", "codex:<pid>".
+        var calledBy: String? = nil
+    }
+
+    struct VibeRead: Sendable {
+        let log: VibeSource.LogState
+        let meta: VibeSource.Meta?
     }
 
     struct Result: Sendable {
         var claude: [ClaudeRead] = []
         var agents: [AgentRead] = []
         var sessionsFolderExists = false
+        var vibeLeasesExist = false
         var limits: [PlanLimit] = []
         /// Requests held for the island, when answering from it is on.
         var asks: [IslandAnswers.Ask] = []
@@ -107,10 +123,18 @@ actor AgentReader {
         }
 
         let interval: TimeInterval = emptyScans >= 4 ? 60 : 15
-        let scanned = now.timeIntervalSince(lastScan) >= interval
+        // A Vibe starting or ending changes its leases: look for processes now.
+        let leasesChanged = FileTimes.modified(VibeSource.leasesFolder.path)
+        result.vibeLeasesExist = leasesChanged != nil
+        let vibeChanged = leasesChanged != vibeLeasesModified
+        vibeLeasesModified = leasesChanged
+        let scanned = now.timeIntervalSince(lastScan) >= interval || vibeChanged
         if scanned {
             scan(now: now)
         }
+        let vibes = agents.filter { $0.agent == .vibe }
+        let leases = vibes.isEmpty ? [:] : VibeSource.leases()
+        vibeFollowers = vibeFollowers.filter { pid, _ in vibes.contains { $0.pid == pid } }
         for found in agents {
             let key = "\(found.agent.rawValue):\(found.pid)"
             live.insert(key)
@@ -119,15 +143,69 @@ actor AgentReader {
                 follow(key, url: url) { followed, line in followed.codex.consume(line) }
                 codex = logs[key]?.codex
             }
-            result.agents.append(AgentRead(found: found, place: place(of: found.folder), codex: codex,
-                                           busy: busyByCPU[found.pid] ?? false))
+            var read = AgentRead(found: found, place: place(of: found.folder), codex: codex,
+                                 busy: busyByCPU[found.pid] ?? false)
+            if found.agent == .vibe {
+                read.vibe = vibe(found.pid, leases: leases)
+            }
+            result.agents.append(read)
         }
+        let callers = Dictionary(newest.values.map { ($0.pid, "claude:\($0.sessionId)") }, uniquingKeysWith: { a, _ in a })
+            .merging(agents.map { ($0.pid, "\($0.agent.rawValue):\($0.pid)") }, uniquingKeysWith: { a, _ in a })
+        for index in result.agents.indices {
+            result.agents[index].calledBy = Self.caller(of: result.agents[index].found.pid, among: callers,
+                                                        ancestors: ancestors(of: result.agents[index].found.pid))
+        }
+        ancestry = ancestry.filter { pid, _ in agents.contains { $0.pid == pid } }
         result.limits = limits(now: now, codex: result.agents.compactMap(\.codex))
         logs = logs.filter { live.contains($0.key) }
         transcripts = transcripts.filter { live.contains("claude:\($0.key)") }
         missingLogs = missingLogs.filter { live.contains("claude:\($0.key)") }
         if places.count > 200 { places.removeAll() }
         return result
+    }
+
+    /// The agent session an agent was started by, if any: the nearest of its
+    /// ancestors that's a Claude Code session or another agent. An agent
+    /// asked to help by another runs a few shells below it.
+    static func caller(of pid: Int32, among callers: [Int32: String], ancestors: [Int32]) -> String? {
+        ancestors.lazy.compactMap { callers[$0] }.first
+    }
+
+    /// A process's parents, nearest first, up to `launchd`. They don't change
+    /// while it runs, so they're looked up once.
+    private func ancestors(of pid: Int32) -> [Int32] {
+        if let known = ancestry[pid] { return known }
+        var chain: [Int32] = []
+        var current = pid
+        while chain.count < 16, let parent = ProcessScan.parent(of: current), parent > 1, parent != current {
+            chain.append(parent)
+            current = parent
+        }
+        ancestry[pid] = chain
+        return chain
+    }
+
+    /// A Vibe process's session, followed from where it last stopped. `/clear`
+    /// starts a new session in the same process, so its lease is read each time.
+    private func vibe(_ pid: Int32, leases: [Int32: String]) -> VibeRead? {
+        guard let session = VibeSource.session(of: pid, leases: leases, parentOf: { ProcessScan.parent(of: $0) })
+        else { return nil }
+        let folder = VibeSource.folder(of: session)
+        var follower = vibeFollowers[pid]?.session == session ? vibeFollowers[pid]! : VibeSource.Follower(session: session)
+        follower.read(folder: folder)
+        vibeFollowers[pid] = follower
+        var meta: VibeSource.Meta?
+        if let modified = FileTimes.modified(folder.appending(path: "meta.json").path) {
+            if let known = vibeMeta[session], known.modified == modified {
+                meta = known.meta
+            } else {
+                meta = VibeSource.meta(of: folder)
+                if let meta { vibeMeta[session] = (modified, meta) }
+            }
+        }
+        if vibeMeta.count > 50 { vibeMeta = vibeMeta.filter { _, entry in Date().timeIntervalSince(entry.modified) < 86_400 } }
+        return VibeRead(log: follower.log, meta: meta)
     }
 
     /// Plan limits: Claude's from its app's history and Barn Owl's status

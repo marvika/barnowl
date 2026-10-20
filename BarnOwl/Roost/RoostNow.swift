@@ -731,7 +731,7 @@ struct TodayCard: View {
     private var projection: (text: String, warns: Bool)? {
         guard let limit = limits.first(where: { $0.window == .session && $0.agent == .claude }) ?? limits.first,
               !limit.isStale() else { return nil }
-        let name = limit.window == .session ? "the 5-hour window" : "this week"
+        let name = "\(limit.owner)'s " + (limit.window == .session ? "5-hour window" : "week")
         // Only a forecast can say how the pace ends; without one, say nothing.
         guard let full = limit.fullAt, full < (limit.resetsAt ?? .distantFuture) else { return nil }
         return ("At this pace \(name) runs out \(PlanLimit.moment(full)).", true)
@@ -839,8 +839,7 @@ struct MoonRow: View {
     }
 
     private var title: String {
-        let agent = limit.agent == .claude ? "" : "\(limit.agent.name) "
-        return agent + (limit.window == .session ? "5-hour window" : "Week")
+        "\(limit.owner) · " + (limit.window == .session ? "5-hour window" : "week")
     }
 
     private func detail(stale: Bool) -> Text {
