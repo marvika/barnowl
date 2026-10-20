@@ -125,6 +125,24 @@ final class ItemOpener {
         }
     }
 
+    /// Whether any other app has a menu or popover hanging from the menu bar:
+    /// a window above normal ones whose top meets the top of a screen.
+    static func anyMenuOpen() -> Bool {
+        guard let list = CGWindowListCopyWindowInfo([.optionOnScreenOnly], kCGNullWindowID) as? [[String: Any]],
+              let primary = NSScreen.screens.first else { return false }
+        let own = ProcessInfo.processInfo.processIdentifier
+        let statusLevel = Int(CGWindowLevelForKey(.statusWindow))
+        // Window bounds are top-left based, from the top of the main screen.
+        let tops = NSScreen.screens.map { primary.frame.maxY - $0.frame.maxY }
+        return list.contains { info in
+            let layer = info[kCGWindowLayer as String] as? Int ?? 0
+            let owner = info[kCGWindowOwnerPID as String] as? pid_t ?? 0
+            guard owner != own, layer > 0, layer != statusLevel,
+                  let bounds = info[kCGWindowBounds as String] as? [String: CGFloat], let y = bounds["Y"] else { return false }
+            return tops.contains { y >= $0 && y <= $0 + 60 }
+        }
+    }
+
     /// A left click at a screen point (top-left coordinates). The pointer is
     /// put back where it was.
     private static func click(at point: CGPoint) {

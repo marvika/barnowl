@@ -46,6 +46,19 @@ final class StatusItems {
         }
     }
 
+    /// Seeds a new item of Barn Owl's own (a group's icon) between the arrow and
+    /// the "|" divider, where it shows, rather than left of everything and
+    /// perhaps behind the notch. Only before the item first appears.
+    static func seedVisiblePosition(for name: String) {
+        guard ProcessInfo.processInfo.operatingSystemVersion.majorVersion < 27 else { return }
+        let defaults = UserDefaults.standard
+        let key = "NSStatusItem Preferred Position \(name)"
+        guard defaults.object(forKey: key) == nil else { return }
+        let toggle = defaults.double(forKey: "NSStatusItem Preferred Position \(toggleName)")
+        let separator = defaults.object(forKey: "NSStatusItem Preferred Position \(separatorName)") as? Double
+        defaults.set(separator.map { (toggle + $0) / 2 } ?? toggle + 0.5, forKey: key)
+    }
+
     /// Created lazily so people who never use the section don't get a gap for it.
     func ensureAlwaysHiddenItem() -> NSStatusItem {
         if let alwaysHidden { return alwaysHidden }

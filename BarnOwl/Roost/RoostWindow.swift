@@ -173,7 +173,7 @@ struct RoostView: View {
         let base = Text(subtitle(sessions)).foregroundStyle(RoostInk.secondary)
         guard waiting > 0 else { return base }
         return base + Text(" · ").foregroundStyle(RoostInk.secondary)
-            + Text("\(waiting) need\(waiting == 1 ? "s" : "") you").foregroundStyle(RoostInk.amber)
+            + Text("\(waiting) need\(waiting == 1 ? "s" : "") you").foregroundStyle(RoostInk.needsYou)
     }
 
     /// "12 owlets in 5 repos"
@@ -257,7 +257,7 @@ struct RoostInspector: View {
                     .background(.black.opacity(0.25), in: .rect(cornerRadius: 10))
             }
         } else if let detail = session.detail, session.state == .stuck {
-            Text(detail).font(.callout).foregroundStyle(RoostInk.coral)
+            Text(detail).font(.callout).foregroundStyle(RoostInk.stuck)
         }
         // Side by side when they fit, stacked when they don't.
         ViewThatFits(in: .horizontal) {
@@ -317,8 +317,8 @@ struct RoostInspector: View {
     }
 
     private func tone(_ session: AgentSession) -> Color {
-        if session.state.needsYou { return RoostInk.amber }
-        if session.state == .stuck { return RoostInk.coral }
+        if session.state.needsYou { return RoostInk.needsYou }
+        if session.state == .stuck { return RoostInk.stuck }
         if session.state == .done || session.state == .shipped { return RoostInk.green }
         return RoostInk.secondary
     }
@@ -347,10 +347,10 @@ struct RoostInspector: View {
         return VStack(alignment: .leading, spacing: 12) {
             Text(needing > 0 ? "\(needing) need\(needing == 1 ? "s" : "") you" : working > 0 ? "\(working) at work" : "All quiet")
                 .font(.system(size: 22, weight: .bold))
-                .foregroundStyle(needing > 0 ? RoostInk.amber : RoostInk.primary)
+                .foregroundStyle(needing > 0 ? RoostInk.needsYou : RoostInk.primary)
             VStack(alignment: .leading, spacing: 6) {
                 if working > 0 && needing > 0 { line("\(working) working", RoostInk.lavender) }
-                if stuck > 0 { line("\(stuck) stuck", RoostInk.coral) }
+                if stuck > 0 { line("\(stuck) stuck", RoostInk.stuck) }
                 if napping > 0 { line("\(napping) napping", RoostInk.quiet) }
                 if done > 0 { line("\(done) done today", RoostInk.green) }
             }
@@ -604,7 +604,7 @@ private struct AskedAgents: View {
                 Text(helper.model ?? helper.agent.name).font(.callout.weight(.medium)).foregroundStyle(RoostInk.primary)
                     .lineLimit(1)
                 Text(back ? "\(helper.agent.name) · back" : "\(helper.agent.name) · \(helper.detail ?? helper.state.label)")
-                    .font(.caption).foregroundStyle(helper.state.needsYou && !back ? RoostInk.amber : RoostInk.secondary)
+                    .font(.caption).foregroundStyle(helper.state.needsYou && !back ? RoostInk.needsYou : RoostInk.secondary)
                     .lineLimit(1)
             }
             Spacer(minLength: 4)

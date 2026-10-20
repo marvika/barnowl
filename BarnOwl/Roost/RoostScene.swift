@@ -971,8 +971,8 @@ private struct TreePerch: View {
     private var stateText: String { session.detail ?? session.state.label }
 
     private var stateColour: Color {
-        if session.state.needsYou { return Color(hex: 0xFFC56B) }
-        if session.state == .stuck { return Color(hex: 0xFF9A85) }
+        if session.state.needsYou { return RoostInk.needsYou }
+        if session.state == .stuck { return RoostInk.stuck }
         return .white.opacity(0.78)
     }
 

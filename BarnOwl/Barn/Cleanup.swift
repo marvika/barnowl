@@ -355,6 +355,13 @@ enum CleanupGate {
         let realRoots = roots.map { realPath($0) ?? $0 }
         let protected = protectedPaths(home: home)
         let realProtected = protected.map { realPath($0) ?? $0 }
+        // A rule's own folder reached through a link (~/.gradle/caches pointing into
+        // Documents) would make its target look like the rule's to clean: refuse it.
+        // Links above the home folder (/var → /private/var) are the system's own.
+        if let root = roots.first(where: { path == $0 || path.hasPrefix($0 + "/") }), let realRoot = realPath(root) {
+            let expected = root.hasPrefix(home + "/") ? (realPath(home) ?? home) + root.dropFirst(home.count) : root
+            if realRoot != expected { return .symlink }
+        }
         for (candidate, allowed, guarded) in [(path, roots, protected), (real, realRoots, realProtected)] {
             guard let root = allowed.first(where: { candidate == $0 || candidate.hasPrefix($0 + "/") }) else {
                 return .outsideAllowedFolders
@@ -444,7 +451,10 @@ enum CleanupRunner {
                     if case .trash = rule.method {
                         var resulting: NSURL?
                         try FileManager.default.trashItem(at: URL(fileURLWithPath: path), resultingItemURL: &resulting)
-                        if let resulting { outcome.trashed.append((URL(fileURLWithPath: path), resulting as URL)) }
+                        if let resulting {
+                            outcome.trashed.append((URL(fileURLWithPath: path), resulting as URL))
+                            TrashLedger.note(resulting as URL)
+                        }
                         log("trashed \(path)")
                     } else if rule.id == "trash" {
                         // Empty the Trash, but keep the Trash itself.
@@ -488,6 +498,8 @@ enum CleanupRunner {
         for item in trashed {
             do {
                 guard !FileManager.default.fileExists(atPath: item.from.path) else { throw CocoaError(.fileWriteFileExists) }
+                // Put back only what Barn Owl moved there, not another item with its name.
+                guard TrashLedger.isSame(item.to) else { throw CocoaError(.fileNoSuchFile) }
                 try FileManager.default.moveItem(at: item.to, to: item.from)
                 log("put back \(item.from.path)")
             } catch {
@@ -500,7 +512,13 @@ enum CleanupRunner {
 
     enum TrashError: LocalizedError {
         case notInTrash
-        var errorDescription: String? { "it's no longer in the Trash" }
+        case replaced
+        var errorDescription: String? {
+            switch self {
+            case .notInTrash: "it's no longer in the Trash"
+            case .replaced: "something else has taken its place in the Trash"
+            }
+        }
     }
 
     /// Removes one thing Barn Owl just moved to the Trash, for good. Refuses
@@ -511,6 +529,8 @@ enum CleanupRunner {
         var info = stat()
         guard parent == trash, url.lastPathComponent != "..", lstat(url.path, &info) == 0,
               info.st_mode & S_IFMT != S_IFLNK else { throw TrashError.notInTrash }
+        // Only the very item Barn Owl moved there, not another that has since taken its name.
+        guard TrashLedger.isSame(url) else { throw TrashError.replaced }
         try FileManager.default.removeItem(at: url)
         log("removed \(url.path) from the Trash")
     }
@@ -597,5 +617,35 @@ enum CleanupRunner {
         } else {
             try? text.write(to: logURL, atomically: true, encoding: .utf8)
         }
+    }
+}
+
+/// Which file each item Barn Owl moved to the Trash was (device and inode), by
+/// where it went, so "Empty from Trash" and Undo act only on that very item.
+enum TrashLedger {
+    struct Identity: Equatable, Sendable {
+        let device: Int32
+        let inode: UInt64
+    }
+
+    private static let lock = NSLock()
+    nonisolated(unsafe) private static var identities: [String: Identity] = [:]
+
+    static func identity(of path: String) -> Identity? {
+        var info = stat()
+        guard lstat(path, &info) == 0 else { return nil }
+        return Identity(device: info.st_dev, inode: info.st_ino)
+    }
+
+    static func note(_ url: URL) {
+        guard let identity = identity(of: url.path) else { return }
+        lock.withLock { identities[url.path] = identity }
+    }
+
+    /// Whether `url` still holds the item noted there. Something never noted is
+    /// taken as is (older reports), but every move to the Trash notes it.
+    static func isSame(_ url: URL) -> Bool {
+        guard let noted = lock.withLock({ identities[url.path] }) else { return true }
+        return identity(of: url.path) == noted
     }
 }

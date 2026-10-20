@@ -79,6 +79,29 @@ struct DiskScan: Sendable {
         return current
     }
 
+    /// The scan as it stands once `path` is gone: its folders count it no
+    /// more, and nothing in it shows among the biggest files.
+    func removing(_ path: String) -> DiskScan {
+        guard let index = index(of: path), index > 0 else { return self }
+        var nodes = nodes
+        let gone = nodes[Int(index)]
+        var parent = gone.parent
+        nodes[Int(parent)].children.removeAll { $0 == index }
+        while parent >= 0 {
+            nodes[Int(parent)].size -= gone.size
+            nodes[Int(parent)].reclaimable -= gone.reclaimable
+            nodes[Int(parent)].files -= gone.files
+            parent = nodes[Int(parent)].parent
+        }
+        var inside = [index]
+        while let next = inside.popLast() {
+            inside += nodes[Int(next)].children
+            nodes[Int(next)].kind = .folder
+            nodes[Int(next)].size = 0
+        }
+        return DiskScan(root: root, nodes: nodes, finished: finished, duration: duration)
+    }
+
     /// The biggest single files.
     func largestFiles(limit: Int = 50) -> [Int32] {
         nodes.indices.filter { nodes[$0].kind == .file }
@@ -123,6 +146,13 @@ final class DiskScanner: @unchecked Sendable {
         "dsym", "pkg", "mpkg", "photoboothlibrary", "aplibrary", "sparsebundle",
     ]
 
+    /// How urgently the scan threads run: the Barn's own measuring stays in the background.
+    private let priority: QualityOfService
+
+    init(priority: QualityOfService = .userInitiated) {
+        self.priority = priority
+    }
+
     private let condition = NSCondition()
     private var nodes: [DiskScan.Node] = []
     private var pending: [(index: Int32, path: String)] = []
@@ -156,7 +186,7 @@ final class DiskScanner: @unchecked Sendable {
                         group.leave()
                     }
                     thread.name = "Barn Owl disk scan \(number)"
-                    thread.qualityOfService = .userInitiated
+                    thread.qualityOfService = priority
                     thread.start()
                 }
                 group.notify(queue: .global()) { done.resume() }

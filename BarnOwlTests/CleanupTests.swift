@@ -60,7 +60,10 @@ struct CleanupGateTests {
     @Test(arguments: ["/Users/x/Library/Mobile Documents/com~apple~CloudDocs/Thesis",
                       "/Users/x/Library/Application Support/Slack", "/Users/x/Library/Messages/Attachments",
                       "/Users/x/Library/Containers/com.apple.mail", "/Users/x/Documents", "/Users/x",
-                      "/Users/x/.ssh/id_ed25519", "/Applications/Xcode.app/Contents/Developer", "/private/var/vm"])
+                      "/Users/x/.ssh/id_ed25519", "/Applications/Xcode.app/Contents/Developer", "/private/var/vm",
+                      // The protected folders themselves, and the folders holding them.
+                      "/Users/x/Library/Containers", "/Users/x/Library/Mobile Documents", "/opt/homebrew",
+                      "/opt/homebrew/Cellar", "/Users/x/Pictures/Photos Library.photoslibrary"])
     func basketRefusesWhatYoudMiss(path: String) {
         #expect(BarnModel.basketRefusal(path, home: "/Users/x") != nil)
     }
@@ -234,6 +237,37 @@ struct CleanupEndToEndTests {
         // sneaky-link → Documents, so this is really Documents/precious.txt.
         let refusal = CleanupGate.check(home + "/Library/Caches/sneaky-link/precious.txt", rule: try rule("app-caches"), home: home)
         #expect(refusal == .outsideAllowedFolders)
+    }
+
+    @Test func refusesARuleFolderThatIsALink() throws {
+        defer { tidyUp() }
+        // ~/Library/Logs swapped for a link to Documents: what's in it isn't logs.
+        try fm.removeItem(atPath: home + "/Library/Logs")
+        try fm.createSymbolicLink(atPath: home + "/Library/Logs", withDestinationPath: home + "/Documents")
+        let refusal = CleanupGate.check(home + "/Library/Logs/precious.txt", rule: try rule("logs"), home: home)
+        #expect(refusal == .symlink)
+        #expect(CleanupGate.check(home + "/Library/Caches/com.example.app", rule: try rule("app-caches"), home: home) == nil)
+    }
+
+    @Test func emptiesFromTheTrashOnlyWhatItPutThere() throws {
+        defer { tidyUp() }
+        let original = URL(fileURLWithPath: home + "/.Trash/thrown away.txt")
+        TrashLedger.note(original)
+        // Something else takes its name in the Trash.
+        try fm.removeItem(at: original)
+        try Data("other".utf8).write(to: original)
+        #expect(throws: (any Error).self) { try CleanupRunner.removeFromTrash(original, home: home) }
+        #expect(exists(".Trash/thrown away.txt"))
+    }
+
+    @Test func basketKeepsPackagesWhole() throws {
+        defer { tidyUp() }
+        for inside in ["Tool.app/Contents/Resources", "Build.xcarchive/Products"] {
+            try fm.createDirectory(atPath: home + "/Projects/" + inside, withIntermediateDirectories: true)
+        }
+        #expect(BarnModel.basketRefusal(home + "/Projects/Tool.app/Contents/Resources", home: "/Users/x") == "inside an app")
+        #expect(BarnModel.basketRefusal(home + "/Projects/Build.xcarchive/Products", home: "/Users/x") != nil)
+        #expect(BarnModel.basketRefusal(home + "/Projects/Tool.app", home: "/Users/x") == nil)
     }
 
     @Test func undoSaysWhatItCouldntPutBack() async throws {

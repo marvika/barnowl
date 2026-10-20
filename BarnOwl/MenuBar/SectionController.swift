@@ -103,6 +103,9 @@ final class SectionController {
                 // Wait while the pointer is in the menu bar: the user is probably
                 // about to click one of the revealed items.
                 if self.isPointerInMenuBar() { continue }
+                // Nor while a menu from one of them is open: hiding its icon
+                // would leave the menu hanging from nothing, or close it.
+                if ItemOpener.anyMenuOpen() { continue }
                 self.collapse()
                 return
             }
