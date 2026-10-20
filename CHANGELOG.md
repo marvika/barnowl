@@ -3,7 +3,7 @@
 All notable changes to Barn Owl. Versions follow [semantic versioning](https://semver.org);
 before 1.0, a minor version can change behaviour.
 
-## Unreleased
+## 0.14.1
 
 - **Explore's basket is stricter.** It no longer takes a protected folder
   itself (~/Library/Containers, Mobile Documents) or a folder that holds one
