@@ -37,6 +37,7 @@ struct RoostNowView: View {
     let log: FlightLog
     /// Today so far, kept across restarts.
     var day: DaySummary?
+    var history: History?
     @Binding var selected: String?
     var scrolls = true
     @State private var showsAllWorking = false
@@ -68,7 +69,7 @@ struct RoostNowView: View {
             column { main }
                 .frame(minWidth: 440, maxWidth: .infinity)
             column {
-                TodayCard(limits: limits, log: log, day: day) { showsFlightLog = true }
+                TodayCard(limits: limits, log: log, day: day, history: history) { showsFlightLog = true }
                     .padding(.vertical, 16)
             }
             .frame(width: 330)
@@ -667,7 +668,12 @@ struct TodayCard: View {
     let log: FlightLog
     /// Today so far from the saved log, so a restart doesn't start the day over.
     var day: DaySummary?
+    /// The last eight weeks, for the card's other view.
+    var history: History?
     var openLog: () -> Void = {}
+    @State private var showsWeeks = false
+    /// A day picked from the moon calendar ("2026-10-14").
+    @State private var picked: String?
 
     private var worked: TimeInterval { max(day?.working ?? 0, log.total(.working)) }
     private var waited: TimeInterval { max(day?.waiting ?? 0, log.total(.waiting)) }
@@ -680,9 +686,52 @@ struct TodayCard: View {
     }
 
     var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            header
+            if showsWeeks, let history {
+                HistoryPanel(history: history, picked: $picked)
+            } else {
+                today
+            }
+        }
+        .padding(20)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.white.opacity(0.05), in: .rect(cornerRadius: 22))
+        .overlay { RoundedRectangle(cornerRadius: 22).strokeBorder(RoostInk.cardEdge, lineWidth: 1) }
+        .animation(.easeOut(duration: 0.15), value: showsWeeks)
+        .animation(.easeOut(duration: 0.15), value: picked)
+    }
+
+    /// "Today", "8 weeks", or the picked day with a way back; and the switch.
+    private var header: some View {
+        HStack(alignment: .center) {
+            if showsWeeks, let picked {
+                Button { self.picked = nil } label: {
+                    HStack(spacing: 5) {
+                        Image(systemName: "chevron.left").font(.system(size: 12, weight: .semibold)).foregroundStyle(RoostInk.link)
+                        Text(HistoryPanel.dayName(picked)).font(.system(size: 15, weight: .bold)).foregroundStyle(RoostInk.primary)
+                    }
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Back to the weeks, from \(HistoryPanel.dayName(picked))")
+            } else {
+                Text(showsWeeks ? "8 weeks" : "Today").font(.system(size: 15, weight: .bold)).foregroundStyle(RoostInk.primary)
+            }
+            Spacer()
+            if history != nil {
+                Picker("Show", selection: $showsWeeks) {
+                    Text("Today").tag(false)
+                    Text("8 weeks").tag(true)
+                }
+                .pickerStyle(.segmented).labelsHidden().fixedSize().controlSize(.small)
+                .onChange(of: showsWeeks) { picked = nil }
+            }
+        }
+    }
+
+    private var today: some View {
         VStack(alignment: .leading, spacing: 18) {
             VStack(alignment: .leading, spacing: 2) {
-                Text("Today").font(.system(size: 15, weight: .bold)).foregroundStyle(RoostInk.primary)
                 Text(worked >= 60 ? RoostNumbers.duration(worked, long: true) : "Quiet so far")
                     .font(.system(size: 30, weight: .bold)).monospacedDigit().foregroundStyle(RoostInk.primary)
                     .padding(.top, 4)
@@ -738,10 +787,6 @@ struct TodayCard: View {
                 .padding(.top, 4)
             }
         }
-        .padding(20)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color.white.opacity(0.05), in: .rect(cornerRadius: 22))
-        .overlay { RoundedRectangle(cornerRadius: 22).strokeBorder(RoostInk.cardEdge, lineWidth: 1) }
     }
 
     /// "of owl work · up to 9 at once"

@@ -512,8 +512,16 @@ more than one repository, a menu there lets you show just one of them.
   you), your plan limits, and time by repository. **Open the full flight
   log** draws a line per repository through the day: working, waiting for
   you, and paused for a plan limit.
+- **8 weeks**, the Today card's other side: the last eight weeks as a
+  calendar of moons, one per day, bigger and brighter the more your owls
+  worked (an empty socket is a day off). Under it are your busiest day, your
+  streak, the repository most of the time went to, and **When your owls
+  fly**, the weeks' work by weekday and hour, with a sentence about the
+  pattern. Click a moon to see that day: its hours, its peak, what shipped,
+  and time by repository.
 
-Today's numbers carry on across restarts of Barn Owl.
+Today's numbers carry on across restarts of Barn Owl, and the daily log keeps
+60 days for the 8-week view and the weekly recap.
 
 **Tree** puts every owlet on one pixel tree, a branch per repository. A
 branch grows leafier the more work it saw today. The owlet that needs you

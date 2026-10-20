@@ -299,6 +299,20 @@ final class DailyLog {
         return days[key] ?? DaySummary(day: key)
     }
 
+    /// The last `weeks` weeks, Monday first, up to and including `date`.
+    func history(weeks: Int = History.weeks, endingOn date: Date) -> History {
+        let monday = Self.monday(of: date, calendar: calendar)
+        let start = calendar.date(byAdding: .day, value: -7 * (weeks - 1), to: monday) ?? monday
+        var keys: [String] = []
+        var day = start
+        while day <= date, keys.count < 7 * weeks {
+            keys.append(dayKey(day))
+            guard let next = calendar.date(byAdding: .day, value: 1, to: day) else { break }
+            day = next
+        }
+        return History(days: keys.map { days[$0] ?? DaySummary(day: $0) }, today: dayKey(date))
+    }
+
     /// The Monday-to-Sunday week that holds `date`.
     func week(endingOn date: Date) -> WeekSummary {
         let monday = Self.monday(of: date, calendar: calendar)
