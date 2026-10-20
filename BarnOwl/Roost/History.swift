@@ -96,10 +96,13 @@ struct History: Equatable {
             if random.next() > (weekend ? 0.45 : 0.08) {
                 let hours = weekend ? 0.6 + random.next() * 2.4 : 1.5 + random.next() * 5
                 day.working = hours * 3600
-                let shape = (0..<24).map { hour -> Double in
-                    weekend ? exp(-pow((Double(hour) - 20.5) / 2.4, 2))
-                        : exp(-pow((Double(hour) - 11) / 2.4, 2)) + exp(-pow((Double(hour) - 15) / 2.2, 2))
-                            + 0.35 * exp(-pow((Double(hour) - 22) / 1.4, 2))
+                let shape: [Double] = (0..<24).map { hour in
+                    let h = Double(hour)
+                    if weekend { return bump(h, at: 20.5, width: 2.4) }
+                    let morning: Double = bump(h, at: 11, width: 2.4)
+                    let afternoon: Double = bump(h, at: 15, width: 2.2)
+                    let night: Double = 0.35 * bump(h, at: 22, width: 1.4)
+                    return morning + afternoon + night
                 }
                 let sum = shape.reduce(0, +)
                 day.hours = shape.map { $0 / sum * day.working }
@@ -112,6 +115,12 @@ struct History: Equatable {
         }
         return History(days: days, today: DailyLog.dayKey(now, calendar: calendar))
     }
+}
+
+/// A bell-shaped bump of work around an hour, for the demo's days.
+private func bump(_ hour: Double, at centre: Double, width: Double) -> Double {
+    let distance: Double = (hour - centre) / width
+    return exp(-(distance * distance))
 }
 
 /// A small repeatable sequence for demo data.
@@ -279,9 +288,11 @@ struct DayMoon: View {
     /// Dim lavender, through lilac, to warm moonlight.
     static func colour(_ t: Double) -> Color {
         let stops: [(Double, Double, Double)] = [(0x5E, 0x59, 0xC8), (0xB5, 0xB1, 0xFF), (0xF6, 0xEA, 0xD6)]
-        let (a, b, u) = t < 0.5 ? (stops[0], stops[1], t / 0.5) : (stops[1], stops[2], (t - 0.5) / 0.5)
-        return Color(red: (a.0 + (b.0 - a.0) * u) / 255, green: (a.1 + (b.1 - a.1) * u) / 255,
-                     blue: (a.2 + (b.2 - a.2) * u) / 255)
+        let low = t < 0.5 ? stops[0] : stops[1]
+        let high = t < 0.5 ? stops[1] : stops[2]
+        let u: Double = t < 0.5 ? t / 0.5 : (t - 0.5) / 0.5
+        func mix(_ from: Double, _ to: Double) -> Double { (from + (to - from) * u) / 255 }
+        return Color(red: mix(low.0, high.0), green: mix(low.1, high.1), blue: mix(low.2, high.2))
     }
 }
 
