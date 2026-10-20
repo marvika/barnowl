@@ -3,7 +3,7 @@
 All notable changes to Barn Owl. Versions follow [semantic versioning](https://semver.org);
 before 1.0, a minor version can change behaviour.
 
-## Unreleased
+## 0.13.0
 
 - **Mistral Vibe gets an owlet.** Vibe 3 sessions show what they're doing,
   from Vibe's own session store: thinking, running a command, editing,
