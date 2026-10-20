@@ -20,7 +20,11 @@ python3 -I -B - <<'PY'
 """Composes docs/images/hero.png (1800 x 1000, shown at 900 px) and
 docs/images/social-preview.png (1280 x 640) from the demo screenshots in
 docs/images, the owlet sprites in Scripts/owlets and the owl the app draws
-(build/hero-owl.png). Run from the repo root."""
+(build/hero-owl.png). Run from the repo root.
+
+The hero: the owl, the name and the tagline on the left; on the right the
+island growing out of the notch and the quick panel under the owl in the menu
+bar; along the bottom, owlets on a bough in the Roost's dusk landscape."""
 import math
 import os
 import random
@@ -64,16 +68,19 @@ def body(img, s):
     return out.crop(out.getbbox())
 
 
-def quick_panel():
+def quick_panel(healthy=False):
     """The quick panel with Keep Awake on, the owlets and the disk: the Rules,
     the toggles and the 'is asking' row are lifted out (the island shows the
-    question). Its background is a flat #14141C, so the joins are invisible."""
+    question). Its background is a flat #14141C, so the joins are invisible.
+    healthy: the disk as the app shows it when it isn't nearly full."""
     parts = (("quick-panel.png", 0, 266),               # Keep Awake, counting down
              ("quick-panel-agents.png", 770, 1044),     # Owlets
              ("quick-panel-agents.png", 1252, None))    # plan limits, disk, footer
     rows = []
     for name, a, b in parts:
         src = body(load(name), 60)  # the opaque box starts at (40, 40)
+        if healthy and b is None:
+            src = healthy_disk(src)
         rows.append(src.crop((0, max(0, a - 40), src.width, src.height if b is None else b - 40)))
     out = layer((rows[0].width, sum(r.height for r in rows)))
     y = 0
@@ -83,23 +90,32 @@ def quick_panel():
     return out
 
 
-def roost_window(cut):
-    """The Roost (tree) at 2/3: its pixels are 3 px on a grid at phase (1, 2), so
-    cropping on that grid and box-filtering keeps every sprite pixel a crisp 2 x 2.
-    The window is cut at `cut` (before its sidebar, which sits under the quick
-    panel) and given back its right edge and top-right corner."""
-    src = load("roost-tree.png")
-    w = body(src, 150)
-    x0, y0 = Image.fromarray(np.array(src)[:, :, 3] > 150).getbbox()[:2]  # where body() cropped
-    sx, sy = (1 - x0) % 3, (2 - y0) % 3
-    w = w.crop((sx, sy, w.width - (w.width - sx) % 3, w.height - (w.height - sy) % 3))
-    w = w.resize((w.width * 2 // 3, w.height * 2 // 3), Image.BOX)
-    edge = w.crop((w.width - 3, 30, w.width, w.height))
-    corner = w.crop((w.width - 30, 0, w.width, 30))
-    w = w.crop((0, 0, cut, w.height))
-    w.paste(edge, (cut - 3, 30))
-    w.paste(corner, (cut - 30, 0))
-    return w
+LAVENDER = (140, 135, 255)
+
+
+def healthy_disk(panel):
+    """The disk card as the app draws a healthy disk (QuickPanelView's DiskGlance):
+    a lavender ring for the used share, "182 GB free" over a secondary "of 494 GB".
+    Coordinates are the 2x screenshot's; body() cropped 40 px off the top left."""
+    img = panel.copy()
+    o = -40
+    d = ImageDraw.Draw(img)
+    d.rectangle((80 + o, 1424 + o, 440 + o, 1490 + o), fill=(31, 31, 38, 255))  # the card
+    S, c, rad, wdt = 4, 128, 96, 32  # at 4x: a 24-pt ring with a 4-pt stroke
+    ring = layer((64 * S, 64 * S))
+    rd = ImageDraw.Draw(ring)
+    box = (c - rad - wdt / 2, c - rad - wdt / 2, c + rad + wdt / 2, c + rad + wdt / 2)
+    rd.ellipse(box, outline=(255, 255, 255, 31), width=wdt)
+    used = 1 - 182 / 494
+    rd.arc(box, -90, -90 + 360 * used, fill=LAVENDER + (255,), width=wdt)
+    for ang in (-90, -90 + 360 * used):  # round caps
+        x, y = c + rad * math.cos(math.radians(ang)), c + rad * math.sin(math.radians(ang))
+        rd.ellipse((x - wdt / 2, y - wdt / 2, x + wdt / 2, y + wdt / 2), fill=LAVENDER + (255,))
+    img.alpha_composite(ring.resize((64, 64), Image.LANCZOS), (80 + o, 1424 + o))
+    d = ImageDraw.Draw(img)
+    d.text((156 + o, 1426 + o), "182 GB free", font=font(26, "Semibold"), fill=(244, 244, 244), anchor="la")
+    d.text((156 + o, 1457 + o), "of 494 GB", font=font(23, "Regular"), fill=(160, 160, 166), anchor="la")
+    return img
 
 
 def island():
@@ -237,25 +253,153 @@ def menu_bar(img, k, notch_x, countdown="2:14", clock=("Tue Oct 20", "20:34")):
     return x0 + total / 2
 
 
-# ------------------------------------------------------------------ hero
+# ------------------------------------------------------------------ hero: the Roost's dusk
+# Colours from RoostScene.swift's dusk palette.
+DUSK = dict(sky=[(0x1D, 0x20, 0x50), (0x36, 0x34, 0x70), (0x66, 0x4E, 0x87), (0xAC, 0x6B, 0x8C), (0xE8, 0xA2, 0x8C)],
+            ridge=(0x5E, 0x4F, 0x86), ridge_rim=(0xC3, 0xA0, 0xC6), hill=(0x3A, 0x2F, 0x58), meadow=(0x33, 0x29, 0x4F),
+            leaves=[(0x1F, 0x2E, 0x46), (0x2C, 0x44, 0x58), (0x48, 0x66, 0x7A)])
+P = 3  # landscape pixels are 3 x 3, like the Roost's sprites
+
+
+def dusk_sky(w, h, top):
+    """The dusk sky as one smooth, dithered gradient, with a few stars up high."""
+    ys = np.linspace(0, 1, h)
+    cols = DUSK["sky"]
+    col = np.stack([np.interp(ys, [0, 0.3, 0.62, 0.86, 1.0], [c[i] for c in cols]) for i in range(3)], 1)
+    a = np.repeat(col[:, None, :], w, axis=1) + np.random.default_rng(3).uniform(-0.6, 0.6, (h, w, 3))
+    img = Image.fromarray(np.clip(a, 0, 255).astype(np.uint8), "RGB").convert("RGBA")
+    rng = random.Random(11)
+    d = ImageDraw.Draw(img, "RGBA")
+    for _ in range(int(80 * w * h / 1.8e6)):
+        x, y, s = rng.uniform(0, w), rng.uniform(top, h * 0.55), rng.uniform(1.2, 3.0)
+        al = int(255 * rng.uniform(0.15, 0.55) * (1 - (y - top) / (h * 0.55 - top) * 0.8))
+        d.ellipse((x - s / 2, y - s / 2, x + s / 2, y + s / 2), fill=(255, 250, 240, al))
+    return img
+
+
+def ridge_line(n, base, amp, seed, phase=0.0):
+    r = random.Random(seed)
+    waves = [(r.uniform(0.7, 1.3) * 2 * math.pi / n * k, r.uniform(0, 6.28), amp / k ** 1.2) for k in (1, 2, 3, 5)]
+    return [int(round(base + sum(a * math.sin(f * x + p + phase) for f, p, a in waves))) for x in range(n)]
+
+
+def landscape(w, h):
+    """Ridge (with a lit rim), hill and meadow as pixel silhouettes, full width.
+    Returns the far layers and the meadow separately, so the bough can root between them."""
+    n, m = -(-w // P), -(-h // P)
+    back, front = Image.new("RGBA", (n, m)), Image.new("RGBA", (n, m))
+    for layer_img, line, col, rim_col in (
+            (back, ridge_line(n, 292, 7, 5), DUSK["ridge"], DUSK["ridge_rim"]),
+            (back, ridge_line(n, 306, 5, 9, 1.3), DUSK["hill"], None),
+            (front, ridge_line(n, 322, 3, 17, 2.1), DUSK["meadow"], None)):
+        px = layer_img.load()
+        for x in range(n):
+            for y in range(max(0, line[x]), m):
+                px[x, y] = col + (255,)
+            if rim_col and 0 <= line[x] < m:
+                px[x, line[x]] = tuple((a + b) // 2 for a, b in zip(col, rim_col)) + (255,)
+    grow = lambda g: g.resize((n * P, m * P), Image.NEAREST).crop((0, 0, w, h))
+    return grow(back), grow(front)
+
+
+def hexrgb(h):
+    return tuple(int(h.lstrip("#")[i:i + 2], 16) for i in (0, 2, 4))
+
+
+def bough(n_len, owls, rise=34, root=46):
+    """A low bough on the landscape's grid: it grows up out of the meadow on the left,
+    runs level, tapers to a leafy tip and is lit from above. Owlets (Scripts/owlets
+    sprites, whole pixels) stand on it, toes curled over the bark.
+    Returns (image, y of the level branch's top, left padding), in px."""
+    pad, base = 8, 32
+    g = Image.new("RGBA", (n_len + 2 * pad, base + rise + 12))
+    px = g.load()
+    bark, dark, lit = (0x5C, 0x43, 0x63), (0x33, 0x24, 0x3C), (0xB8, 0x92, 0xB4)
+
+    def put(x, y, c):
+        if 0 <= x + pad < g.width and 0 <= y < g.height:
+            px[x + pad, y] = c + (255,)
+
+    def y_at(i):
+        if i >= root:
+            return base + int(round(1.2 * math.sin((i - root) / 41.0)))
+        return base + int(round(rise * (1 - i / root) ** 2))
+
+    for i in range(n_len):
+        t = i / n_len
+        th = 6 if t < 0.08 else 5 if t < 0.3 else 4 if t < 0.6 else 3 if t < 0.85 else 2
+        y0 = y_at(i)
+        y1 = max(y0, y_at(i - 1) if i else y0)
+        for y in range(y0, y1 + th):
+            put(i, y, lit if y == y0 else (dark if y == y1 + th - 1 else bark))
+    tx = int(n_len * 0.86)  # a twig near the tip
+    for k in range(7):
+        put(tx + k, y_at(tx) - 1 - k // 2, bark)
+        put(tx + k, y_at(tx) - 2 - k // 2, lit)
+    rng = random.Random(4)
+    for cx, cy, rr in ((n_len - 2, y_at(n_len - 1) - 1, 5), (tx + 8, y_at(tx) - 6, 3)):
+        for dx in range(-rr - 2, rr + 3):
+            for dy in range(-rr, rr + 1):
+                if dx * dx / (rr + 2) ** 2 + dy * dy / rr ** 2 <= 1 and rng.random() > 0.1:
+                    put(cx + dx, cy + dy, DUSK["leaves"][2 if dy < -rr / 3 else (1 if dy < rr / 3 else 0)])
+    frames = {s[0]: s[3] for s in OW.STATES}
+    for state, palname, i in owls:
+        pal = OW.PALS[OW.AGENT_PALS.get(palname, palname)]
+        foot = y_at(i)
+        for (x, y), c in frames[state][0].items():
+            if c != "n" and y < OW.H - 2:  # leave out the sprite's own branch
+                put(i + x - 16, foot - (OW.H - 2) + y, hexrgb(pal[c]))
+        for x in (12, 14, 17, 19):
+            put(i + x - 16, foot, hexrgb(pal["a"]))
+    return g.resize((g.width * P, g.height * P), Image.NEAREST), base * P, pad * P
+
+
+def notch_and_island(img, cx, mb, k):
+    """The island at scale k (0.75 keeps its 4-px owlet a crisp 3 px), hanging from a
+    notch as tall as the menu bar."""
+    isl = scaled(island(), k)
+    xs = np.where(np.array(isl)[2, :, 3] > 128)[0]
+    neck = round(66 * k)
+    ix, iy = int(cx - (xs.min() + xs.max()) / 2), mb - neck
+    ImageDraw.Draw(img).rectangle((ix + xs.min(), 0, ix + xs.max(), iy + 4), fill=(0, 0, 0, 255))
+    shadow(img, isl.crop((0, neck, isl.width, isl.height)), (ix, iy + neck), 0.9)
+    img.alpha_composite(isl, (ix, iy))
+
+
+def brand(img, x, y, owl_h, size):
+    """The owl the app draws, with its soft shadow, over the name, the tagline and the four jobs."""
+    owl = Image.open("build/hero-owl.png").convert("RGBA")
+    owl = scaled(owl.crop(owl.getbbox()), owl_h / owl.crop(owl.getbbox()).height)
+    shadow(img, owl, (x, y), 0.35)
+    img.alpha_composite(owl, (x, y))
+    d = ImageDraw.Draw(img)
+    yb = y + owl_h + round(size * 1.02)
+    d.text((x - round(size * 0.06), yb), "Barn Owl", font=font(size, "Bold"), fill=(255, 255, 255), anchor="ls")
+    yt = yb + round(size * 0.58)
+    d.text((x - 2, yt), "The owl that runs your menu bar.", font=font(size * 0.34, "Medium"),
+           fill=(240, 236, 255), anchor="ls")
+    d.text((x - 2, yt + round(size * 0.5)), "Tidy menu bar · Keep awake · Disk space · Coding agents",
+           font=font(size * 0.235, "Medium"), fill=(222, 220, 255), anchor="ls")
+
+
 def hero():
-    W, H, K = 1800, 1000, 0.8  # UI at 0.8 of Retina; the README shows it at half
-    notch_x = 610               # a 1,490-pt screen, its left third out of frame
-    img = wallpaper(W, H, round(66 * K))
-    owl_x = menu_bar(img.copy(), K, notch_x)
-    # The Roost, lower left: two branches of owlets, the frame cutting below them
-    wx, wy, cut = 56, 562, 1012
-    place(img, rim(roost_window(cut)), (wx, wy))
-    # The quick panel under the owl
-    qp = rim(scaled(quick_panel(), K))
-    qx = int(max(min(owl_x - qp.width / 2, W - 44 - qp.width), wx + cut + 50))
-    menu_bar(img, K, notch_x)
-    place(img, qp, (qx, round(66 * K) + 8))
-    # The island out of the notch, over everything
-    isl = scaled(island(), K)
-    ix, neck = int(notch_x - isl.width / 2), round(66 * K)
-    shadow(img, isl.crop((0, neck, isl.width, isl.height)), (ix, neck), 0.9)
-    img.alpha_composite(isl, (ix, 0))
+    W, H, K, KI = 1800, 1000, 0.8, 0.75  # UI at 0.8 of Retina (the README shows it at half)
+    mb = round(66 * K)
+    img = dusk_sky(W, H, mb)
+    back, front = landscape(W, H)
+    img.alpha_composite(back)
+    b, top, pad = bough(330, [("ask", "golden", 84), ("typing", "golden", 142),
+                              ("command", "ghost", 200), ("nap", "lilac", 258)])
+    img.alpha_composite(b, (40 - pad, 905 - top))
+    img.alpha_composite(front)
+    # The quick panel under the owl in the menu bar, the island beside it
+    owl_x = menu_bar(img.copy(), K, -999)
+    qp = rim(scaled(quick_panel(healthy=True), K))
+    qx = int(min(owl_x - qp.width / 2, W - 44 - qp.width))
+    menu_bar(img, K, -999)
+    place(img, qp, (qx, mb + 8))
+    notch_and_island(img, qx - 56 - scaled(island(), KI).width / 2, mb, KI)
+    brand(img, 110, 120, 290, 140)
     return img.convert("RGB")
 
 

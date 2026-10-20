@@ -1,11 +1,8 @@
 <p align="center">
-  <img src="docs/images/hero.png" alt="Barn Owl on a Mac at dusk: the island at the notch asking a question from a coding agent, the quick panel keeping the Mac awake with owlets and plan limits, and the Roost's pixel tree" width="900">
+  <img src="docs/images/hero.png" alt="Barn Owl, the owl that runs your menu bar: the owl beside the island at the notch asking a question from a coding agent, the quick panel keeping the Mac awake with owlets, plan limits and a healthy disk, and four pixel owlets on a branch at dusk" width="900">
 </p>
 
-<h1 align="center">Barn Owl</h1>
-
 <p align="center">
-  <b>The owl that runs your menu bar.</b><br>
   Tidy icons, a Mac that stays awake, room on your disk, and an eye on your coding agents.<br>
   One friendly owl. Free and open source, for macOS 26 Tahoe and later.
 </p>
