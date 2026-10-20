@@ -3,7 +3,7 @@
 All notable changes to Barn Owl. Versions follow [semantic versioning](https://semver.org);
 before 1.0, a minor version can change behaviour.
 
-## Unreleased
+## 0.14.0
 
 - **Eight weeks in the Roost.** The Now view's Today card has a second side:
   the last eight weeks as a calendar of moons, bigger and brighter the more
