@@ -151,7 +151,9 @@ private struct ExploreResults: View {
     private var rows: [Int32] {
         switch showing {
         case .folder: scan.children(of: focus)
-        case .largest: Array(largest.lazy.filter { kind.matches(scan.nodes[Int($0)].name) }.prefix(100))
+        case .largest: Array(largest.lazy.filter {
+            scan.nodes[Int($0)].kind == .file && kind.matches(scan.nodes[Int($0)].name)
+        }.prefix(100))
         }
     }
 
@@ -217,7 +219,10 @@ private struct ExploreResults: View {
     private var footnote: some View {
         let unreadable = scan.unreadable.count
         return VStack(spacing: 4) {
-            Text("Scanned \(scan.total.files.formatted()) files in \(Int(scan.duration.rounded())) s")
+            // How old the map is: the disk keeps changing after the owl looks.
+            TimelineView(.periodic(from: .now, by: 60)) { _ in
+                Text("Scanned \(scan.total.files.formatted()) files in \(Int(scan.duration.rounded())) s, \(scan.finished.formatted(.relative(presentation: .named)))")
+            }
             if unreadable > 0 {
                 Text("\(unreadable) \(unreadable == 1 ? "folder was" : "folders were") locked\(barn.fullDiskAccess ? "" : ": Full Disk Access shows them")")
             }

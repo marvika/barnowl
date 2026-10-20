@@ -3,6 +3,27 @@
 All notable changes to Barn Owl. Versions follow [semantic versioning](https://semver.org);
 before 1.0, a minor version can change behaviour.
 
+## Unreleased
+
+- **Explore's basket is stricter.** It no longer takes a protected folder
+  itself (~/Library/Containers, Mobile Documents) or a folder that holds one
+  (/opt/homebrew), anything inside an app, Photos library or other package
+  wherever it is, or a Photos library whole.
+- **Clean-ups refuse a rule's folder that has become a link** (say, a cache
+  folder pointing into Documents), and "Empty from Trash" and Undo act only on
+  the very item Barn Owl put in the Trash, not on something that has since
+  taken its name.
+- **The Barn measures more lightly:** a few places at a time at background
+  priority, and the big places only you can judge once a day rather than every
+  time it opens.
+- **Explore** drops what you've trashed from its map and says how old the scan
+  is.
+- **Menu bar:** one app that stops answering can no longer slow down finding
+  icons; auto-rehide waits while a menu from a revealed icon is open; a new
+  group's icon starts where it shows, not behind the notch.
+- **The Roost** shows "needs you" and "stuck" in one colour each, on the
+  tree, the cards and the island.
+
 ## 0.14.0
 
 - **Eight weeks in the Roost.** The Now view's Today card has a second side:

@@ -61,6 +61,8 @@ final class BarnModel {
     /// Bumped on each new measure, so an older one still finishing can't
     /// overwrite what a newer one found.
     @ObservationIgnored private var measureRun = 0
+    /// When the "only you know" places were last measured.
+    @ObservationIgnored private var yoursMeasured: Date?
 
     /// Everything safe, in one click.
     var safeTotal: Int64 {
@@ -95,20 +97,38 @@ final class BarnModel {
         isMeasuring = true
         measureRun += 1
         let run = measureRun
+        // The places only you can judge are never cleaned and hardly change,
+        // yet they're the biggest to measure, so once a day is plenty.
+        let measureYours = yoursMeasured.map { Date().timeIntervalSince($0) > 24 * 3600 } ?? true
+        var found = measureYours ? [] : suggestions.filter { $0.rule.safety == .yourCall }
+        let rules = CleanupRule.all.filter { measureYours || $0.safety != .yourCall }
+        let fullDiskAccess = fullDiskAccess
         measureTask = Task {
-            var found: [Suggestion] = []
-            for rule in CleanupRule.all {
-                if Task.isCancelled || run != measureRun { return }
-                if let suggestion = await Self.measure(rule, fullDiskAccess: fullDiskAccess) {
-                    found.append(suggestion)
-                    // Show them as they come in.
-                    if run == measureRun { suggestions = Self.ordered(found) }
+            // A few at a time, so a big folder doesn't hold up the rest, nor
+            // the whole Mac.
+            await withTaskGroup(of: Suggestion?.self) { group in
+                var waiting = rules[...]
+                for _ in 0..<3 {
+                    guard let rule = waiting.popFirst() else { break }
+                    group.addTask { await Self.measure(rule, fullDiskAccess: fullDiskAccess) }
+                }
+                for await suggestion in group {
+                    if Task.isCancelled || run != measureRun { group.cancelAll(); return }
+                    if let suggestion {
+                        found.append(suggestion)
+                        // Show them as they come in.
+                        suggestions = Self.ordered(found)
+                    }
+                    if let rule = waiting.popFirst() {
+                        group.addTask { await Self.measure(rule, fullDiskAccess: fullDiskAccess) }
+                    }
                 }
             }
-            guard run == measureRun else { return }
+            guard run == measureRun, !Task.isCancelled else { return }
             suggestions = Self.ordered(found)
             isMeasuring = false
             lastMeasured = Date()
+            if measureYours { yoursMeasured = lastMeasured }
             measureTask = nil
         }
     }
@@ -143,7 +163,7 @@ final class BarnModel {
             suggestion.size = suggestion.items.map(\.size).reduce(0, +)
         } else {
             for path in rule.expandedPaths where FileManager.default.fileExists(atPath: path) {
-                if let scan = await DiskScanner().scan(root: path, workers: 4, progress: { _ in }) {
+                if let scan = await DiskScanner(priority: .utility).scan(root: path, workers: 2, progress: { _ in }) {
                     suggestion.size += rule.safety == .yourCall ? scan.total.size : scan.total.reclaimable
                 }
             }
@@ -177,7 +197,7 @@ final class BarnModel {
                 guard CleanupGate.check(path, rule: rule, home: home) == nil else { continue }
                 var size = Int64(values?.totalFileAllocatedSize ?? 0)
                 if values?.isDirectory == true {
-                    size = await DiskScanner().scan(root: path, workers: 2, progress: { _ in })?.total.reclaimable ?? 0
+                    size = await DiskScanner(priority: .utility).scan(root: path, workers: 2, progress: { _ in })?.total.reclaimable ?? 0
                 }
                 guard rule.allows(child, size: size) else { continue }
                 items.append(Item(path: path, name: name, size: size, modified: values?.contentModificationDate))
@@ -201,7 +221,7 @@ final class BarnModel {
                 .replacingOccurrences(of: #"(\d+) (\d+)"#, with: "$1.$2", options: .regularExpression) ?? runtime
             for device in list {
                 guard let udid = device["udid"] as? String else { continue }
-                let size = await DiskScanner().scan(root: root + "/" + udid, workers: 2, progress: { _ in })?.total.reclaimable ?? 0
+                let size = await DiskScanner(priority: .utility).scan(root: root + "/" + udid, workers: 2, progress: { _ in })?.total.reclaimable ?? 0
                 total += size
                 items.append(Item(path: root + "/" + udid, name: "\(device["name"] as? String ?? udid) (\(version))",
                                   size: size, modified: nil))
@@ -437,10 +457,31 @@ final class BarnModel {
                              home + "/Library/Photos", home + "/Library/Safari", home + "/Library/Cookies",
                              home + "/.ssh", home + "/.gnupg", home + "/.config", home + "/.local", home + "/.claude"]
         if nothingInside.contains(where: { shown.hasPrefix($0 + "/") }) { return "where apps or iCloud keep data you'd miss" }
+        // The protected folders themselves, and any folder that holds one (~/Library/Containers,
+        // /opt/homebrew for its Cellar): taking it takes everything in it.
+        if nothingInside.contains(where: { $0 == shown || $0.hasPrefix(shown + "/") }) { return "holds data apps or iCloud keep" }
         if shown.hasPrefix("/Applications/"), (shown as NSString).pathComponents.count > 3 { return "inside an app" }
+        // Inside an app, a Photos library or another package, wherever it is: taking a
+        // piece breaks the whole. A Photos library is never taken whole either.
+        if shown.hasSuffix(".photoslibrary") { return "a Photos library" }
+        if let package = Self.enclosingPackage(of: shown) {
+            return package.hasSuffix(".app") ? "inside an app" : "inside \((package as NSString).lastPathComponent)"
+        }
         // Only in iCloud, or kept in sync by it: removing it removes it everywhere.
         let values = try? URL(fileURLWithPath: shown).resourceValues(forKeys: [.isUbiquitousItemKey])
         if values?.isUbiquitousItem == true { return "kept in iCloud" }
+        return nil
+    }
+
+    /// The nearest folder above `path` that macOS treats as a single item (an app, a
+    /// Photos library, an Xcode archive), if any.
+    nonisolated static func enclosingPackage(of path: String) -> String? {
+        var folder = (path as NSString).deletingLastPathComponent
+        while folder.count > 1 {
+            let values = try? URL(fileURLWithPath: folder).resourceValues(forKeys: [.isPackageKey])
+            if values?.isPackage == true { return folder }
+            folder = (folder as NSString).deletingLastPathComponent
+        }
         return nil
     }
 
@@ -489,7 +530,10 @@ final class BarnModel {
             var resulting: NSURL?
             do {
                 try FileManager.default.trashItem(at: URL(fileURLWithPath: item.path), resultingItemURL: &resulting)
-                if let resulting { trashed.append((URL(fileURLWithPath: item.path), resulting as URL)) }
+                if let resulting {
+                    trashed.append((URL(fileURLWithPath: item.path), resulting as URL))
+                    TrashLedger.note(resulting as URL)
+                }
                 size += item.size
                 CleanupRunner.log("trashed \(item.path) from Explore")
             } catch {
@@ -497,6 +541,10 @@ final class BarnModel {
             }
         }
         basket = []
+        // What's in the Trash leaves the map too, so it can't be picked again.
+        if case .done(let current) = scan {
+            scan = .done(trashed.reduce(current) { $0.removing($1.from.path) })
+        }
         show(Report(title: "Your basket", freed: 0, trashed: trashed, trashedSize: size, problems: problems))
         refreshSpace()
         measureAgain(CleanupRule.trash)

@@ -32,6 +32,21 @@ struct DiskScannerTests {
         scan.nodes.indices.first { scan.path(of: Int32($0)) == scan.root + "/" + path }.map { scan.nodes[$0] }
     }
 
+    @Test func forgetsWhatWentToTheTrash() async throws {
+        let root = try makeTree()
+        defer { cleanUp(root) }
+        let scan = try #require(await DiskScanner().scan(root: root.path, workers: 4) { _ in })
+        let small = try #require(node(scan, "Media/Small"))
+        let after = scan.removing(scan.root + "/Media/Small")
+        #expect(after.total.size == scan.total.size - small.size)
+        #expect(after.total.files == scan.total.files - small.files)
+        #expect(node(after, "Media")?.children.count == (node(scan, "Media")?.children.count ?? 0) - 1)
+        // Nothing inside a removed folder shows among the biggest files.
+        let film = after.removing(after.root + "/Media/movie.mov").removing(after.root + "/Media/same-movie.mov")
+        #expect(film.largestFiles().allSatisfy { film.nodes[Int($0)].kind == .file && film.nodes[Int($0)].size > 0 } )
+        #expect(!film.largestFiles().contains { film.nodes[Int($0)].name.hasSuffix(".mov") })
+    }
+
     @Test func countsSizesFilesAndFolders() async throws {
         let root = try makeTree()
         defer { cleanUp(root) }

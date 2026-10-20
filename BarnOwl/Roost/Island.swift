@@ -432,7 +432,7 @@ struct IslandView: View {
             if let request = lead.session.request {
                 RequestBody(request: request, showsOptions: lead.session.pendingAsk == nil)
             } else if let detail = lead.session.detail {
-                Text(detail).font(.callout).foregroundStyle(lead.kind == .stuck ? Brand.amber : .white.opacity(0.8))
+                Text(detail).font(.callout).foregroundStyle(lead.kind == .stuck ? RoostInk.stuck : .white.opacity(0.8))
                     .fixedSize(horizontal: false, vertical: true)
             }
             if let ask = lead.session.pendingAsk {

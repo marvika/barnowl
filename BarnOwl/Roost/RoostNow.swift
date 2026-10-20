@@ -19,6 +19,9 @@ enum RoostInk {
     static let green = Color(hex: 0x7CE0A0)
     static let coral = Color(hex: 0xFF9A8A)
     static let moon = Color(hex: 0xF6EAD6)
+    /// An owlet's state, the same on the tree, the cards and the island.
+    static let needsYou = amber
+    static let stuck = coral
     static let moonDark = Color(hex: 0x3A3858)
 
     static var background: LinearGradient {
@@ -419,7 +422,7 @@ private struct WorkingRow: View {
                 VStack(alignment: .leading, spacing: 3) {
                     Text(session.name).font(.system(size: 15, weight: .semibold)).foregroundStyle(RoostInk.primary)
                         .lineLimit(1)
-                    Text(meta).font(.callout).foregroundStyle(stuck ? RoostInk.coral : RoostInk.secondary).lineLimit(1)
+                    Text(meta).font(.callout).foregroundStyle(stuck ? RoostInk.stuck : RoostInk.secondary).lineLimit(1)
                 }
                 .padding(.top, 4)
                 Spacer(minLength: 12)
@@ -1032,7 +1035,7 @@ private struct AskedProgress: View {
                 HStack(spacing: 2) {
                     ForEach(0..<min(total, 16), id: \.self) { index in
                         RoundedRectangle(cornerRadius: 2)
-                            .fill(index < back ? RoostInk.green : asked[index - back].state.needsYou ? RoostInk.amber : RoostInk.lavender)
+                            .fill(index < back ? RoostInk.green : asked[index - back].state.needsYou ? RoostInk.needsYou : RoostInk.lavender)
                             .frame(width: total > 10 ? 9 : 14, height: 7)
                     }
                 }
@@ -1042,7 +1045,7 @@ private struct AskedProgress: View {
                 let doing = lead.state == .asking ? "has a question for you" : lead.state.needsYou ? "wants your OK"
                     : "is \(lead.state.label.lowercased())"
                 Text("\(lead.model ?? lead.agent.name) \(doing)")
-                    .font(.caption).foregroundStyle(lead.state.needsYou ? RoostInk.amber : RoostInk.secondary).lineLimit(1)
+                    .font(.caption).foregroundStyle(lead.state.needsYou ? RoostInk.needsYou : RoostInk.secondary).lineLimit(1)
             }
         }
         .accessibilityElement(children: .combine)

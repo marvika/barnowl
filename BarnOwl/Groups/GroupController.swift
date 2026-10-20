@@ -47,8 +47,10 @@ final class GroupController {
     var allStatusItems: [NSStatusItem?] { Array(statusItems.values) }
 
     private func makeItem(for group: MenuBarGroup) -> NSStatusItem {
+        let name = "BarnOwlGroup-\(group.id.uuidString)"
+        StatusItems.seedVisiblePosition(for: name)
         let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
-        item.autosaveName = "BarnOwlGroup-\(group.id.uuidString)"
+        item.autosaveName = name
         item.button?.target = self
         item.button?.action = #selector(clicked(_:))
         item.button?.identifier = NSUserInterfaceItemIdentifier(group.id.uuidString)

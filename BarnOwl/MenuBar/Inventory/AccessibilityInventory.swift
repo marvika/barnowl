@@ -34,9 +34,9 @@ enum AccessibilityInventory {
         // The default timeout is seconds per app; one hung app would stall everything.
         AXUIElementSetMessagingTimeout(app, 0.1)
         guard let bar: AXUIElement = attribute(app, "AXExtrasMenuBar"),
-              let children: [AXUIElement] = attribute(bar, kAXChildrenAttribute) else { return [] }
+              let children: [AXUIElement] = attribute(timed(bar), kAXChildrenAttribute) else { return [] }
         return children.compactMap { child in
-            frame(of: child).map { InventoryItem(bundleIdentifier: bundle, frame: $0) }
+            frame(of: timed(child)).map { InventoryItem(bundleIdentifier: bundle, frame: $0) }
         }
     }
 
@@ -45,9 +45,9 @@ enum AccessibilityInventory {
         let element = AXUIElementCreateApplication(app.pid)
         AXUIElementSetMessagingTimeout(element, 0.1)
         guard let bar: AXUIElement = attribute(element, "AXExtrasMenuBar"),
-              let children: [AXUIElement] = attribute(bar, kAXChildrenAttribute) else { return [] }
+              let children: [AXUIElement] = attribute(timed(bar), kAXChildrenAttribute) else { return [] }
         return children.compactMap { child in
-            guard let frame = frame(of: child) else { return nil }
+            guard let frame = frame(of: timed(child)) else { return nil }
             let title: String? = attribute(child, kAXTitleAttribute)
             let description: String? = attribute(child, kAXDescriptionAttribute)
             let name = [title, description].compactMap { $0 }.first { !$0.isEmpty }
@@ -63,6 +63,13 @@ enum AccessibilityInventory {
         return [kAXTitleAttribute, kAXDescriptionAttribute, kAXHelpAttribute]
             .compactMap { (attribute(element, $0) as String?) }
             .joined(separator: "|")
+    }
+
+    /// The timeout belongs to each element, not to the app: a bar or item
+    /// fetched from a hung app would otherwise wait the default seconds.
+    private nonisolated static func timed(_ element: AXUIElement) -> AXUIElement {
+        AXUIElementSetMessagingTimeout(element, 0.1)
+        return element
     }
 
     /// Accessibility titles sometimes span lines ("OneDrive\nBacked up and synced").
