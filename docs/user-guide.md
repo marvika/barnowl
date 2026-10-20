@@ -410,6 +410,29 @@ General → Features (or **Show coding agents as owlets** in Settings →
 Agents). Off means off: nothing is read or watched, and the owlets, the
 island, the widget and the keep-awake rule all rest.
 
+### Agents that call other agents
+
+An agent can start others to help it: Claude Code running `vibe -p …` or
+`codex exec …` for a second opinion, a review or a piece of work. Barn Owl
+sees which agent started which, and the helpers perch with their caller:
+
+- **On the tree,** a twig grows out of the caller's branch, under its owlet.
+  Each helper is named for its model and what it's doing ("GLM 5.3 ·
+  Searching"), and one label says who asked, how many are working and how
+  many are back. Past five, the rest huddle at the twig's end as a flock.
+  Click the label or the flock to list them all in the inspector.
+- **In the Now view,** the caller's row shows "3 of 10 back" and what the
+  busiest helper is doing.
+- **In the quick panel,** helpers stay off the branch and are counted in the
+  line below it.
+- **When a helper needs you,** its card and the island say who it's working for.
+
+A session counts as waiting for its helpers while any are out, even when its
+agent reports itself idle, so the twig stays put. Once the last helper is
+back, the twig says "all 6 back" for ten minutes. Helpers whose caller is gone,
+or has no room for a twig, perch on their own repository's branch like any
+other owlet.
+
 ### What the owlets are doing
 
 Each agent has its own colour, borrowed from the owl's: Claude Code golden,

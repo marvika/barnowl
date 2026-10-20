@@ -207,6 +207,13 @@ struct AgentSession: Identifiable, Hashable, Sendable {
     var isScripted = false
     /// The session that started it, when another agent did ("claude:<id>").
     var calledBy: String?
+    /// The model it runs, for agents that say: "GLM 5.3", "GPT-6 Astra".
+    var model: String?
+    /// Its caller's name, while the caller is around: "Vibe support".
+    var callerName: String?
+
+    /// Started by another agent to help it: it perches with its caller.
+    var isHelper: Bool { calledBy != nil }
     /// How long the last turn ran, for "finished after 47 min".
     var lastTurn: TimeInterval?
     /// What it's waiting on you for, while it waits.
@@ -290,5 +297,24 @@ enum CommandKind: String, Sendable {
         let builds = ["build", "xcodebuild", "make", "cargo", "tsc", "gradle", "mvn", "swiftc", "compile"]
         if builds.contains(where: { line.contains($0) }) { return .build }
         return .other
+    }
+}
+
+/// Model names as people say them.
+enum ModelName {
+    /// "glm-5.3" → "GLM 5.3", "gpt-6-astra" → "GPT-6 Astra", "mistral-medium-3.5" → "Mistral Medium 3.5",
+    /// "Devstral Medium (25.12)" → "Devstral Medium". Names that already read well keep their words.
+    static func display(_ raw: String) -> String {
+        var name = raw.trimmingCharacters(in: .whitespaces)
+        if let paren = name.range(of: " (") { name = String(name[..<paren.lowerBound]) }
+        guard name == name.lowercased(), !name.contains(" ") else { return name }
+        let words = name.split(separator: "-").map(String.init)
+        guard let first = words.first else { return raw }
+        if first == "gpt", words.count > 1 {
+            return (["GPT-" + words[1]] + words.dropFirst(2).map(\.capitalized)).joined(separator: " ")
+        }
+        return words.map { word in
+            ["glm", "gpt", "llm"].contains(word) ? word.uppercased() : word.first?.isNumber == true ? word : word.capitalized
+        }.joined(separator: " ")
     }
 }

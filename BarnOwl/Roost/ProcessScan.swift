@@ -71,9 +71,39 @@ enum ProcessScan {
         let words = arguments.dropFirst()
         switch agent {
         case .vibe: return words.contains { $0 == "-p" || $0 == "--prompt" || $0 == "--prompt-file" || $0.hasPrefix("--prompt=") }
-        case .codex: return words.first == "exec" || words.first == "e"
+        // Global flags can come first: `codex --search exec …`, `codex -c key=value exec …`.
+        case .codex: return ["exec", "e"].contains(subcommand(words, valueFlags: codexValueFlags))
         default: return false
         }
+    }
+
+    /// Codex's global options that take a value, so their values aren't taken for a subcommand.
+    static let codexValueFlags: Set<String> = ["-c", "--config", "-m", "--model", "-p", "--profile", "-s", "--sandbox",
+                                                "-a", "--ask-for-approval", "-C", "--cd", "-i", "--image", "--add-dir",
+                                                "--enable", "--disable", "--local-provider"]
+
+    /// The first word that isn't an option or an option's value.
+    static func subcommand<Words: Collection<String>>(_ words: Words, valueFlags: Set<String>) -> String? {
+        var skip = false
+        for word in words {
+            if skip { skip = false; continue }
+            if word == "--" { return nil }
+            if word.hasPrefix("-") {
+                skip = valueFlags.contains(word)
+                continue
+            }
+            return word
+        }
+        return nil
+    }
+
+    /// A process's children, for agents that run as a small wrapper around the real program.
+    static func children(of pid: Int32) -> [Int32] {
+        let count = proc_listchildpids(pid, nil, 0)
+        guard count > 0 else { return [] }
+        var pids = [Int32](repeating: 0, count: Int(count) + 8)
+        let filled = pids.withUnsafeMutableBytes { raw in proc_listchildpids(pid, raw.baseAddress, Int32(raw.count)) }
+        return Array(pids.prefix(Int(max(0, filled))))
     }
 
     static func scriptAgent(arguments: [String]) -> AgentKind? {
@@ -134,6 +164,31 @@ enum ProcessScan {
 
     private static func startTime(_ info: proc_bsdinfo) -> Date {
         Date(timeIntervalSince1970: TimeInterval(info.pbi_start_tvsec) + TimeInterval(info.pbi_start_tvusec) / 1_000_000)
+    }
+
+    /// The files a process has open whose paths pass `matching`, through
+    /// libproc's file descriptors (what `lsof` lists). Only your own processes.
+    static func openFiles(of pid: Int32, matching: (String) -> Bool) -> [String] {
+        let size = proc_pidinfo(pid, PROC_PIDLISTFDS, 0, nil, 0)
+        guard size > 0 else { return [] }
+        let count = Int(size) / MemoryLayout<proc_fdinfo>.stride
+        var fds = [proc_fdinfo](repeating: proc_fdinfo(), count: count + 16)
+        let filled = fds.withUnsafeMutableBytes { raw in
+            proc_pidinfo(pid, PROC_PIDLISTFDS, 0, raw.baseAddress, Int32(raw.count))
+        }
+        guard filled > 0 else { return [] }
+        var paths: [String] = []
+        for fd in fds.prefix(Int(filled) / MemoryLayout<proc_fdinfo>.stride)
+        where fd.proc_fdtype == UInt32(PROX_FDTYPE_VNODE) {
+            var info = vnode_fdinfowithpath()
+            let wanted = Int32(MemoryLayout<vnode_fdinfowithpath>.size)
+            guard proc_pidfdinfo(pid, fd.proc_fd, PROC_PIDFDVNODEPATHINFO, &info, wanted) == wanted else { continue }
+            let path = withUnsafeBytes(of: info.pvip.vip_path) { raw in
+                String(decoding: raw.prefix { $0 != 0 }, as: UTF8.self)
+            }
+            if matching(path) { paths.append(path) }
+        }
+        return paths
     }
 
     static func cpuTime(of pid: Int32) -> TimeInterval? {

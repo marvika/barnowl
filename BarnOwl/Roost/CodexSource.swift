@@ -13,6 +13,12 @@ enum CodexSource {
 
     static var sessionsFolder: URL { home.appending(path: "sessions") }
 
+    /// A session log: `…/.codex/sessions/2026/10/20/rollout-<time>-<id>.jsonl`.
+    static func isLog(_ path: String) -> Bool {
+        path.hasPrefix(sessionsFolder.path + "/") && (path as NSString).lastPathComponent.hasPrefix("rollout-")
+            && path.hasSuffix(".jsonl")
+    }
+
     /// Logs written to in the last `within` seconds. A log lives in the folder
     /// of the day its session started, so the last week of folders is checked.
     static func recentLogs(now: Date, within: TimeInterval = 2 * 3600, days: Int = 7) -> [(url: URL, modified: Date)] {
@@ -82,6 +88,8 @@ enum CodexSource {
         var aborted = false
         /// The plan's windows as Codex last reported them.
         var limits: [PlanLimit] = []
+        /// The model of its latest turn: "gpt-6-astra".
+        var model: String?
 
         mutating func consume(_ line: Substring) {
             guard line.utf8.count < 256_000, let data = line.data(using: .utf8),
@@ -93,6 +101,8 @@ enum CodexSource {
             let time = (record["timestamp"] as? String).flatMap(ClaudeSource.LogState.date(from:))
             guard let payload = record["payload"] as? [String: Any] else { return }
             switch (record["type"] as? String, payload["type"] as? String) {
+            case ("turn_context", _):
+                if let model = payload["model"] as? String, !model.isEmpty, model.count < 80 { self.model = model }
             case ("event_msg", "task_started"):
                 busy = true
                 aborted = false

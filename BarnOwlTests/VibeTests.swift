@@ -150,7 +150,7 @@ struct VibeTests {
     @Test func otherRecordsAreIgnored() {
         var log = VibeSource.LogState()
         log.consume(line("command_reserved", #"{"method":"turn/start","params":{"entries":[{"content":[{"text":"Hey!"}]}]}}"#))
-        log.consume(line("action_intent", #"{"action_id":"a","kind":"completion"}"#))
+        log.consume(line("action_intent", #"{"action_id":"a","kind":"tool"}"#))
         log.consume("not json")
         #expect(log == VibeSource.LogState())
     }
@@ -286,13 +286,17 @@ struct VibeTests {
         #expect(!choices.isHidden(session))
     }
 
-    @MainActor @Test func theCalledByLineNamesTheCaller() {
-        let caller = AgentSession(id: "claude:abc", agent: .claude, pid: 30911, name: "Vibe support",
-                                  folder: URL(fileURLWithPath: "/Users/me/code/barnowl"),
-                                  place: ProjectPlace(repository: "barnowl", root: URL(fileURLWithPath: "/Users/me/code/barnowl")),
-                                  started: Date(), state: .running, stateSince: Date())
-        #expect(AgentWatcher.calledByLine("claude:abc", among: [caller]) == "Asked by Claude Code · Vibe support")
-        #expect(AgentWatcher.calledByLine("codex:9", among: [caller]) == "Asked by another agent")
-        #expect(AgentWatcher.calledByLine(nil, among: [caller]) == nil)
+
+    @Test func aLongModelCallSaysHowLong() {
+        var log = VibeSource.LogState()
+        log.consume(envelope("running", turn: "in_progress", started: t0))
+        log.consume(line("action_intent", #"{"action_id":"call-1","kind":"completion"}"#))
+        let now = Date()
+        #expect(log.state(now: now, thinkingSince: now.addingTimeInterval(-30)).detail == nil)
+        #expect(log.state(now: now, thinkingSince: now.addingTimeInterval(-150)).detail == "Thinking · 3 min")
+        log.consume(line("action_result", #"{"action_id":"call-1","result":{}}"#))
+        #expect(log.pendingCompletion == nil)
+        #expect(log.state(now: now, thinkingSince: now.addingTimeInterval(-150)).detail == nil)
     }
 }
+

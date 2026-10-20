@@ -68,6 +68,40 @@ enum VibeSource {
                     model: (config?["active_model"] ?? config?["model_name"]) as? String)
     }
 
+    /// The display names of the models in Vibe's config, by alias:
+    /// `{ alias = "glm-5.3", …, display_name = "GLM 5.3", … }`.
+    static func modelNames(config: URL = home.appending(path: "config.toml")) -> [String: String] {
+        guard let text = try? String(contentsOf: config, encoding: .utf8) else { return [:] }
+        func value(_ key: String, in line: Substring) -> String? {
+            guard let range = line.range(of: #"\b"# + key + #"\s*=\s*"([^"]{1,80})""#, options: .regularExpression)
+            else { return nil }
+            let match = line[range]
+            guard let open = match.firstIndex(of: "\"") else { return nil }
+            return String(match[match.index(after: open)...].dropLast())
+        }
+        // Vibe writes models either as inline tables, one per line, or as `[[models]]`
+        // blocks with a key per line (after it saves the config itself).
+        var names: [String: String] = [:]
+        var alias: String?, display: String?
+        func keep() {
+            if let alias, let display { names[alias] = display }
+            alias = nil
+            display = nil
+        }
+        for line in text.split(separator: "\n") {
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            if trimmed.hasPrefix("[") && !trimmed.hasPrefix("[\"") { keep() }
+            if let found = value("alias", in: line) {
+                if value("display_name", in: line) == nil, trimmed.hasPrefix("{") { keep() }
+                alias = found
+            }
+            if let found = value("display_name", in: line) { display = found }
+            if trimmed.hasPrefix("{") || trimmed.hasSuffix("},") || trimmed.hasSuffix("}") { keep() }
+        }
+        keep()
+        return names
+    }
+
     /// The journal's segments, oldest first: `journal/0000000000000043.jsonl`.
     static func segments(of session: URL) -> [URL] {
         let journal = session.appending(path: "journal")
@@ -95,6 +129,8 @@ enum VibeSource {
         var open: [String: AgentRequest] = [:]
         /// The order they were asked in.
         var openOrder: [String] = []
+        /// The model call it's waiting on, if any: Vibe asked the model and has no answer yet.
+        var pendingCompletion: String?
 
         mutating func consume(_ line: Substring) {
             guard line.utf8.count < 2_000_000, let data = line.data(using: .utf8),
@@ -123,6 +159,10 @@ enum VibeSource {
                     ?? AgentRequest(kind: .other, text: "Waiting for you", since: Self.date(routing["createdAt"]) ?? Date())
                 if open[id] == nil { openOrder.append(id) }
                 open[id] = request
+            case "action_intent":
+                if payload["kind"] as? String == "completion" { pendingCompletion = payload["action_id"] as? String }
+            case "action_result":
+                if let id = payload["action_id"] as? String, id == pendingCompletion { pendingCompletion = nil }
             case "callback_resolved":
                 guard let id = payload["callback_id"] as? String else { return }
                 open[id] = nil
@@ -139,6 +179,7 @@ enum VibeSource {
                 if status != "running", self.status == "running" {
                     // A turn that ended can't still be running a tool or waiting.
                     runningTool = nil
+                    pendingCompletion = nil
                     open = [:]
                     openOrder = []
                 }
@@ -218,7 +259,8 @@ enum VibeSource {
         /// The request it's waiting on you for, the oldest first.
         var request: AgentRequest? { openOrder.first.flatMap { open[$0] } }
 
-        func state(now: Date) -> (state: OwletState, detail: String?) {
+        /// `thinkingSince`: when the model call it's waiting on was first seen, for "Thinking · 3 min".
+        func state(now: Date, thinkingSince: Date? = nil) -> (state: OwletState, detail: String?) {
             if let request {
                 return request.kind == .question ? (.asking, "Has a question for you") : (.needsYou, "Wants your OK")
             }
@@ -227,7 +269,13 @@ enum VibeSource {
                 if failures >= ClaudeSource.LogState.stuckAfter {
                     return (.fixing, "Fixing after \(failures) failed commands")
                 }
-                guard let tool = runningTool else { return (.thinking, nil) }
+                guard let tool = runningTool else {
+                    // A long answer looks like a hang; say how long the model has been at it.
+                    if pendingCompletion != nil, let since = thinkingSince, now.timeIntervalSince(since) >= 90 {
+                        return (.thinking, "Thinking · \(ClaudeSource.duration(now.timeIntervalSince(since)))")
+                    }
+                    return (.thinking, nil)
+                }
                 if Self.isCommand(tool) { return (.running, nil) }
                 if Self.isEdit(tool) { return (.typing, nil) }
                 if Self.isWeb(tool) { return (.browsing, nil) }
@@ -285,13 +333,23 @@ enum VibeSource {
         var offset: UInt64 = 0
         var partial = Data()
         var log = LogState()
+        /// When the model call it's waiting on was first seen. The journal has no times of its own.
+        var thinkingSince: Date?
 
         init(session: String) { self.session = session }
 
         /// Reads what was added since last time. The first time, the last two
         /// segments are read (the newest is empty between turns), at most the
         /// last 256 KB of each.
-        mutating func read(folder: URL) {
+        mutating func read(folder: URL, now: Date = Date()) {
+            let before = log.pendingCompletion
+            defer {
+                if log.pendingCompletion == nil {
+                    thinkingSince = nil
+                } else if log.pendingCompletion != before || thinkingSince == nil {
+                    thinkingSince = now
+                }
+            }
             let segments = VibeSource.segments(of: folder)
             guard !segments.isEmpty else { return }
             let known = segment.flatMap { segments.firstIndex(of: $0) }

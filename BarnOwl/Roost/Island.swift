@@ -487,6 +487,7 @@ struct IslandView: View {
 
     private func subtitle(_ item: IslandController.Item) -> String {
         var parts = [item.session.placeName, item.session.agent.name]
+        if let caller = item.session.callerName { parts[0] = "Asked by \(caller)" }
         if item.kind == .needsYou, let since = item.session.request?.since ?? Optional(item.session.stateSince) {
             parts.append("asked \(Self.ago(since))")
         }

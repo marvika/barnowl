@@ -172,6 +172,47 @@ struct TreePlan: Equatable {
         var id: String { session.id }
     }
 
+    /// A twig grown out of a caller's branch for the agents it asked to help:
+    /// it falls away below the caller's labels, then runs on nearly level.
+    struct Twig: Hashable {
+        /// Where it leaves the branch, and the branch's top there.
+        var x: Int
+        var from: Int
+        /// Its top once level, and its tip.
+        var y: Int
+        var end: Int
+        var seed: Int
+        /// Cells it takes to fall to its level.
+        static let fall = 28
+
+        func top(at column: Int) -> Int {
+            let t = min(1, max(0, Double(column - x) / Double(Self.fall)))
+            let fallen = Double(from) + Double(y - from) * t * t * (3 - 2 * t)
+            let past = Double(max(0, column - (end - 24)))
+            return Int((fallen + past * past / (24 * 24) * 2).rounded())
+        }
+    }
+
+    /// The helpers on one caller's twig: one label for them all, and a flock
+    /// for those past the first few.
+    struct Helpers: Equatable {
+        var caller: String
+        var callerName: String
+        var working: Int
+        /// Out but idle, at their prompt.
+        var idle: Int
+        var back: Int
+        /// Where they work, when it isn't the caller's repository.
+        var place: String?
+        /// The label's top-left, in cells.
+        var labelX: Int
+        var labelY: Int
+        /// The rest, huddled at the twig's end.
+        var flock: [AgentSession]
+        var flockX: Int
+        var flockTop: Int
+    }
+
     /// Owlets that didn't fit on their branch: "+N" at its end.
     struct Overflow: Equatable {
         var repository: String
@@ -199,6 +240,8 @@ struct TreePlan: Equatable {
     var labelBottom: Int
     var branches: [Branch] = []
     var perches: [Perch] = []
+    var twigs: [Twig] = []
+    var helpers: [Helpers] = []
     var overflows: [Overflow] = []
     var hollow = Group()
     var nest = Group()
@@ -236,22 +279,32 @@ struct TreePlan: Equatable {
 
     static func isNapping(_ state: OwletState) -> Bool { state == .napping || state == .resting }
 
-    init(sessions: [AgentSession], cameHome: [AgentSession], size: CGSize, now: Date, unit: CGFloat, trim: Bool) {
+    /// `withTwigs`: the callers that may grow a twig. Left out, every caller out on a branch
+    /// may; callers that turn out to have no room are left out on a second pass, so their
+    /// helpers perch on their own branches instead of going missing.
+    init(sessions: [AgentSession], cameHome: [AgentSession], size: CGSize, now: Date, unit: CGFloat, trim: Bool,
+         withTwigs: Set<String>? = nil) {
         self.unit = unit
         cols = max(150, Int((size.width / unit).rounded(.up)))
         viewRows = max(100, Int((size.height / unit).rounded(.up)))
         labelBottom = 6 + Int((31 / unit).rounded(.up))
         firstPerch = Self.labelX + Int((104 / unit).rounded(.up)) + 20
-        let ordered = sessions.sorted(by: AgentWatcher.order)
+        let everyone = sessions.sorted(by: AgentWatcher.order)
+        // Helpers perch with a caller that's out on a branch; otherwise they're owlets like any other.
+        let callers = withTwigs ?? Set(everyone.filter { Self.isOnBranch($0.state) && !$0.isHelper }.map(\.id))
+        let helping = Dictionary(grouping: everyone.filter { $0.calledBy.map(callers.contains) ?? false },
+                                 by: { $0.calledBy ?? "" })
+        let ordered = everyone.filter { !($0.calledBy.map(callers.contains) ?? false) }
         let active = ordered.filter { Self.isOnBranch($0.state) }
         let nappers = ordered.filter { Self.isNapping($0.state) }
         let finished = ordered.filter { $0.state == .done || $0.state == .shipped }
         hollow = Group(ids: nappers.map(\.id), names: nappers.map(Self.baseName), palettes: nappers.prefix(3).map(\.agent.palette),
                        count: nappers.count)
-        let home = cameHome + finished
+        // Helpers that finished went back to a caller that's out, not to the nest.
+        let home = cameHome.filter { !($0.calledBy.map(callers.contains) ?? false) } + finished
         nest = Group(ids: finished.map(\.id), names: home.map(Self.baseName), palettes: home.suffix(3).map(\.agent.palette),
                      count: home.count)
-        isEmpty = ordered.isEmpty && cameHome.isEmpty
+        isEmpty = everyone.isEmpty && cameHome.isEmpty
         allQuiet = active.isEmpty && !isEmpty
 
         let names = Self.tellApart(active)
@@ -265,6 +318,7 @@ struct TreePlan: Equatable {
 
         // Each placed branch, and the row below its labels.
         var placed: [(branch: Branch, perches: [Perch], overflow: Overflow?, bottom: Int)] = []
+        var grown: [String: (twigs: [Twig], helpers: [Helpers], perches: [Perch])] = [:]
         let labelHalf = Int((70 / unit).rounded(.up))
         let limit = cols - 4
         for repository in repositories {
@@ -322,19 +376,73 @@ struct TreePlan: Equatable {
                                      animated: lively.contains(spec.session.id),
                                      labelWidth: max(70, width)))
             }
+            // Each caller's helpers, on a twig of its own below the caller's labels. Twigs on one
+            // branch stack: the rightmost caller's highest, so no twig falls across another.
+            var bottom = y + labelBottom
+            var twigsHere: [Twig] = [], groupsHere: [Helpers] = [], helperPerches: [Perch] = []
+            let lane = labelBottom + 30 + Int((20 / unit).rounded(.up))
+            let recent = { (caller: String) in
+                cameHome.filter { $0.calledBy == caller && now.timeIntervalSince($0.stateSince) < 10 * 60 }
+            }
+            let withHelpers = specs.prefix(shown).indices.filter { index in
+                let id = specs[index].session.id
+                return callers.contains(id) && (!(helping[id] ?? []).isEmpty || !recent(id).isEmpty)
+            }
+            var stack = 0
+            for index in withHelpers.sorted(by: { xs[$0] > xs[$1] }) {
+                let spec = specs[index]
+                let team = helping[spec.session.id] ?? []
+                let x0 = xs[index] + max(spec.right, 12) + 4
+                let level = y + lane * (stack + 1)
+                let step = Int((116 / unit).rounded(.up))
+                let first = x0 + Twig.fall + 12
+                var room = 0
+                while room < team.count, first + room * step + labelHalf <= limit { room += 1 }
+                // No room at all: no twig; its helpers perch on their own branch instead.
+                guard team.isEmpty ? first + 30 <= limit : room > 0 else { continue }
+                // Up to five sit in a row; past that, four do and the rest huddle as a flock.
+                let perched = team.count <= 5 ? min(team.count, room) : min(4, max(room - 1, 0))
+                let rest = Array(team.dropFirst(perched))
+                let flockX = min(first + max(perched, 0) * step - (perched > 0 ? step / 4 : 0), cols - 46)
+                let tip = min(cols - 8, max(x0 + Twig.fall + 30,
+                                            (rest.isEmpty ? first + max(perched - 1, 0) * step + 22 : flockX + 30) + 8))
+                let twig = Twig(x: x0, from: Self.top(of: branch, at: x0) + 1, y: level, end: tip,
+                                seed: Self.stableHash(spec.session.id) % 997)
+                for (place, helper) in team.prefix(perched).enumerated() {
+                    let hx = first + place * step
+                    helperPerches.append(Perch(session: helper, name: Self.baseName(helper), suffix: nil, x: hx,
+                                               top: twig.top(at: hx), kids: [], flock: 0, flockX: hx,
+                                               animated: lively.contains(helper.id) || place < 2,
+                                               labelWidth: max(70, min(190, CGFloat(step) * unit - 10))))
+                }
+                let places = Set(team.map(\.place.repository))
+                let elsewhere = places.count == 1 && places.first != repository ? places.first : nil
+                let idle = team.filter { Self.isNapping($0.state) }.count
+                groupsHere.append(Helpers(caller: spec.session.id, callerName: Self.baseName(spec.session),
+                                          working: team.count - idle, idle: idle,
+                                          back: cameHome.filter { $0.calledBy == spec.session.id }.count,
+                                          place: elsewhere, labelX: min(first - 14, cols - 8 - Int((150 / unit).rounded())),
+                                          labelY: level - 30 - Int((18 / unit).rounded(.up)),
+                                          flock: rest, flockX: flockX, flockTop: twig.top(at: flockX)))
+                twigsHere.append(twig)
+                bottom = max(bottom, level + labelBottom)
+                stack += 1
+            }
+            grown[repository] = (twigsHere, groupsHere, helperPerches)
+
             var overflow: Overflow?
             if shown < specs.count {
                 let x = min(xs[shown - 1] + last.right + 6, limit - Int((26 / unit).rounded(.up)))
                 overflow = Overflow(repository: repository, x: x, y: Self.top(of: branch, at: min(x, end)),
                                     sessions: specs.dropFirst(shown).map(\.session))
             }
-            placed.append((branch, perches, overflow, y + labelBottom))
+            placed.append((branch, perches, overflow, bottom))
         }
 
         // Repositories with nobody doing anything keep a short bare twig, their names dimmed.
         let live = Set(repositories)
         var quiet: [String] = []
-        for session in ordered + cameHome.reversed() where !live.contains(session.place.repository)
+        for session in ordered + cameHome.filter({ !$0.isHelper }).reversed() where !live.contains(session.place.repository)
             && !quiet.contains(session.place.repository) {
             quiet.append(session.place.repository)
         }
@@ -372,6 +480,11 @@ struct TreePlan: Equatable {
             branches.append(entry.branch)
             perches += entry.perches
             if let overflow = entry.overflow { overflows.append(overflow) }
+            if !entry.branch.bare, let extra = grown[entry.branch.repository] {
+                self.twigs += extra.twigs
+                self.helpers += extra.helpers
+                perches += extra.perches
+            }
         }
         if isEmpty {
             // Nobody out: two waiting branches.
@@ -382,6 +495,14 @@ struct TreePlan: Equatable {
         }
         // Crowded branches end in "+N" rather than shrinking the whole tree; only height steps the grid down.
         fits = needed <= viewRows && hidden.isEmpty
+
+        // A caller that ended up in a branch's "+N", was trimmed, or had no room grew no twig:
+        // lay the tree out again with its helpers on their own branches.
+        let grew = Set(self.helpers.map(\.caller))
+        if withTwigs == nil, !Set(helping.keys).isSubset(of: grew) {
+            self = TreePlan(sessions: sessions, cameHome: cameHome, size: size, now: now, unit: unit, trim: trim,
+                            withTwigs: grew)
+        }
     }
 
     /// The branch's top row at x: it rises out of the trunk and droops at the tip.
@@ -391,6 +512,17 @@ struct TreePlan: Equatable {
         let past = Double(max(0, x - (branch.end - 34)))
         let droop = past * past / (34 * 34) * 5
         return Int((Double(branch.y) + rise + droop).rounded())
+    }
+
+    /// "2 Codex · 1 Vibe, working"
+    static func makeUp(_ helpers: [AgentSession]) -> String {
+        var counts: [(String, Int)] = []
+        for helper in helpers {
+            let name = helper.agent == .vibe ? "Vibe" : helper.agent.name
+            if let index = counts.firstIndex(where: { $0.0 == name }) { counts[index].1 += 1 } else { counts.append((name, 1)) }
+        }
+        let waiting = helpers.contains { $0.state.needsYou }
+        return counts.map { "\($0.1) \($0.0)" }.joined(separator: " · ") + (waiting ? ", one needs you" : ", working")
     }
 
     static func baseName(_ session: AgentSession) -> String {
@@ -435,7 +567,8 @@ struct TreePlan: Equatable {
 
     /// Changes whenever an owlet moves, arrives, leaves or changes pose.
     var motion: [String] {
-        perches.map { "\($0.id)@\($0.x),\($0.top),\($0.session.state.rawValue)" } + ["\(unit)", "\(hollow.count)", "\(nest.count)"]
+        perches.map { "\($0.id)@\($0.x),\($0.top),\($0.session.state.rawValue)" }
+            + helpers.map { "\($0.caller)+\($0.flock.count)" } + ["\(unit)", "\(hollow.count)", "\(nest.count)"]
     }
 }
 
@@ -532,6 +665,7 @@ private struct TreeStage: View, Equatable {
                               y: (CGFloat(perch.top - TreePerch.above) + CGFloat(TreePerch.above + plan.labelBottom + 2) / 2) * u)
                     .transition(transition(for: perch))
             }
+            ForEach(plan.helpers, id: \.caller) { group in helpers(group) }
             ForEach(plan.overflows, id: \.repository) { overflow in more(overflow) }
             if !plan.hidden.isEmpty { hiddenNote }
             if plan.isEmpty {
@@ -642,6 +776,68 @@ private struct TreeStage: View, Equatable {
                 .accessibilityLabel("Nest, \(group.count) home today: \(list(group.names))")
                 .accessibilityAddTraits(picked ? [.isButton, .isSelected] : .isButton)
                 .accessibilityAction { cycle(group.ids) }
+        }
+    }
+
+    /// One label for a caller's helpers ("Asked by Vibe support · 7 working · 3 back"),
+    /// and the ones past the first few, huddled at the twig's end. Either picks the caller,
+    /// whose inspector lists them all.
+    @ViewBuilder
+    private func helpers(_ group: TreePlan.Helpers) -> some View {
+        let picked = selected == group.caller
+        var counts: [String] = []
+        if group.working > 0 { counts.append("\(group.working) working") }
+        if group.idle > 0 { counts.append("\(group.idle) idle") }
+        if group.back > 0 { counts.append(group.working + group.idle == 0 ? "all \(group.back) back" : "\(group.back) back") }
+        if let place = group.place { counts.append("in \(place)") }
+        return Group {
+            HStack(spacing: 5) {
+                Circle().fill(Color(hex: 0xF5B04F)).frame(width: 6, height: 6)
+                (Text("Asked by ") + Text(group.callerName).fontWeight(.semibold) + Text(" · " + counts.joined(separator: " · ")))
+                    .font(.system(size: 10.5, weight: .medium))
+                    .foregroundStyle(.white.opacity(picked ? 1 : 0.9))
+                    .lineLimit(1).truncationMode(.middle)
+            }
+            .padding(.horizontal, 8).padding(.vertical, 3)
+            .background(style.ink.opacity(0.62), in: .capsule)
+            .overlay { Capsule().strokeBorder(.white.opacity(picked ? 0.5 : 0.14), lineWidth: 1) }
+            .fixedSize(horizontal: false, vertical: true)
+            .frame(maxWidth: CGFloat(plan.cols - group.labelX - 4) * u, alignment: .leading)
+            .contentShape(.capsule)
+            .onTapGesture { select(group.caller) }
+            .help("Agents \(group.callerName) asked to help. Click to list them.")
+            .accessibilityElement(children: .combine)
+            .accessibilityAddTraits(.isButton)
+            .accessibilityAction { select(group.caller) }
+            .offset(x: CGFloat(group.labelX) * u, y: CGFloat(group.labelY) * u)
+
+            if !group.flock.isEmpty {
+                let shown = Array(group.flock.prefix(3))
+                ZStack(alignment: .topLeading) {
+                    ForEach(Array(shown.enumerated()), id: \.element.id) { index, helper in
+                        OwletSprite(sprite: helper.state.sprite, palette: helper.agent.palette, scale: u,
+                                    seed: TreePlan.stableHash(helper.id), animated: moves && index == shown.count - 1)
+                            .treeCell(13 * index, index == 1 ? 2 : index == 0 ? 4 : 0, u)
+                    }
+                }
+                .treeCell(group.flockX - 16, group.flockTop - 32, u)
+                .allowsHitTesting(false)
+                TreeHaloText(text: "+\(group.flock.count)", size: 10, weight: .bold, colour: .white, ink: style.ink,
+                             halo: style.halo)
+                    .offset(x: CGFloat(group.flockX + 13 * (shown.count - 1) + 10) * u, y: CGFloat(group.flockTop - 34) * u)
+                VStack(spacing: 1) {
+                    TreeHaloText(text: "\(group.flock.count) more", size: 11, weight: .semibold, ink: style.ink, halo: style.halo)
+                    TreeHaloText(text: TreePlan.makeUp(group.flock), size: 10, weight: .medium, colour: .white.opacity(0.78),
+                                 ink: style.ink, halo: style.halo)
+                }
+                .frame(width: 150)
+                .contentShape(.rect)
+                .onTapGesture { select(group.caller) }
+                .offset(x: CGFloat(group.flockX + 13 * (shown.count - 1) / 2) * u - 75, y: CGFloat(group.flockTop + 6) * u + 1)
+                .accessibilityElement(children: .combine)
+                .accessibilityAddTraits(.isButton)
+                .accessibilityAction { select(group.caller) }
+            }
         }
     }
 
@@ -1235,6 +1431,7 @@ enum TreeScenery {
         var moon: Int
         var contrast: Bool
         var branches: [TreePlan.Branch]
+        var twigs: [TreePlan.Twig]
         /// Who sleeps in the nest, and who's curled up in the hollow.
         var sleepers: [String]
         var nappers: [String]
@@ -1247,6 +1444,7 @@ enum TreeScenery {
             moon = style.light == .night ? style.moon : 0
             contrast = style.contrast
             branches = plan.branches
+            twigs = plan.twigs
             sleepers = plan.nest.palettes
             nappers = plan.hollow.palettes
         }
@@ -1387,6 +1585,7 @@ enum TreePainter {
             let leaves = self.branch(&canvas, p, branch)
             if !branch.bare { sprays.append(leaves) }
         }
+        for twig in key.twigs { sprays.append(self.twig(&canvas, p, twig)) }
         shadeBark(&canvas, p)
         barkDetail(&canvas, p, cx: cx, top: top + 4, ground: ground - 4)
         hollow(&canvas, p, nappers: key.nappers)
@@ -1550,6 +1749,15 @@ enum TreePainter {
         sprays.append(Spray(x: Double(end + 3), y: Double(TreePlan.top(of: branch, at: end) - 1), r: 5 + 6 * branch.leafy,
                             squash: 0.7))
         return sprays
+    }
+
+    /// A helpers' twig: five cells thick where it leaves the branch, three at
+    /// the tip, with a small spray of leaves at the end.
+    private static func twig(_ canvas: inout TreePixels, _ p: TreePalette, _ twig: TreePlan.Twig) -> [Spray] {
+        // Discs along its middle keep it whole down the steep fall as well as along the level.
+        let points = stride(from: twig.x, through: twig.end, by: 2).map { (Double($0), Double(twig.top(at: $0)) + 2) }
+        polyline(&canvas, p, points, 5, 3)
+        return [Spray(x: Double(twig.end + 2), y: Double(twig.top(at: twig.end) - 1), r: 4, squash: 0.7)]
     }
 
     /// A leafy clump, lit from the light's side, with small two-pixel leaf marks.

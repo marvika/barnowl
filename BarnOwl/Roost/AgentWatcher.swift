@@ -270,9 +270,17 @@ final class AgentWatcher {
         let known = Dictionary(all.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
         var sessions: [AgentSession] = []
 
+        // A session that started helpers is waiting on them, though it looks idle:
+        // Claude Code reports itself idle while it waits for a command to finish.
+        let helpersOut = Dictionary(result.agents.compactMap(\.calledBy).map { ($0, 1) }, uniquingKeysWith: +)
+        func waiting(_ id: String, _ found: (state: OwletState, detail: String?)) -> (state: OwletState, detail: String?) {
+            guard let count = helpersOut[id], [.resting, .napping, .done].contains(found.state) else { return found }
+            return (.waitingOnHelpers, count == 1 ? "Waiting for its helper" : "Waiting for \(count) helpers")
+        }
+
         for read in result.claude {
             let id = "claude:\(read.file.sessionId)"
-            var (state, detail) = ClaudeSource.state(file: read.file, log: read.log, helpers: read.helpers, now: now)
+            var (state, detail) = waiting(id, ClaudeSource.state(file: read.file, log: read.log, helpers: read.helpers, now: now))
             var session = known[id] ?? AgentSession(
                 id: id, agent: .claude, pid: read.file.pid, name: "", folder: URL(fileURLWithPath: read.file.cwd),
                 place: read.place, started: read.file.started, state: state, stateSince: now, detail: detail)
@@ -312,12 +320,16 @@ final class AgentWatcher {
         for read in result.agents {
             let id = "\(read.found.agent.rawValue):\(read.found.pid)"
             // Without a log to read, an agent using the CPU counts as working.
-            let (state, detail) = read.codex?.state(now: now) ?? read.vibe?.log.state(now: now)
-                ?? (read.busy ? .thinking : .resting, nil)
+            let (state, detail) = waiting(id, read.codex?.state(now: now)
+                ?? read.vibe.map { $0.log.state(now: now, thinkingSince: $0.thinkingSince) }
+                ?? (read.busy ? .thinking : .resting, nil))
             var session = known[id] ?? AgentSession(
                 id: id, agent: read.found.agent, pid: read.found.pid, name: "", folder: URL(fileURLWithPath: read.found.folder),
                 place: read.place, started: read.found.started, state: state, stateSince: now, detail: detail)
-            session.name = read.vibe?.meta?.title ?? read.place.worktree ?? read.place.repository
+            session.model = read.vibe?.model ?? read.codex?.model.map(ModelName.display)
+            // A helper is named for its model ("GLM 5.3"); its caller is said once, on its twig.
+            session.name = read.calledBy != nil ? (session.model ?? read.found.agent.name)
+                : read.vibe?.meta?.title ?? read.place.worktree ?? read.place.repository
             session.lastTurn = read.codex?.lastTurn ?? read.vibe?.log.lastTurn
             session.isScripted = read.found.scripted
             session.request = state.needsYou ? read.vibe?.log.request : nil
@@ -325,8 +337,14 @@ final class AgentWatcher {
             let host = host(of: read.found.pid)
             session.host = host.name
             session.hostPID = host.pid
-            update(&session, to: state, detail: detail ?? Self.calledByLine(read.calledBy, among: sessions), now: now)
+            update(&session, to: state, detail: detail, now: now)
             sessions.append(session)
+        }
+
+        // Helpers carry their caller's name, for the island and the cards.
+        let names = Dictionary(sessions.map { ($0.id, $0.name) }, uniquingKeysWith: { a, _ in a })
+        for index in sessions.indices {
+            sessions[index].callerName = sessions[index].calledBy.flatMap { names[$0] }
         }
 
         let live = Set(sessions.map(\.id))
@@ -455,13 +473,6 @@ final class AgentWatcher {
             return false
         }
         return true
-    }
-
-    /// "Asked by Claude Code · Vibe support", for an agent another started.
-    static func calledByLine(_ caller: String?, among sessions: [AgentSession]) -> String? {
-        guard let caller else { return nil }
-        guard let session = sessions.first(where: { $0.id == caller }) else { return "Asked by another agent" }
-        return session.name.isEmpty ? "Asked by \(session.agent.name)" : "Asked by \(session.agent.name) · \(session.name)"
     }
 
     nonisolated static func request(for ask: IslandAnswers.Ask) -> AgentRequest {

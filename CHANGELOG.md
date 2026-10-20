@@ -14,10 +14,24 @@ before 1.0, a minor version can change behaviour.
   session. Vibe's owlets are ember.
 - A new Vibe shows up the moment it starts, not at the next look for
   processes.
-- **One agent calling another.** When an agent starts another (Claude Code
-  running `vibe -p …` or `codex exec …` for a second opinion), the helper's
-  owlet says who asked: "Asked by Claude Code · Vibe support". It's shown
-  even though it runs from a script.
+- **Agents that call other agents.** When an agent starts another (Claude
+  Code running `vibe -p …` or `codex exec …` for a second opinion or a piece
+  of work), the helper perches with its caller: on a twig that grows out of
+  the caller's branch, named for its model and what it's doing ("Devstral
+  Medium · Running a command"), under one label that says who asked and how
+  many are working and back. Past five, the rest huddle as a flock with "+N".
+  Picking the caller lists all its helpers in the inspector; the Now view
+  shows "3 of 10 back" on the caller's row; the quick panel counts them in
+  its line; and a helper that needs you says who it's working for. Helpers
+  are shown even though they run from a script. A session that's waiting
+  for its helpers stays on its branch, though its agent reports itself idle,
+  and when the last one is back its twig says "all 6 back" for a while.
+- A Vibe owlet that has waited over a minute and a half for the model's
+  answer says how long ("Thinking · 3 min"), so a long answer doesn't look
+  like a hang.
+- Codex sessions are matched to their own log by the file each one has open,
+  so several Codex runs in one folder, or in worktrees, no longer mix up
+  their logs.
 - Other agents run for a single prompt (`vibe -p …`, `codex exec …`) count as
   scripted, like the Agent SDK's sessions, and are hidden unless you show
   scripted sessions.
