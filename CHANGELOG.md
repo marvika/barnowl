@@ -3,6 +3,14 @@
 All notable changes to Barn Owl. Versions follow [semantic versioning](https://semver.org);
 before 1.0, a minor version can change behaviour.
 
+## Unreleased
+
+- **Eight weeks in the Roost.** The Now view's Today card has a second side:
+  the last eight weeks as a calendar of moons, bigger and brighter the more
+  your owls worked; your busiest day, streak and main repository; and when
+  your owls fly, by weekday and hour. Click a moon to see that day. It's all
+  from the daily log Barn Owl already keeps; nothing new is tracked.
+
 ## 0.13.0
 
 - **Mistral Vibe gets an owlet.** Vibe 3 sessions show what they're doing,

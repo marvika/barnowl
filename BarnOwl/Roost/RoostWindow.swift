@@ -91,6 +91,8 @@ struct RoostView: View {
     /// Today so far; the demo copy shows a made-up day, never the real log.
     private var log: FlightLog { DemoMode.isOn ? .demo(now: Date()) : agents.flightLog }
     private var day: DaySummary? { DemoMode.isOn ? nil : DailyLog.shared.today }
+    /// The last eight weeks; made up in demo mode, so screenshots never show a real log.
+    private var history: History { DemoMode.isOn ? History.demo(now: Date()) : DailyLog.shared.history(endingOn: Date()) }
 
     var body: some View {
         let all = agents.visible
@@ -111,7 +113,7 @@ struct RoostView: View {
                 }
             } else {
                 RoostNowView(model: model, sessions: sessions, cameHome: agents.cameHome, limits: agents.limits,
-                             log: log, day: day, selected: $selected)
+                             log: log, day: day, history: history, selected: $selected)
             }
         }
         .background(RoostInk.background.ignoresSafeArea())
