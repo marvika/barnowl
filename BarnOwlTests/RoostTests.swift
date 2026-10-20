@@ -485,6 +485,19 @@ struct PlanLimitTests {
         #expect(CodexSource.limit(NSNull(), at: time) == nil)
     }
 
+    @Test func limitsNameTheirOwnerAndPlan() {
+        var log = CodexSource.LogState()
+        log.consume(["timestamp": "2026-10-20T10:00:00.000Z", "type": "event_msg",
+                     "payload": ["type": "token_count", "rate_limits": [
+                        "plan_type": "plus", "rate_limit_reached_type": NSNull(),
+                        "primary": ["used_percent": 38, "window_minutes": 300, "resets_at": 1_792_500_000]]]])
+        #expect(log.limits.first?.owner == "Codex Plus")
+        #expect(CodexSource.plan(NSNull()) == nil)
+        #expect(CodexSource.plan("../x") == nil)
+        let claude = PlanLimit(agent: .claude, window: .week, used: 71, updated: Date())
+        #expect(claude.owner == "Claude")
+    }
+
     @Test func relayKeepsOnlyTheLimits() throws {
         let file = FileManager.default.temporaryDirectory.appending(path: "relay-\(UUID().uuidString).json")
         defer { try? FileManager.default.removeItem(at: file) }
@@ -682,7 +695,8 @@ struct RoostSnapshotTests {
         let snapshot = WidgetFeed.snapshot(sessions: sessions, limits: AgentDemo.limits(now: now), worked: 0, now: now)
         #expect(snapshot.owlets.first?.needsYou == true)
         #expect(snapshot.owlets.filter { $0.request != nil }.allSatisfy { $0.needsYou })
-        #expect(snapshot.limits.map(\.title).contains("Week"))
+        // Each limit says whose it is: Claude's plan isn't Vibe's or Codex's.
+        #expect(snapshot.limits.map(\.title).contains("Claude week"))
     }
 }
 

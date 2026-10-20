@@ -15,4 +15,10 @@ enum FileTimes {
     }
 
     static func modified(_ path: String) -> Date? { of(path)?.modified }
+
+    static func size(_ path: String) -> UInt64? {
+        var info = stat()
+        guard stat(path, &info) == 0 else { return nil }
+        return UInt64(info.st_size)
+    }
 }

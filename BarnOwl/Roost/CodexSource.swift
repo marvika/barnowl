@@ -13,6 +13,12 @@ enum CodexSource {
 
     static var sessionsFolder: URL { home.appending(path: "sessions") }
 
+    /// A session log: `…/.codex/sessions/2026/10/20/rollout-<time>-<id>.jsonl`.
+    static func isLog(_ path: String) -> Bool {
+        path.hasPrefix(sessionsFolder.path + "/") && (path as NSString).lastPathComponent.hasPrefix("rollout-")
+            && path.hasSuffix(".jsonl")
+    }
+
     /// Logs written to in the last `within` seconds. A log lives in the folder
     /// of the day its session started, so the last week of folders is checked.
     static func recentLogs(now: Date, within: TimeInterval = 2 * 3600, days: Int = 7) -> [(url: URL, modified: Date)] {
@@ -62,6 +68,13 @@ enum CodexSource {
                          updated: time)
     }
 
+    /// The plan Codex names beside its limits: "plus" is "Plus".
+    static func plan(_ value: Any?) -> String? {
+        guard let type = value as? String, !type.isEmpty, type.count <= 24,
+              type.allSatisfy({ $0.isLetter || $0.isNumber || $0 == "_" || $0 == "-" }) else { return nil }
+        return type.replacingOccurrences(of: "_", with: " ").capitalized
+    }
+
     struct LogState: Equatable, Sendable {
         var busy = false
         var lastTool: String?
@@ -75,6 +88,8 @@ enum CodexSource {
         var aborted = false
         /// The plan's windows as Codex last reported them.
         var limits: [PlanLimit] = []
+        /// The model of its latest turn: "gpt-6-astra".
+        var model: String?
 
         mutating func consume(_ line: Substring) {
             guard line.utf8.count < 256_000, let data = line.data(using: .utf8),
@@ -86,6 +101,8 @@ enum CodexSource {
             let time = (record["timestamp"] as? String).flatMap(ClaudeSource.LogState.date(from:))
             guard let payload = record["payload"] as? [String: Any] else { return }
             switch (record["type"] as? String, payload["type"] as? String) {
+            case ("turn_context", _):
+                if let model = payload["model"] as? String, !model.isEmpty, model.count < 80 { self.model = model }
             case ("event_msg", "task_started"):
                 busy = true
                 aborted = false
@@ -107,7 +124,9 @@ enum CodexSource {
                 rateLimited = !(limits?["rate_limit_reached_type"] is NSNull) && limits?["rate_limit_reached_type"] != nil
                 if rateLimited { rateLimitedAt = time ?? Date() }
                 if let limits, let time {
+                    let plan = CodexSource.plan(limits["plan_type"])
                     let windows = ["primary", "secondary"].compactMap { CodexSource.limit(limits[$0], at: time) }
+                        .map { limit in var limit = limit; limit.plan = plan; return limit }
                     if !windows.isEmpty { self.limits = windows }
                 }
             case ("event_msg", "item_completed"):

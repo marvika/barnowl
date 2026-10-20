@@ -30,7 +30,7 @@ struct AgentsPane: View {
             Section {
                 Toggle(isOn: $enabled) {
                     BadgeLabel(title: "Show coding agents as owlets",
-                               subtitle: "Claude Code, Codex, Copilot CLI, OpenCode and other agents, in the quick panel.",
+                               subtitle: "Claude Code, Codex, Mistral Vibe, Copilot CLI, OpenCode and other agents, in the quick panel.",
                                symbol: "bird.fill", color: .orange)
                 }
                 Toggle(isOn: $menuBar) {
@@ -308,6 +308,7 @@ struct AgentsPane: View {
                 .copilot: exists(".copilot"),
                 .opencode: exists(".local/share/opencode") || exists(".config/opencode"),
                 .gemini: exists(".gemini"),
+                .vibe: FileManager.default.fileExists(atPath: VibeSource.home.path),
             ]
             return (installed, StatusLineRelay.isOn(), IslandAnswers.isOn())
         }.value
@@ -318,7 +319,7 @@ struct AgentsPane: View {
     }
 
     private func refreshDetected() {
-        detected = [AgentKind.claude, .codex, .copilot, .opencode, .gemini].map { kind in
+        detected = [AgentKind.claude, .codex, .vibe, .copilot, .opencode, .gemini].map { kind in
             let running = agents.all.filter { $0.agent == kind }.count
             let status = running > 0 ? "\(running) running" : (installed[kind] == true ? "Found" : "Not found")
             return Detected(kind: kind, status: status)

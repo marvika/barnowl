@@ -387,7 +387,7 @@ only tell you; nothing is cleaned without you.
 ## Coding agents
 
 Barn Owl shows the coding agents running on your Mac as pixel **owlets**:
-Claude Code, Codex, Copilot CLI, OpenCode, Gemini CLI, and Cursor's agent,
+Claude Code, Codex, Mistral Vibe, Copilot CLI, OpenCode, Gemini CLI, and Cursor's agent,
 Droid, Goose, Crush, Aider and Amp. Each owlet shows what its agent is doing,
 and Barn Owl tells you when one needs you. Their home is the **Roost**.
 
@@ -402,6 +402,7 @@ How much Barn Owl can tell depends on the agent:
 |---|---|
 | Claude Code, in a terminal, the Claude app's Code tab or the Agent SDK | Everything below: what it's doing, its helpers, when it needs you and what it asks, failed commands, pull requests, plan limits |
 | Codex | Working, running commands, editing, stuck, paused for the plan limit, done; and its plan limits |
+| Mistral Vibe | Working, running commands, editing, searching, on the web, waiting for its helpers, stuck, paused for a rate limit, done; when it needs you and what it asks |
 | The others | Working or resting, from whether it's using the processor |
 
 To turn the whole feature off, switch off **Coding agents** in Settings →
@@ -409,10 +410,34 @@ General → Features (or **Show coding agents as owlets** in Settings →
 Agents). Off means off: nothing is read or watched, and the owlets, the
 island, the widget and the keep-awake rule all rest.
 
+### Agents that call other agents
+
+An agent can start others to help it: Claude Code running `vibe -p …` or
+`codex exec …` for a second opinion, a review or a piece of work. Barn Owl
+sees which agent started which, and the helpers perch with their caller:
+
+- **On the tree,** a twig grows out of the caller's branch, under its owlet.
+  Each helper is named for its model and what it's doing ("GLM 5.3 ·
+  Searching"), and one label says who asked, how many are working and how
+  many are back. Past five, the rest huddle at the twig's end as a flock.
+  Click the label or the flock to list them all in the inspector.
+- **In the Now view,** the caller's row shows "3 of 10 back" and what the
+  busiest helper is doing.
+- **In the quick panel,** helpers stay off the branch and are counted in the
+  line below it.
+- **When a helper needs you,** its card and the island say who it's working for.
+
+A session counts as waiting for its helpers while any are out, even when its
+agent reports itself idle, so the twig stays put. Once the last helper is
+back, the twig says "all 6 back" for ten minutes. Helpers whose caller is gone,
+or has no room for a twig, perch on their own repository's branch like any
+other owlet.
+
 ### What the owlets are doing
 
 Each agent has its own colour, borrowed from the owl's: Claude Code golden,
-Codex and Gemini CLI ghost white, Copilot CLI lilac, OpenCode ember.
+Codex and Gemini CLI ghost white, Copilot CLI lilac, OpenCode and Mistral
+Vibe ember.
 
 | Owlet | Means |
 |---|---|
@@ -638,7 +663,11 @@ its notifications.
 
 Under the owlets, in the Roost and on the widget, Claude's and Codex's
 5-hour and weekly windows show as moons that wax as you use them and are new
-again when the window resets: "38% · resets 19:30". When a window is filling
+again when the window resets: "38% · resets 19:30". Each says whose plan it
+is ("Claude · 5 hours", "Codex Plus · week"): a limit belongs to that
+agent's plan only, not to the other agents' owlets. Codex names its plan;
+Claude's history doesn't, so it says just "Claude". Mistral Vibe saves no
+limits, so it has no moons. When a window is filling
 fast, the Roost says when it would run out at the recent pace. A reading
 over half an hour old is faded and dashed, and says when it's from: "43% ·
 as of 16:44".
@@ -764,10 +793,12 @@ in the quick panel shows hidden owlets, and scripted sessions and scratch
 folders are hidden by default. Agents other than Claude Code are found by
 their process every 15 seconds, or every minute when none have run for a
 while, so a new one can take a moment. An agent started through a wrapper
-with another name isn't recognised. If you've moved Claude Code's or Codex's
-folder with `CLAUDE_CONFIG_DIR` or `CODEX_HOME` in your shell, Barn Owl,
-which doesn't start from your shell, still looks in `~/.claude` and
-`~/.codex`.
+with another name isn't recognised. If you've moved Claude Code's, Codex's
+or Vibe's folder with `CLAUDE_CONFIG_DIR`, `CODEX_HOME` or `VIBE_HOME` in
+your shell, Barn Owl, which doesn't start from your shell, still looks in
+`~/.claude`, `~/.codex` and `~/.vibe`. Vibe's owlet shows what it's doing
+only while Vibe saves its sessions in the usual place, so not with
+`[session_logging]` turned off or moved with `save_dir`.
 
 **Show doesn't pick the right tab.** Barn Owl can choose the tab in
 Terminal and iTerm only; other apps just come to the front. Check that Barn

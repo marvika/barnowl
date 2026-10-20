@@ -186,8 +186,19 @@ no process scans.
   `codex` is matched to the newest log for its folder written since it
   started. Only event types, tool names, exit codes, timing and the
   `rate_limits` it reports are used.
-- `CLAUDE_CONFIG_DIR` and `CODEX_HOME` are respected when they're set in
-  Barn Owl's own environment.
+- **Mistral Vibe** 3 keeps each session in
+  `~/.vibe/logs/session/unified/<id>/`. A running Vibe holds a lease on its
+  session in `active/<id>.lock.json`, naming the app server that `vibe-rs`
+  starts as its child, so each `vibe-rs` is matched to the lease whose
+  process is its child (or itself, when an editor hosts Vibe through
+  `vibe-acp`). The lease is read on every look, since `/clear` starts a new
+  session in the same process. Barn Owl follows the session's journal
+  (`journal/<sequence>.jsonl`), which Vibe appends to during a turn and
+  starts afresh after it, and uses only the session's state, its tools'
+  names and outcomes, open approvals and questions, and the turn's timing;
+  the title comes from `meta.json`.
+- `CLAUDE_CONFIG_DIR`, `CODEX_HOME` and `VIBE_HOME` are respected when
+  they're set in Barn Owl's own environment.
 
 Prompts, replies, command output, logins, tokens, cookies and environment
 variables are never read or kept.
@@ -214,8 +225,11 @@ Activity Monitor uses, for your own processes only and with no permission:
 `proc_listallpids`, then `proc_pidinfo` with `PROC_PIDTBSDINFO` (name, owner,
 parent, start time, terminal), `PROC_PIDVNODEPATHINFO` (working folder) and
 `PROC_PIDTASKINFO` (CPU time). Native agents are known by name (`codex`,
-`opencode`, `copilot`, `gemini`, `cursor-agent`, `droid`, `goose`, `crush`,
-`aider`, `amp`). For `node`, `bun` and `python`, the first few arguments say
+`vibe-rs`, `opencode`, `copilot`, `gemini`, `cursor-agent`, `droid`, `goose`,
+`crush`, `aider`, `amp`). A run for one prompt (`vibe -p …`, `codex exec …`)
+counts as scripted, unless another agent started it: each agent's parent
+processes are looked up once, and the nearest that's a Claude Code session or
+another agent is its caller. For `node`, `bun` and `python`, the first few arguments say
 which script runs; they're read with `sysctl(KERN_PROCARGS2)`, and the
 environment that follows them never is. Editors' background servers
 (`app-server`, `mcp-server`…) are skipped, and only the outermost process of

@@ -29,6 +29,8 @@ final class AgentWatcher {
 
     @ObservationIgnored private let reader = AgentReader()
     @ObservationIgnored private var folderSource: DispatchSourceFileSystemObject?
+    /// Vibe's leases, which appear the moment a Vibe starts.
+    @ObservationIgnored private var vibeSource: DispatchSourceFileSystemObject?
     /// Answering from the island: on while its hooks are in Claude Code's settings.
     private(set) var answering = false
     @ObservationIgnored private var answersSource: DispatchSourceFileSystemObject?
@@ -96,6 +98,7 @@ final class AgentWatcher {
         }
         previous = nil
         watchSessionsFolder()
+        watchVibeLeases()
         Task { [weak self] in
             let on = await Task.detached { IslandAnswers.isOn() }.value
             self?.setAnswering(on)
@@ -121,6 +124,8 @@ final class AgentWatcher {
         pending = nil
         folderSource?.cancel()
         folderSource = nil
+        vibeSource?.cancel()
+        vibeSource = nil
         exitSources.values.forEach { $0.cancel() }
         exitSources.removeAll()
         candidates.removeAll()
@@ -196,8 +201,18 @@ final class AgentWatcher {
     /// be replaced; then it's watched again on a later read.
     private func watchSessionsFolder() {
         guard folderSource == nil else { return }
-        let descriptor = open(ClaudeSource.sessionsFolder.path, O_EVTONLY)
-        guard descriptor >= 0 else { return }
+        folderSource = watch(ClaudeSource.sessionsFolder) { [weak self] in self?.folderSource = nil }
+    }
+
+    /// Hears when a Vibe starts or ends, rather than at the next process scan.
+    private func watchVibeLeases() {
+        guard vibeSource == nil else { return }
+        vibeSource = watch(VibeSource.leasesFolder) { [weak self] in self?.vibeSource = nil }
+    }
+
+    private func watch(_ folder: URL, gone: @escaping @MainActor () -> Void) -> DispatchSourceFileSystemObject? {
+        let descriptor = open(folder.path, O_EVTONLY)
+        guard descriptor >= 0 else { return nil }
         let source = DispatchSource.makeFileSystemObjectSource(fileDescriptor: descriptor, eventMask: [.write, .rename, .delete],
                                                                queue: .main)
         source.setEventHandler { [weak self, weak source] in
@@ -205,14 +220,14 @@ final class AgentWatcher {
                 guard let self, let source else { return }
                 if !source.data.isDisjoint(with: [.rename, .delete]) {
                     source.cancel()
-                    self.folderSource = nil
+                    gone()
                 }
                 self.scheduleRefresh()
             }
         }
         source.setCancelHandler { close(descriptor) }
         source.resume()
-        folderSource = source
+        return source
     }
 
     /// Hears straight away when a session's process ends.
@@ -251,12 +266,21 @@ final class AgentWatcher {
         let result = await reader.read(now: now, answers: answering)
         guard tickTask != nil else { return } // turned off meanwhile
         if result.sessionsFolderExists { watchSessionsFolder() }
+        if result.vibeLeasesExist { watchVibeLeases() }
         let known = Dictionary(all.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
         var sessions: [AgentSession] = []
 
+        // A session that started helpers is waiting on them, though it looks idle:
+        // Claude Code reports itself idle while it waits for a command to finish.
+        let helpersOut = Dictionary(result.agents.compactMap(\.calledBy).map { ($0, 1) }, uniquingKeysWith: +)
+        func waiting(_ id: String, _ found: (state: OwletState, detail: String?)) -> (state: OwletState, detail: String?) {
+            guard let count = helpersOut[id], [.resting, .napping, .done].contains(found.state) else { return found }
+            return (.waitingOnHelpers, count == 1 ? "Waiting for its helper" : "Waiting for \(count) helpers")
+        }
+
         for read in result.claude {
             let id = "claude:\(read.file.sessionId)"
-            var (state, detail) = ClaudeSource.state(file: read.file, log: read.log, helpers: read.helpers, now: now)
+            var (state, detail) = waiting(id, ClaudeSource.state(file: read.file, log: read.log, helpers: read.helpers, now: now))
             var session = known[id] ?? AgentSession(
                 id: id, agent: .claude, pid: read.file.pid, name: "", folder: URL(fileURLWithPath: read.file.cwd),
                 place: read.place, started: read.file.started, state: state, stateSince: now, detail: detail)
@@ -296,17 +320,31 @@ final class AgentWatcher {
         for read in result.agents {
             let id = "\(read.found.agent.rawValue):\(read.found.pid)"
             // Without a log to read, an agent using the CPU counts as working.
-            let (state, detail) = read.codex?.state(now: now) ?? (read.busy ? .thinking : .resting, nil)
+            let (state, detail) = waiting(id, read.codex?.state(now: now)
+                ?? read.vibe.map { $0.log.state(now: now, thinkingSince: $0.thinkingSince) }
+                ?? (read.busy ? .thinking : .resting, nil))
             var session = known[id] ?? AgentSession(
                 id: id, agent: read.found.agent, pid: read.found.pid, name: "", folder: URL(fileURLWithPath: read.found.folder),
                 place: read.place, started: read.found.started, state: state, stateSince: now, detail: detail)
-            session.name = read.place.worktree ?? read.place.repository
-            session.lastTurn = read.codex?.lastTurn
+            session.model = read.vibe?.model ?? read.codex?.model.map(ModelName.display)
+            // A helper is named for its model ("GLM 5.3"); its caller is said once, on its twig.
+            session.name = read.calledBy != nil ? (session.model ?? read.found.agent.name)
+                : read.vibe?.meta?.title ?? read.place.worktree ?? read.place.repository
+            session.lastTurn = read.codex?.lastTurn ?? read.vibe?.log.lastTurn
+            session.isScripted = read.found.scripted
+            session.request = state.needsYou ? read.vibe?.log.request : nil
+            session.calledBy = read.calledBy
             let host = host(of: read.found.pid)
             session.host = host.name
             session.hostPID = host.pid
             update(&session, to: state, detail: detail, now: now)
             sessions.append(session)
+        }
+
+        // Helpers carry their caller's name, for the island and the cards.
+        let names = Dictionary(sessions.map { ($0.id, $0.name) }, uniquingKeysWith: { a, _ in a })
+        for index in sessions.indices {
+            sessions[index].callerName = sessions[index].calledBy.flatMap { names[$0] }
         }
 
         let live = Set(sessions.map(\.id))
@@ -359,7 +397,7 @@ final class AgentWatcher {
         guard Preferences.agentsLimitAlerts else { return }
         for limit in fresh {
             guard let before = lastUsed[limit.id] else { continue }
-            let owner = limit.agent == .claude ? "Claude" : limit.agent.name
+            let owner = limit.owner
             let name = "\(owner)'s \(limit.window == .session ? "5-hour" : "weekly") limit"
             if before < 80, limit.used >= 80, alerted[limit.id] == nil {
                 alerted[limit.id] = Date()

@@ -92,8 +92,7 @@ final class WidgetFeed {
                 active: !isAway(session.state))
         }
         let plan = limits.prefix(4).map { limit in
-            RoostSnapshot.Limit(id: limit.id, title: (limit.agent == .claude ? "" : limit.agent.name + " ")
-                                    + (limit.window == .session ? "5-hour" : "Week"),
+            RoostSnapshot.Limit(id: limit.id, title: "\(limit.owner) " + (limit.window == .session ? "5-hour" : "week"),
                                 used: limit.used, updated: limit.updated, resetsAt: limit.resetsAt, high: limit.isHigh)
         }
         let ordered = sessions.sorted(by: AgentWatcher.order)

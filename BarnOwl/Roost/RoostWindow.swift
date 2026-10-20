@@ -104,7 +104,8 @@ struct RoostView: View {
                     RoostTreeView(model: model, sessions: sessions, cameHome: agents.cameHome, sky: sky, selected: $selected)
                         .frame(minWidth: 420)
                     RoostInspector(session: sessions.first { $0.id == selected }, sessions: sessions, limits: agents.limits,
-                                   log: log, cameHome: agents.cameHome.count, day: day)
+                                   log: log, cameHome: agents.cameHome.count, returned: agents.cameHome.filter(\.isHelper),
+                                   day: day)
                         .frame(width: 290)
                         .background(RoostInk.bottom)
                 }
@@ -192,6 +193,8 @@ struct RoostInspector: View {
     let limits: [PlanLimit]
     let log: FlightLog
     let cameHome: Int
+    /// Helpers that finished, to list with the session that asked them.
+    var returned: [AgentSession] = []
     var day: DaySummary?
     var scrolls = true
 
@@ -260,6 +263,10 @@ struct RoostInspector: View {
         }
         Grid(alignment: .leadingFirstTextBaseline, horizontalSpacing: 12, verticalSpacing: 7) {
             if let host = session.host { fact("Where", host) }
+            if let caller = session.calledBy {
+                fact("Asked by", sessions.first { $0.id == caller }.map { "\($0.name) (\($0.agent.name))" } ?? "Another agent")
+            }
+            if let model = session.model { fact("Model", model) }
             fact("Folder", (session.folder.path as NSString).abbreviatingWithTildeInPath)
             if let branch = session.branch { fact("Branch", branch) }
             fact("Started", "\(session.started.formatted(date: .omitted, time: .shortened)) · \(RoostNumbers.duration(Date().timeIntervalSince(session.started), long: true))")
@@ -267,9 +274,13 @@ struct RoostInspector: View {
             if let summary = session.evidence?.summary { fact("Last turn", summary) }
         }
         .font(.callout)
+        let asked = sessions.filter { $0.calledBy == session.id }
+        let back = returned.filter { $0.calledBy == session.id }
+        if !asked.isEmpty || !back.isEmpty { AskedAgents(working: asked, back: back) }
         if !session.helpers.isEmpty {
             VStack(alignment: .leading, spacing: 8) {
-                Text("Helpers").font(.system(size: 13, weight: .bold)).foregroundStyle(RoostInk.primary)
+                Text(asked.isEmpty && back.isEmpty ? "Helpers" : "Its own subagents")
+                    .font(.system(size: 13, weight: .bold)).foregroundStyle(RoostInk.primary)
                 ForEach(session.helpersByActivity.prefix(12)) { helper in
                     HStack(alignment: .top, spacing: 8) {
                         OwletIcon(icon: helper.state.icon, palette: session.agent.palette, scale: 1, animated: false)
@@ -541,5 +552,63 @@ struct FlightLogView: View {
                 }
             }
         }
+    }
+}
+
+/// The agents a session asked to help: how many are working and back, and
+/// a row for each, working ones first.
+private struct AskedAgents: View {
+    let working: [AgentSession]
+    let back: [AgentSession]
+
+    var body: some View {
+        let total = working.count + back.count
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .firstTextBaseline) {
+                Text(total == 1 ? "1 helper" : "\(total) helpers").font(.system(size: 13, weight: .bold))
+                    .foregroundStyle(RoostInk.primary)
+                Spacer()
+                let busy = working.filter { $0.state.isWorking || $0.state.needsYou }.count
+                if busy > 0 { pill("\(busy) working", RoostInk.lavender) }
+                if working.count > busy { pill("\(working.count - busy) idle", RoostInk.secondary) }
+                if !back.isEmpty { pill("\(back.count) back", RoostInk.green) }
+            }
+            GeometryReader { proxy in
+                Capsule().fill(.white.opacity(0.08))
+                    .overlay(alignment: .leading) {
+                        Capsule().fill(RoostInk.green)
+                            .frame(width: max(back.isEmpty ? 0 : 4, proxy.size.width * Double(back.count) / Double(max(total, 1))))
+                    }
+            }
+            .frame(height: 4)
+            .accessibilityLabel("\(back.count) of \(total) back")
+            ForEach(working.sorted(by: AgentWatcher.order)) { helper in row(helper, back: false) }
+            ForEach(back.sorted { $0.stateSince > $1.stateSince }) { helper in row(helper, back: true) }
+        }
+    }
+
+    private func pill(_ text: String, _ colour: Color) -> some View {
+        Text(text).font(.caption.weight(.medium)).foregroundStyle(colour)
+            .padding(.horizontal, 7).padding(.vertical, 2)
+            .background(colour.opacity(0.16), in: .capsule)
+    }
+
+    private func row(_ helper: AgentSession, back: Bool) -> some View {
+        HStack(alignment: .center, spacing: 8) {
+            OwletIcon(icon: back ? "done" : helper.state.icon, palette: helper.agent.palette, scale: 1, animated: false)
+                .opacity(back ? 0.6 : 1)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(helper.model ?? helper.agent.name).font(.callout.weight(.medium)).foregroundStyle(RoostInk.primary)
+                    .lineLimit(1)
+                Text(back ? "\(helper.agent.name) · back" : "\(helper.agent.name) · \(helper.detail ?? helper.state.label)")
+                    .font(.caption).foregroundStyle(helper.state.needsYou && !back ? RoostInk.amber : RoostInk.secondary)
+                    .lineLimit(1)
+            }
+            Spacer(minLength: 4)
+            Text(RoostNumbers.duration((back ? helper.stateSince : Date()).timeIntervalSince(helper.started)))
+                .font(.caption.monospacedDigit()).foregroundStyle(RoostInk.secondary)
+        }
+        .opacity(back ? 0.75 : 1)
+        .accessibilityElement(children: .combine)
     }
 }

@@ -457,8 +457,8 @@ extension RoostSnapshot {
             Owlet(id: "d", name: "Sync engine", place: "site", palette: "golden", sprite: "think", icon: "typing",
                   label: "Thinking", needsYou: false, working: true, since: now.addingTimeInterval(-600)),
         ], limits: [
-            Limit(id: "s", title: "5-hour", used: 38, updated: now, resetsAt: nil, high: false),
-            Limit(id: "w", title: "Week", used: 71, updated: now, resetsAt: nil, high: false),
+            Limit(id: "s", title: "Claude 5-hour", used: 38, updated: now, resetsAt: nil, high: false),
+            Limit(id: "w", title: "Claude week", used: 71, updated: now, resetsAt: nil, high: false),
         ], workedToday: 4 * 3600, lastHome: Homecoming(name: "docs", shipped: true, at: now.addingTimeInterval(-120)),
         nappers: 2, napperPalettes: ["lilac", "golden"], homeToday: 1, homePalettes: ["golden"])
     }

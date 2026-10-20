@@ -39,6 +39,8 @@ never changes:
   beside them), each session's log in `~/.claude/projects`, and its helpers'
   descriptions;
 - Codex's session logs in `~/.codex/sessions`;
+- Mistral Vibe's session store in `~/.vibe/logs/session`: which process holds
+  each session, and each session's title and journal;
 - the Claude app's records of its Code-tab sessions (the first 4 KB of each,
   for the chat's ID and title) and its plan usage history, both in
   `~/Library/Application Support/Claude`;

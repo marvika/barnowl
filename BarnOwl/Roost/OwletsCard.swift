@@ -56,7 +56,7 @@ struct PocketRoost: View {
             VStack(alignment: .leading, spacing: 12) {
                 if !sessions.isEmpty || hiddenCount > 0 { header }
                 if !sessions.isEmpty {
-                    PocketStrip(sessions: sessions, model: model, close: close, openRoost: openRoost, hovered: $hovered)
+                    PocketStrip(sessions: perched, model: model, close: close, openRoost: openRoost, hovered: $hovered)
                     news
                 }
                 if !limits.isEmpty { PlanMoons(limits: limits) }
@@ -81,6 +81,18 @@ struct PocketRoost: View {
             .help("Open the Roost: every agent on one tree, and today's flight log")
         }
         .padding(.horizontal, 2)
+    }
+
+    /// Owlets on the strip: helpers stay with a caller that's here, and are
+    /// counted in the line below instead.
+    private var perched: [AgentSession] {
+        let callers = callersOut
+        return sessions.filter { !($0.calledBy.map(callers.contains) ?? false) }
+    }
+
+    /// Callers out on a branch, which keep their helpers with them (as the Roost's tree does).
+    private var callersOut: Set<String> {
+        Set(sessions.filter { !$0.isHelper && TreePlan.isOnBranch($0.state) }.map(\.id))
     }
 
     // MARK: What's new: one card and one line, or the owlet under the pointer
@@ -110,16 +122,26 @@ struct PocketRoost: View {
 
     /// "3 busy (12 helpers) · 1 stuck · docs shipped 2 min ago", leaving out the one in the card.
     private func summary(excluding lead: String?) -> String? {
-        let others = sessions.filter { $0.id != lead }
+        let here = callersOut
+        let asked = sessions.filter { $0.id != lead && ($0.calledBy.map(here.contains) ?? false) }
+        let others = sessions.filter { $0.id != lead && !asked.contains($0) }
         var parts: [String] = []
-        let needing = others.filter(\.state.needsYou).count
+        // Anyone who needs you is counted, helper or not.
+        let needing = (others + asked).filter(\.state.needsYou).count
         if needing > 0 { parts.append(lead == nil ? "\(needing) \(needing == 1 ? "needs" : "need") you" : "\(needing) more \(needing == 1 ? "needs" : "need") you") }
         let busy = others.filter(\.state.isWorking)
         if !busy.isEmpty {
             let helpers = busy.reduce(0) { $0 + $1.helpers.filter(\.isWorking).count }
             parts.append(helpers > 0 ? "\(busy.count) busy (\(helpers) \(helpers == 1 ? "helper" : "helpers"))" : "\(busy.count) busy")
         }
-        let stuck = others.filter { $0.state == .stuck }.count
+        let helping = asked.filter { $0.state.isWorking }.count
+        let helpersStuck = asked.filter { $0.state == .stuck }.count
+        let back = cameHome.filter { $0.calledBy.map(here.contains) ?? false }.count
+        if helping > 0 || back > 0 {
+            parts.append(helping > 0 ? "\(helping) \(helping == 1 ? "helper" : "helpers") working" + (back > 0 ? ", \(back) back" : "")
+                         : "\(back) \(back == 1 ? "helper" : "helpers") back")
+        }
+        let stuck = others.filter { $0.state == .stuck }.count + helpersStuck
         if stuck > 0 { parts.append("\(stuck) stuck") }
         let done = others.filter { $0.state == .done }.count
         if done > 0 { parts.append("\(done) done") }
@@ -134,7 +156,7 @@ struct PocketRoost: View {
     /// The last owlet to ship or fly home today: "docs shipped 2 min ago".
     private var lastHome: String? {
         let now = Date()
-        let candidates = sessions.filter { $0.state == .shipped } + cameHome
+        let candidates = sessions.filter { $0.state == .shipped } + cameHome.filter { !$0.isHelper }
         guard let last = candidates.filter({ Calendar.current.isDate($0.stateSince, inSameDayAs: now) })
             .max(by: { $0.stateSince < $1.stateSince }) else { return nil }
         let ago = now.timeIntervalSince(last.stateSince)
@@ -538,12 +560,11 @@ private struct MoonTile: View {
     }
 
     private var title: String {
-        let agent = limit.agent == .claude ? "" : limit.agent.name + " "
-        return agent + (limit.window == .session ? "5 hours" : (agent.isEmpty ? "Week" : "week"))
+        "\(limit.owner) · " + (limit.window == .session ? "5 hours" : "week")
     }
 
     private func help(stale: Bool) -> String {
-        var parts = ["\(limit.agent == .claude ? "Claude" : limit.agent.name) \(limit.window.title.lowercased()): \(Int(limit.used.rounded()))% used"]
+        var parts = ["\(limit.owner) plan, \(limit.window.title.lowercased()) limit: \(Int(limit.used.rounded()))% used"]
         if stale { parts.append("as of \(PlanLimit.when(limit.updated))") }
         if let reset = limit.resetsAt { parts.append("resets \(PlanLimit.moment(reset))") }
         if let full = limit.fullAt, !stale { parts.append("at this pace it runs out \(PlanLimit.moment(full))") }

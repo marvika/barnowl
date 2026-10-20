@@ -30,6 +30,16 @@ actor AgentReader {
     private var places: [String: ProjectPlace] = [:]
     /// Codex log per process, so a session keeps its log while it runs.
     private var codexLogs: [Int32: URL] = [:]
+    /// Vibe's journal per process, and its session's title and model.
+    private var vibeFollowers: [Int32: VibeSource.Follower] = [:]
+    private var vibeMeta: [String: (modified: Date, meta: VibeSource.Meta)] = [:]
+    private var vibeLeasesModified: Date?
+    /// Vibe's model names, read again when its config changes.
+    private var vibeModels: (modified: Date, names: [String: String])?
+    /// Each agent process's parents, for which session started it. Keyed by its start
+    /// time as well, so a reused process ID doesn't inherit another's parents.
+    private struct ProcessKey: Hashable { let pid: Int32; let started: Date }
+    private var ancestry: [ProcessKey: [Int32]] = [:]
     private var logFolders: [URL: String] = [:]
     private var agents: [ProcessScan.Found] = []
     private var cpuBefore: [Int32: (cpu: TimeInterval, at: Date)] = [:]
@@ -57,14 +67,28 @@ actor AgentReader {
         let place: ProjectPlace
         /// Codex's log, when one matched.
         let codex: CodexSource.LogState?
+        /// Vibe's session, once it has one (after the first prompt).
+        var vibe: VibeRead? = nil
         /// For agents without a log: whether it used the CPU since the last scan.
         let busy: Bool
+        /// The session that started it, when another agent did: "claude:<id>", "codex:<pid>".
+        var calledBy: String? = nil
+    }
+
+    struct VibeRead: Sendable {
+        let log: VibeSource.LogState
+        let meta: VibeSource.Meta?
+        /// Its model as the config names it: "GLM 5.3".
+        var model: String?
+        /// When the model call it's waiting on was first seen.
+        var thinkingSince: Date?
     }
 
     struct Result: Sendable {
         var claude: [ClaudeRead] = []
         var agents: [AgentRead] = []
         var sessionsFolderExists = false
+        var vibeLeasesExist = false
         var limits: [PlanLimit] = []
         /// Requests held for the island, when answering from it is on.
         var asks: [IslandAnswers.Ask] = []
@@ -107,10 +131,18 @@ actor AgentReader {
         }
 
         let interval: TimeInterval = emptyScans >= 4 ? 60 : 15
-        let scanned = now.timeIntervalSince(lastScan) >= interval
+        // A Vibe starting or ending changes its leases: look for processes now.
+        let leasesChanged = FileTimes.modified(VibeSource.leasesFolder.path)
+        result.vibeLeasesExist = leasesChanged != nil
+        let vibeChanged = leasesChanged != vibeLeasesModified
+        vibeLeasesModified = leasesChanged
+        let scanned = now.timeIntervalSince(lastScan) >= interval || vibeChanged
         if scanned {
             scan(now: now)
         }
+        let vibes = agents.filter { $0.agent == .vibe }
+        let leases = vibes.isEmpty ? [:] : VibeSource.leases()
+        vibeFollowers = vibeFollowers.filter { pid, _ in vibes.contains { $0.pid == pid } }
         for found in agents {
             let key = "\(found.agent.rawValue):\(found.pid)"
             live.insert(key)
@@ -119,15 +151,75 @@ actor AgentReader {
                 follow(key, url: url) { followed, line in followed.codex.consume(line) }
                 codex = logs[key]?.codex
             }
-            result.agents.append(AgentRead(found: found, place: place(of: found.folder), codex: codex,
-                                           busy: busyByCPU[found.pid] ?? false))
+            var read = AgentRead(found: found, place: place(of: found.folder), codex: codex,
+                                 busy: busyByCPU[found.pid] ?? false)
+            if found.agent == .vibe {
+                read.vibe = vibe(found.pid, leases: leases)
+            }
+            result.agents.append(read)
         }
+        let callers = Dictionary(newest.values.map { ($0.pid, "claude:\($0.sessionId)") }, uniquingKeysWith: { a, _ in a })
+            .merging(agents.map { ($0.pid, "\($0.agent.rawValue):\($0.pid)") }, uniquingKeysWith: { a, _ in a })
+        for index in result.agents.indices {
+            let found = result.agents[index].found
+            result.agents[index].calledBy = Self.caller(of: found.pid, among: callers, ancestors: ancestors(of: found))
+        }
+        ancestry = ancestry.filter { key, _ in agents.contains { $0.pid == key.pid && $0.started == key.started } }
         result.limits = limits(now: now, codex: result.agents.compactMap(\.codex))
         logs = logs.filter { live.contains($0.key) }
         transcripts = transcripts.filter { live.contains("claude:\($0.key)") }
         missingLogs = missingLogs.filter { live.contains("claude:\($0.key)") }
         if places.count > 200 { places.removeAll() }
         return result
+    }
+
+    /// The agent session an agent was started by, if any: the nearest of its
+    /// ancestors that's a Claude Code session or another agent. An agent
+    /// asked to help by another runs a few shells below it.
+    static func caller(of pid: Int32, among callers: [Int32: String], ancestors: [Int32]) -> String? {
+        ancestors.lazy.compactMap { callers[$0] }.first
+    }
+
+    /// A process's parents, nearest first, up to `launchd`. They don't change
+    /// while it runs, so they're looked up once.
+    private func ancestors(of found: ProcessScan.Found) -> [Int32] {
+        let key = ProcessKey(pid: found.pid, started: found.started)
+        if let known = ancestry[key] { return known }
+        var chain: [Int32] = []
+        var current = found.pid
+        while chain.count < 16, let parent = ProcessScan.parent(of: current), parent > 1, parent != current {
+            chain.append(parent)
+            current = parent
+        }
+        ancestry[key] = chain
+        return chain
+    }
+
+    /// A Vibe process's session, followed from where it last stopped. `/clear`
+    /// starts a new session in the same process, so its lease is read each time.
+    private func vibe(_ pid: Int32, leases: [Int32: String]) -> VibeRead? {
+        guard let session = VibeSource.session(of: pid, leases: leases, parentOf: { ProcessScan.parent(of: $0) })
+        else { return nil }
+        let folder = VibeSource.folder(of: session)
+        var follower = vibeFollowers[pid]?.session == session ? vibeFollowers[pid]! : VibeSource.Follower(session: session)
+        follower.read(folder: folder)
+        vibeFollowers[pid] = follower
+        var meta: VibeSource.Meta?
+        if let modified = FileTimes.modified(folder.appending(path: "meta.json").path) {
+            if let known = vibeMeta[session], known.modified == modified {
+                meta = known.meta
+            } else {
+                meta = VibeSource.meta(of: folder)
+                if let meta { vibeMeta[session] = (modified, meta) }
+            }
+        }
+        if vibeMeta.count > 50 { vibeMeta = vibeMeta.filter { _, entry in Date().timeIntervalSince(entry.modified) < 86_400 } }
+        let config = VibeSource.home.appending(path: "config.toml")
+        if let modified = FileTimes.modified(config.path), vibeModels?.modified != modified {
+            vibeModels = (modified, VibeSource.modelNames(config: config))
+        }
+        let model = meta?.model.map { ModelName.display(vibeModels?.names[$0] ?? $0) }
+        return VibeRead(log: follower.log, meta: meta, model: model, thinkingSince: follower.thinkingSince)
     }
 
     /// Plan limits: Claude's from its app's history and Barn Owl's status
@@ -219,6 +311,21 @@ actor AgentReader {
     /// Matches each running Codex to the newest log for its folder written
     /// since it started (not an earlier session's).
     private func assignCodexLogs(to processes: [ProcessScan.Found], now: Date) {
+        // Codex keeps its log open while it runs: that says exactly which
+        // is whose, even with several in one folder or in a worktree.
+        for process in processes {
+            // Known and still being written: nothing to look up.
+            if let known = codexLogs[process.pid], let modified = FileTimes.modified(known.path),
+               now.timeIntervalSince(modified) < 120 { continue }
+            var open = ProcessScan.openFiles(of: process.pid) { CodexSource.isLog($0) }
+            // An npm install runs the real program as the wrapper's child.
+            if open.isEmpty {
+                open = ProcessScan.children(of: process.pid).flatMap { ProcessScan.openFiles(of: $0) { CodexSource.isLog($0) } }
+            }
+            let newest = open.max { (FileTimes.modified($0) ?? .distantPast) < (FileTimes.modified($1) ?? .distantPast) }
+            if let newest { codexLogs[process.pid] = URL(fileURLWithPath: newest) }
+        }
+        // Otherwise, the newest log for its folder written since it started.
         let unassigned = processes.filter { codexLogs[$0.pid] == nil }
         guard !unassigned.isEmpty else { return }
         let taken = Set(codexLogs.values)

@@ -47,11 +47,19 @@ struct RoostNowView: View {
     private var waiting: [AgentSession] { sessions.filter(\.state.needsYou) }
     private var done: [AgentSession] { sessions.filter { $0.state == .done || $0.state == .shipped } }
     /// At it, busiest first: working, then stuck, on a break or offline.
+    /// Helpers shown on their caller's working row rather than their own: only while the
+    /// caller has such a row, and isn't itself a helper (a helper's helpers keep their rows).
+    private var withCaller: Set<String> {
+        let rows = Set(sessions.filter { !$0.isHelper && !$0.state.needsYou && !Self.done($0) && !Self.resting($0) }.map(\.id))
+        return Set(sessions.filter { $0.calledBy.map(rows.contains) ?? false }.map(\.id))
+    }
+
     private var working: [AgentSession] {
-        let busy = sessions.filter { !$0.state.needsYou && !Self.done($0) && !Self.resting($0) }
+        let hidden = withCaller
+        let busy = sessions.filter { !$0.state.needsYou && !Self.done($0) && !Self.resting($0) && !hidden.contains($0.id) }
         return busy.filter(\.state.isWorking) + busy.filter { !$0.state.isWorking }
     }
-    private var resting: [AgentSession] { sessions.filter(Self.resting) }
+    private var resting: [AgentSession] { sessions.filter { Self.resting($0) && !withCaller.contains($0.id) } }
     private static func done(_ session: AgentSession) -> Bool { session.state == .done || session.state == .shipped }
     private static func resting(_ session: AgentSession) -> Bool { session.state == .resting || session.state == .napping }
 
@@ -122,7 +130,9 @@ struct RoostNowView: View {
                                 Rectangle().fill(RoostInk.cardEdge).frame(height: 1).padding(.leading, 88)
                             }
                             WorkingRow(session: session, selected: selected == session.id, model: model,
-                                       twin: twins.contains(session.name))
+                                       twin: twins.contains(session.name),
+                                       asked: sessions.filter { $0.calledBy == session.id },
+                                       back: cameHome.filter { $0.calledBy == session.id }.count)
                                 .onTapGesture { selected = session.id }
                         }
                     }
@@ -250,7 +260,7 @@ private struct AskingCard: View {
     private var host: String { (session.host ?? "Terminal").replacingOccurrences(of: "the ", with: "") }
 
     private var meta: String {
-        var parts = [session.placeName]
+        var parts = [session.callerName.map { "for \($0)" } ?? session.placeName]
         parts.append("asked \(IslandView.ago(session.request?.since ?? session.stateSince))")
         return parts.joined(separator: " · ")
     }
@@ -386,6 +396,10 @@ private struct WorkingRow: View {
     /// Another owlet has the same name: say when this one started.
     var twin = false
 
+    /// Agents it asked to help, still out, and how many are back.
+    var asked: [AgentSession] = []
+    var back = 0
+
     private var stuck: Bool { session.state == .stuck }
     private var team: Bool { session.helpers.count > 1 && session.helpers.count <= 6 }
     private var brood: Bool { session.helpers.count > 6 }
@@ -410,6 +424,7 @@ private struct WorkingRow: View {
                     .padding(.top, 4)
             }
             if team { Team(session: session).padding(.leading, 74) }
+            if !asked.isEmpty || back > 0 { AskedProgress(asked: asked, back: back).padding(.leading, 74) }
         }
         .padding(.horizontal, 14).padding(.vertical, team || brood ? 14 : 10)
         .background(team || brood ? RoostInk.card : .clear, in: .rect(cornerRadius: 18))
@@ -731,7 +746,7 @@ struct TodayCard: View {
     private var projection: (text: String, warns: Bool)? {
         guard let limit = limits.first(where: { $0.window == .session && $0.agent == .claude }) ?? limits.first,
               !limit.isStale() else { return nil }
-        let name = limit.window == .session ? "the 5-hour window" : "this week"
+        let name = "\(limit.owner)'s " + (limit.window == .session ? "5-hour window" : "week")
         // Only a forecast can say how the pace ends; without one, say nothing.
         guard let full = limit.fullAt, full < (limit.resetsAt ?? .distantFuture) else { return nil }
         return ("At this pace \(name) runs out \(PlanLimit.moment(full)).", true)
@@ -839,8 +854,7 @@ struct MoonRow: View {
     }
 
     private var title: String {
-        let agent = limit.agent == .claude ? "" : "\(limit.agent.name) "
-        return agent + (limit.window == .session ? "5-hour window" : "Week")
+        "\(limit.owner) · " + (limit.window == .session ? "5-hour window" : "week")
     }
 
     private func detail(stale: Bool) -> Text {
@@ -948,5 +962,36 @@ struct FlowRow: Layout {
             x += size.width + spacing
             line = max(line, size.height)
         }
+    }
+}
+
+/// A caller's helpers on its row: a segment each, green once back, and what
+/// the busiest is doing: "3 of 10 back · Devstral is running a command".
+private struct AskedProgress: View {
+    let asked: [AgentSession]
+    let back: Int
+
+    var body: some View {
+        let total = asked.count + back
+        VStack(alignment: .leading, spacing: 5) {
+            HStack(spacing: 10) {
+                HStack(spacing: 2) {
+                    ForEach(0..<min(total, 16), id: \.self) { index in
+                        RoundedRectangle(cornerRadius: 2)
+                            .fill(index < back ? RoostInk.green : asked[index - back].state.needsYou ? RoostInk.amber : RoostInk.lavender)
+                            .frame(width: total > 10 ? 9 : 14, height: 7)
+                    }
+                }
+                Text("\(back) of \(total) back").font(.callout.monospacedDigit()).foregroundStyle(RoostInk.secondary)
+            }
+            if let lead = asked.sorted(by: AgentWatcher.order).first {
+                let doing = lead.state == .asking ? "has a question for you" : lead.state.needsYou ? "wants your OK"
+                    : "is \(lead.state.label.lowercased())"
+                Text("\(lead.model ?? lead.agent.name) \(doing)")
+                    .font(.caption).foregroundStyle(lead.state.needsYou ? RoostInk.amber : RoostInk.secondary).lineLimit(1)
+            }
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(back) of \(total) helpers back")
     }
 }
