@@ -97,7 +97,9 @@ enum Relaunch {
     static func now() {
         let configuration = NSWorkspace.OpenConfiguration()
         configuration.createsNewApplicationInstance = true
-        NSWorkspace.shared.openApplication(at: Bundle.main.bundleURL, configuration: configuration) { _, _ in
+        NSWorkspace.shared.openApplication(at: Bundle.main.bundleURL, configuration: configuration) { _, error in
+            // Quit only once the new copy is on its way, or there'd be no Barn Owl at all.
+            guard error == nil else { return }
             Task { @MainActor in NSApp.terminate(nil) }
         }
     }

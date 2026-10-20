@@ -10,6 +10,24 @@ before 1.0, a minor version can change behaviour.
   your owls worked; your busiest day, streak and main repository; and when
   your owls fly, by weekday and hour. Click a moon to see that day. It's all
   from the daily log Barn Owl already keeps; nothing new is tracked.
+- **Unused apps** are judged only by apps Spotlight has indexed. Without
+  Spotlight's "last opened" date, an app opened every day could look as old
+  as when it was installed, and be offered for the Trash.
+- **Clearing clipboard history** can't be undone by a save that was already
+  on its way, and the history file is readable only by you.
+- **Claude Code's settings** are changed only over what was read: if Claude
+  Code changes them in between, Barn Owl reads them again first. They're never
+  briefly readable by others while written, turning answers off leaves a file
+  without our hooks untouched, and only Barn Owl's own hook is ever removed.
+- **Menu bar colours** save and redraw once a colour drag pauses, not on
+  every tick.
+- **Helpers:** "back" counts only the current batch, a twig goes once all its
+  helpers are back, and helpers no longer count in "Done today".
+- **VoiceOver:** clipboard and search results, the clipboard's remove button,
+  the Roost's rows and three icon-only buttons now say what they are and do.
+- Fixed: a full disk could crash a clean-up while it wrote its log; Relaunch
+  quit even when the new copy didn't start; out-of-range plan numbers could
+  crash.
 
 ## 0.13.0
 
