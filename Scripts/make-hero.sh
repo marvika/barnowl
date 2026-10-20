@@ -283,22 +283,23 @@ def ridge_line(n, base, amp, seed, phase=0.0):
     return [int(round(base + sum(a * math.sin(f * x + p + phase) for f, p, a in waves))) for x in range(n)]
 
 
-def landscape(w, h):
-    """Ridge (with a lit rim), hill and meadow as pixel silhouettes, full width.
-    Returns the far layers and the meadow separately, so the bough can root between them."""
-    n, m = -(-w // P), -(-h // P)
+def landscape(w, h, p=P, rows=(292, 306, 322)):
+    """Ridge (with a lit rim), hill and meadow as pixel silhouettes, full width, on a
+    p-px grid with their crests at `rows` (grid rows). Returns the far layers and the
+    meadow separately, so the bough can root between them."""
+    n, m = -(-w // p), -(-h // p)
     back, front = Image.new("RGBA", (n, m)), Image.new("RGBA", (n, m))
     for layer_img, line, col, rim_col in (
-            (back, ridge_line(n, 292, 7, 5), DUSK["ridge"], DUSK["ridge_rim"]),
-            (back, ridge_line(n, 306, 5, 9, 1.3), DUSK["hill"], None),
-            (front, ridge_line(n, 322, 3, 17, 2.1), DUSK["meadow"], None)):
+            (back, ridge_line(n, rows[0], 7, 5), DUSK["ridge"], DUSK["ridge_rim"]),
+            (back, ridge_line(n, rows[1], 5, 9, 1.3), DUSK["hill"], None),
+            (front, ridge_line(n, rows[2], 3, 17, 2.1), DUSK["meadow"], None)):
         px = layer_img.load()
         for x in range(n):
             for y in range(max(0, line[x]), m):
                 px[x, y] = col + (255,)
             if rim_col and 0 <= line[x] < m:
                 px[x, line[x]] = tuple((a + b) // 2 for a, b in zip(col, rim_col)) + (255,)
-    grow = lambda g: g.resize((n * P, m * P), Image.NEAREST).crop((0, 0, w, h))
+    grow = lambda g: g.resize((n * p, m * p), Image.NEAREST).crop((0, 0, w, h))
     return grow(back), grow(front)
 
 
@@ -306,7 +307,7 @@ def hexrgb(h):
     return tuple(int(h.lstrip("#")[i:i + 2], 16) for i in (0, 2, 4))
 
 
-def bough(n_len, owls, rise=34, root=46):
+def bough(n_len, owls, rise=34, root=46, p=P):
     """A low bough on the landscape's grid: it grows up out of the meadow on the left,
     runs level, tapers to a leafy tip and is lit from above. Owlets (Scripts/owlets
     sprites, whole pixels) stand on it, toes curled over the bark.
@@ -351,7 +352,7 @@ def bough(n_len, owls, rise=34, root=46):
                 put(i + x - 16, foot - (OW.H - 2) + y, hexrgb(pal[c]))
         for x in (12, 14, 17, 19):
             put(i + x - 16, foot, hexrgb(pal["a"]))
-    return g.resize((g.width * P, g.height * P), Image.NEAREST), base * P, pad * P
+    return g.resize((g.width * p, g.height * p), Image.NEAREST), base * p, pad * p
 
 
 def notch_and_island(img, cx, mb, k):
@@ -405,26 +406,31 @@ def hero():
 
 # ------------------------------------------------------------------ social preview
 def social():
-    W, H, K = 1280, 640, 0.6
-    img = wallpaper(W, H, round(66 * K))
-    owl_x = menu_bar(img.copy(), K, -999, clock=("Tue Oct 20", "20:34"))
-    qp = rim(scaled(quick_panel(), K))
+    """GitHub's card, the hero's little sibling: the owl, the name and the tagline,
+    the quick panel under the owl in the menu bar, owlets on a bough at dusk.
+    Everything that matters sits at least 40 px in, for crops."""
+    W, H, K, p = 1280, 640, 0.6, 3
+    mb = round(66 * K)
+    img = dusk_sky(W, H, mb)
+    back, front = landscape(W, H, p, (187, 194, 204))
+    img.alpha_composite(back)
+    b, top, pad = bough(200, [("ask", "golden", 58), ("command", "ghost", 106), ("nap", "lilac", 152)],
+                        rise=18, root=28, p=p)
+    img.alpha_composite(b, (30 - pad, 585 - top))
+    img.alpha_composite(front)
+    owl_x = menu_bar(img.copy(), K, -999)
+    qp = rim(scaled(quick_panel(healthy=True), K))
     qx = int(min(owl_x - qp.width / 2, W - 48 - qp.width))
     menu_bar(img, K, -999)
-    place(img, qp, (qx, round(66 * K) + 6), 0.9)
-    # The owl, the name and the line under it
+    place(img, qp, (qx, mb + 6), 0.9)
     owl = Image.open("build/hero-owl.png").convert("RGBA")
     owl = owl.crop(owl.getbbox())
-    owl = scaled(owl, 230 / owl.height)
-    lx = 96
-    shadow(img, owl, (lx, 92), 0.35)
-    img.alpha_composite(owl, (lx, 92))
+    owl = scaled(owl, 200 / owl.height)
+    shadow(img, owl, (84, 64), 0.35)
+    img.alpha_composite(owl, (84, 64))
     d = ImageDraw.Draw(img)
-    d.text((lx - 6, 430), "Barn Owl", font=font(104, "Bold"), fill=(255, 255, 255), anchor="ls")
-    d.text((lx - 2, 488), "The owl that runs your menu bar.", font=font(34, "Medium"),
-           fill=(236, 232, 255), anchor="ls")
-    d.text((lx - 2, 548), "Tidy menu bar · Keep awake · Disk space · Coding agents",
-           font=font(23, "Medium"), fill=(222, 220, 255, 255), anchor="ls")
+    d.text((77, 382), "Barn Owl", font=font(118, "Bold"), fill=(255, 255, 255), anchor="ls")
+    d.text((82, 443), "The owl that runs your menu bar.", font=font(40, "Medium"), fill=(240, 236, 255), anchor="ls")
     return img.convert("RGB")
 
 
