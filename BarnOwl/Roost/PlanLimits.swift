@@ -118,7 +118,8 @@ enum PlanLimits {
         var limits: [PlanLimit] = []
         for (key, window) in [("five_hour", PlanLimit.Window.session), ("seven_day", .week)] {
             guard let entry = root[key] as? [String: Any],
-                  let used = (entry["used_percentage"] as? NSNumber)?.doubleValue else { continue }
+                  let used = (entry["used_percentage"] as? NSNumber)?.doubleValue,
+                  used.isFinite, (0...1000).contains(used) else { continue }
             let resets = (entry["resets_at"] as? NSNumber).map { Date(timeIntervalSince1970: $0.doubleValue) }
             // Past its reset, the reading no longer holds.
             if let resets, resets < now { continue }

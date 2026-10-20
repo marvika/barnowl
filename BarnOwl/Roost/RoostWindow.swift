@@ -156,6 +156,7 @@ struct RoostView: View {
             .pickerStyle(.segmented).labelsHidden().fixedSize()
             .help("What needs you now, or every owlet on the tree")
             Button { model.showTree() } label: { Image(systemName: "pip.exit") }
+                .accessibilityLabel("Pop out the tree")
                 .buttonStyle(.bordered).controlSize(.small)
                 .help("Pop the tree out into its own window, which can stay on top")
         }
@@ -275,7 +276,7 @@ struct RoostInspector: View {
         }
         .font(.callout)
         let asked = sessions.filter { $0.calledBy == session.id }
-        let back = returned.filter { $0.calledBy == session.id }
+        let back = HelperBatch.back(of: session.id, live: asked, returned: returned, now: Date())
         if !asked.isEmpty || !back.isEmpty { AskedAgents(working: asked, back: back) }
         if !session.helpers.isEmpty {
             VStack(alignment: .leading, spacing: 8) {

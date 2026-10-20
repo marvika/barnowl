@@ -58,7 +58,8 @@ enum CodexSource {
     /// Older versions said `resets_in_seconds` instead.
     static func limit(_ value: Any?, at time: Date) -> PlanLimit? {
         guard let window = value as? [String: Any],
-              let used = (window["used_percent"] as? NSNumber)?.doubleValue else { return nil }
+              let used = (window["used_percent"] as? NSNumber)?.doubleValue, used.isFinite, (0...1000).contains(used)
+        else { return nil }
         let minutes = (window["window_minutes"] as? NSNumber)?.doubleValue ?? 300
         var resets = (window["resets_at"] as? NSNumber).map { Date(timeIntervalSince1970: $0.doubleValue) }
         if resets == nil, let seconds = (window["resets_in_seconds"] as? NSNumber)?.doubleValue {

@@ -160,19 +160,16 @@ struct HelpersTests {
         #expect((byCaller[outer] ?? 0) > (byCaller[inner] ?? 0))
     }
 
-    @Test func whenAllAreBackTheTwigSaysSoForAWhile() {
+    @Test func whenAllAreBackNoEmptyTwigIsLeft() {
         let caller = session("claude:c", .claude, "barnowl", .thinking)
-        var back = [session("vibe:1", .vibe, "barnowl", .napping, calledBy: caller.id),
+        let back = [session("vibe:1", .vibe, "barnowl", .napping, calledBy: caller.id),
                     session("codex:2", .codex, "barnowl", .napping, calledBy: caller.id)]
         let plan = TreePlan(sessions: [caller], cameHome: back, size: CGSize(width: 1240, height: 700),
                             now: Date(), unit: 3, trim: false)
-        #expect(plan.twigs.count == 1)
-        #expect(plan.helpers.first?.back == 2)
-        #expect(plan.helpers.first?.working == 0)
-        for index in back.indices { back[index].stateSince = Date().addingTimeInterval(-3600) }
-        let later = TreePlan(sessions: [caller], cameHome: back, size: CGSize(width: 1240, height: 700),
-                             now: Date(), unit: 3, trim: false)
-        #expect(later.twigs.isEmpty)
+        #expect(plan.twigs.isEmpty)
+        #expect(plan.helpers.isEmpty)
+        // They went back to their caller, not to the nest.
+        #expect(plan.nest.count == 0)
     }
 
     @Test func codexSubcommandSkipsOptionValues() {

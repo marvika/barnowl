@@ -312,22 +312,44 @@ final class ClipboardHistory {
         let kept = entries.filter { $0.kind != .image && (Preferences.clipboardRemember || $0.isPinned) }
         let store = Store(entries: kept, shelf: shelf)
         pendingSave?.cancel()
+        // Each save takes a ticket now; one overtaken by a later save (Clear
+        // History, say) is dropped, so cleared entries can't come back.
+        let ticket = Self.writer.ticket()
         if now {
-            try? FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
-            if let data = try? JSONEncoder().encode(store) {
-                try? data.write(to: url, options: [.atomic, .completeFileProtection])
-            }
+            Self.writer.write(store, to: url, ticket: ticket, wait: true)
             return
         }
         pendingSave = Task {
             try? await Task.sleep(for: .milliseconds(500))
             guard !Task.isCancelled else { return }
-            await Task.detached(priority: .utility) {
-                try? FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
-                if let data = try? JSONEncoder().encode(store) {
-                    try? data.write(to: url, options: [.atomic, .completeFileProtection])
-                }
-            }.value
+            Self.writer.write(store, to: url, ticket: ticket, wait: false)
         }
+    }
+
+    private static let writer = HistoryWriter()
+}
+
+/// Writes the clipboard history in order, on one queue, and only the newest:
+/// a save overtaken by a later one is skipped. The file is readable only by you.
+final class HistoryWriter: @unchecked Sendable {
+    private let queue = DispatchQueue(label: "io.github.marvika.BarnOwl.clipboard-save", qos: .utility)
+    private let lock = NSLock()
+    private var latest = 0
+
+    func ticket() -> Int {
+        lock.withLock {
+            latest += 1
+            return latest
+        }
+    }
+
+    func write<Store: Encodable & Sendable>(_ store: Store, to url: URL, ticket: Int, wait: Bool) {
+        let work = { [self] in
+            guard lock.withLock({ ticket == latest }), let data = try? JSONEncoder().encode(store) else { return }
+            try? FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try? data.write(to: url, options: [.atomic, .completeFileProtection])
+            try? FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: url.path)
+        }
+        if wait { queue.sync(execute: work) } else { queue.async(execute: work) }
     }
 }

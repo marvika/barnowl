@@ -381,12 +381,9 @@ struct TreePlan: Equatable {
             var bottom = y + labelBottom
             var twigsHere: [Twig] = [], groupsHere: [Helpers] = [], helperPerches: [Perch] = []
             let lane = labelBottom + 30 + Int((20 / unit).rounded(.up))
-            let recent = { (caller: String) in
-                cameHome.filter { $0.calledBy == caller && now.timeIntervalSince($0.stateSince) < 10 * 60 }
-            }
             let withHelpers = specs.prefix(shown).indices.filter { index in
                 let id = specs[index].session.id
-                return callers.contains(id) && (!(helping[id] ?? []).isEmpty || !recent(id).isEmpty)
+                return callers.contains(id) && !(helping[id] ?? []).isEmpty
             }
             var stack = 0
             for index in withHelpers.sorted(by: { xs[$0] > xs[$1] }) {
@@ -399,7 +396,7 @@ struct TreePlan: Equatable {
                 var room = 0
                 while room < team.count, first + room * step + labelHalf <= limit { room += 1 }
                 // No room at all: no twig; its helpers perch on their own branch instead.
-                guard team.isEmpty ? first + 30 <= limit : room > 0 else { continue }
+                guard room > 0 else { continue }
                 // Up to five sit in a row; past that, four do and the rest huddle as a flock.
                 let perched = team.count <= 5 ? min(team.count, room) : min(4, max(room - 1, 0))
                 let rest = Array(team.dropFirst(perched))
@@ -420,7 +417,8 @@ struct TreePlan: Equatable {
                 let idle = team.filter { Self.isNapping($0.state) }.count
                 groupsHere.append(Helpers(caller: spec.session.id, callerName: Self.baseName(spec.session),
                                           working: team.count - idle, idle: idle,
-                                          back: cameHome.filter { $0.calledBy == spec.session.id }.count,
+                                          back: HelperBatch.back(of: spec.session.id, live: team, returned: cameHome,
+                                                                 now: now).count,
                                           place: elsewhere, labelX: min(first - 14, cols - 8 - Int((150 / unit).rounded())),
                                           labelY: level - 30 - Int((18 / unit).rounded(.up)),
                                           flock: rest, flockX: flockX, flockTop: twig.top(at: flockX)))
@@ -788,7 +786,7 @@ private struct TreeStage: View, Equatable {
         var counts: [String] = []
         if group.working > 0 { counts.append("\(group.working) working") }
         if group.idle > 0 { counts.append("\(group.idle) idle") }
-        if group.back > 0 { counts.append(group.working + group.idle == 0 ? "all \(group.back) back" : "\(group.back) back") }
+        if group.back > 0 { counts.append("\(group.back) back") }
         if let place = group.place { counts.append("in \(place)") }
         return Group {
             HStack(spacing: 5) {

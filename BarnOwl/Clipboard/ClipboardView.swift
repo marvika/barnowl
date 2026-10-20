@@ -100,6 +100,8 @@ struct ClipboardView: View {
                                 ClipRow(entry: entry, selected: index == selection)
                                     .id(entry.id)
                                     .onTapGesture { paste(entry) }
+                                    .accessibilityAddTraits(index == selection ? [.isButton, .isSelected] : .isButton)
+                                    .accessibilityAction { paste(entry) }
                                     .contextMenu {
                                         Button("Paste") { paste(entry) }
                                         Button("Copy") { clipboard.copy(entry); close() }
@@ -234,6 +236,8 @@ struct ShelfTile: View {
                 .accessibilityLabel("Remove from the nest")
             }
         }
+        // The button above shows on hover only; VoiceOver gets it as an action.
+        .accessibilityAction(named: "Remove from the nest", remove)
         .onHover { hovering = $0 }
         .help(url.path)
     }

@@ -96,6 +96,9 @@ struct SearchView: View {
                                 }
                                 .id(result.id)
                                 .onTapGesture { perform(result) }
+                                .accessibilityElement(children: .combine)
+                                .accessibilityAddTraits(index == selection ? [.isButton, .isSelected] : .isButton)
+                                .accessibilityAction { perform(result) }
                             }
                         }
                         .padding(6)

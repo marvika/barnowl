@@ -115,6 +115,8 @@ struct RoostNowView: View {
                                 .opacity(selected == session.id ? 1 : 0)
                         }
                         .onTapGesture { selected = session.id }
+                        .accessibilityAddTraits(selected == session.id ? [.isButton, .isSelected] : .isButton)
+                        .accessibilityAction { selected = session.id }
                     }
                 }
             }
@@ -132,8 +134,11 @@ struct RoostNowView: View {
                             WorkingRow(session: session, selected: selected == session.id, model: model,
                                        twin: twins.contains(session.name),
                                        asked: sessions.filter { $0.calledBy == session.id },
-                                       back: cameHome.filter { $0.calledBy == session.id }.count)
+                                       back: HelperBatch.back(of: session.id, live: sessions, returned: cameHome,
+                                                              now: Date()).count)
                                 .onTapGesture { selected = session.id }
+                        .accessibilityAddTraits(selected == session.id ? [.isButton, .isSelected] : .isButton)
+                        .accessibilityAction { selected = session.id }
                         }
                     }
                     if working.count > 4 {
@@ -148,8 +153,10 @@ struct RoostNowView: View {
                     }
                 }
             }
-            if !done.isEmpty || !cameHome.isEmpty {
-                DoneCard(done: done, cameHome: cameHome, expanded: $showsDone, model: model)
+            if done.contains(where: { !$0.isHelper }) || cameHome.contains(where: { !$0.isHelper }) {
+                // Helpers went back to their caller, not home: they're counted on its row.
+                DoneCard(done: done.filter { !$0.isHelper }, cameHome: cameHome.filter { !$0.isHelper },
+                         expanded: $showsDone, model: model)
             }
             if !resting.isEmpty {
                 RestingCard(sessions: resting, twins: twins, expanded: $showsResting, selected: $selected, model: model)
@@ -573,6 +580,8 @@ private struct RestingCard: View {
                 ForEach(sessions) { session in
                     WorkingRow(session: session, selected: selected == session.id, model: model, twin: twins.contains(session.name))
                         .onTapGesture { selected = session.id }
+                        .accessibilityAddTraits(selected == session.id ? [.isButton, .isSelected] : .isButton)
+                        .accessibilityAction { selected = session.id }
                 }
             }
         }

@@ -154,8 +154,8 @@ final class PresenterMode {
         let app = AXUIElementCreateApplication(controlCenter.processIdentifier)
         AXUIElementSetMessagingTimeout(app, 0.2)
         var bar: CFTypeRef?
-        guard AXUIElementCopyAttributeValue(app, "AXExtrasMenuBar" as CFString, &bar) == .success, let bar
-        else { return false }
+        guard AXUIElementCopyAttributeValue(app, "AXExtrasMenuBar" as CFString, &bar) == .success, let bar,
+              CFGetTypeID(bar) == AXUIElementGetTypeID() else { return false }
         let barElement = bar as! AXUIElement
         AXUIElementSetMessagingTimeout(barElement, 0.2)
         var children: CFTypeRef?

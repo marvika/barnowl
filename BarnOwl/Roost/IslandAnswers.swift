@@ -283,8 +283,11 @@ enum IslandAnswers {
         "b=\(StatusLineRelay.shellQuoted(binary)); [ -x \"$b\" ] && exec \"$b\" \(flag); :"
     }
 
+    /// Exactly the command `command(binary:)` writes, so a hook of the user's own that
+    /// merely mentions Barn Owl is never taken for ours (and removed).
     static func isOurs(_ hook: [String: Any]) -> Bool {
-        ((hook["command"] as? String).map { $0.contains(" \(flag)") && $0.contains("Barn Owl") }) ?? false
+        guard let command = hook["command"] as? String else { return false }
+        return command.hasPrefix("b='") && command.hasSuffix("[ -x \"$b\" ] && exec \"$b\" \(flag); :")
     }
 
     /// Our two hook entries.
@@ -313,28 +316,36 @@ enum IslandAnswers {
     static func turnOn(files: StatusLineRelay.Files = .standard,
                        binary: String? = StatusLineRelay.installedBinary) throws {
         guard let binary else { throw StatusLineRelay.Failure.notInstalled }
-        var settings = try StatusLineRelay.readSettings(files)
-        try StatusLineRelay.backUp(files)
-        settings["hooks"] = adding(binary: binary, to: removing(from: settings["hooks"] as? [String: Any] ?? [:]))
-        try StatusLineRelay.write(settings, files)
+        try StatusLineRelay.changing {
+            var (settings, bytes) = try StatusLineRelay.snapshot(files)
+            try StatusLineRelay.backUp(files)
+            settings["hooks"] = adding(binary: binary, to: removing(from: settings["hooks"] as? [String: Any] ?? [:]))
+            try StatusLineRelay.write(settings, files, over: bytes)
+        }
     }
 
     static func turnOff(files: StatusLineRelay.Files = .standard) throws {
-        var settings = try StatusLineRelay.readSettings(files)
-        guard let hooks = settings["hooks"] as? [String: Any] else { return }
-        let left = removing(from: hooks)
-        if left.isEmpty { settings.removeValue(forKey: "hooks") } else { settings["hooks"] = left }
-        try StatusLineRelay.write(settings, files)
+        try StatusLineRelay.changing {
+            var (settings, bytes) = try StatusLineRelay.snapshot(files)
+            guard let hooks = settings["hooks"] as? [String: Any] else { return }
+            let left = removing(from: hooks)
+            // None of them ours: leave the file exactly as it is.
+            guard !NSDictionary(dictionary: left).isEqual(to: hooks) else { return }
+            if left.isEmpty { settings.removeValue(forKey: "hooks") } else { settings["hooks"] = left }
+            try StatusLineRelay.write(settings, files, over: bytes)
+        }
     }
 
     /// After an update or a move, point the hooks at this copy.
     static func repointIfNeeded(files: StatusLineRelay.Files = .standard) {
-        guard let binary = StatusLineRelay.installedBinary, isOn(files: files),
-              var settings = try? StatusLineRelay.readSettings(files),
-              let hooks = settings["hooks"] as? [String: Any],
-              !StatusLineRelay.pretty(hooks).contains(StatusLineRelay.shellQuoted(binary)) else { return }
-        settings["hooks"] = adding(binary: binary, to: removing(from: hooks))
-        try? StatusLineRelay.write(settings, files)
+        guard let binary = StatusLineRelay.installedBinary, isOn(files: files) else { return }
+        try? StatusLineRelay.changing {
+            guard var (settings, bytes) = try? StatusLineRelay.snapshot(files),
+                  let hooks = settings["hooks"] as? [String: Any],
+                  !StatusLineRelay.pretty(hooks).contains(StatusLineRelay.shellQuoted(binary)) else { return }
+            settings["hooks"] = adding(binary: binary, to: removing(from: hooks))
+            try StatusLineRelay.write(settings, files, over: bytes)
+        }
     }
 
     static func adding(binary: String, to hooks: [String: Any]) -> [String: Any] {

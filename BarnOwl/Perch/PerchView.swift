@@ -100,7 +100,7 @@ struct PerchView: View {
                 model.showSettings(.layout)
             }
             Spacer()
-            FooterButton(title: nil, symbol: "gearshape") {
+            FooterButton(title: nil, symbol: "gearshape", label: "Settings") {
                 close()
                 model.showSettings()
             }
@@ -137,6 +137,8 @@ private struct FooterButton: View {
     let title: String?
     let symbol: String
     var hint: String?
+    /// What VoiceOver says for an icon-only button.
+    var label: String?
     let action: () -> Void
     @State private var hovering = false
 
@@ -156,6 +158,7 @@ private struct FooterButton: View {
         .buttonStyle(.plain)
         .foregroundStyle(.secondary)
         .onHover { hovering = $0 }
+        .accessibilityLabel(label ?? [title, hint].compactMap { $0 }.joined(separator: ", "))
     }
 }
 
