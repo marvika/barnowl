@@ -135,14 +135,17 @@ struct CleanupRule: Identifiable, Sendable {
     }
 
     /// When it arrived in its folder (a download's own date can be years
-    /// old), or for apps when it was last opened.
+    /// old), or for apps when it was last opened. An app Spotlight hasn't
+    /// indexed has no age: without its "last opened" date, one used every day
+    /// would look as old as when it was installed.
     static func age(of url: URL, lastOpened: Bool) -> Date? {
-        if lastOpened, let item = MDItemCreateWithURL(nil, url as CFURL),
-           let used = MDItemCopyAttribute(item, kMDItemLastUsedDate) as? Date {
-            return used
-        }
         let values = try? url.resourceValues(forKeys: [.addedToDirectoryDateKey, .creationDateKey])
-        return values?.addedToDirectoryDate ?? values?.creationDate
+        let arrived = values?.addedToDirectoryDate ?? values?.creationDate
+        guard lastOpened else { return arrived }
+        guard let item = MDItemCreateWithURL(nil, url as CFURL),
+              MDItemCopyAttribute(item, kMDItemContentType) != nil else { return nil }
+        // Indexed but never opened: its arrival is its age.
+        return MDItemCopyAttribute(item, kMDItemLastUsedDate) as? Date ?? arrived
     }
 
     /// What happens when it's cleaned, in a few words.
@@ -583,8 +586,13 @@ enum CleanupRunner {
         let stamp = ISO8601DateFormatter().string(from: Date())
         let text = "\(stamp) \(line)\n"
         if let handle = try? FileHandle(forWritingTo: logURL) {
-            handle.seekToEndOfFile()
-            handle.write(Data(text.utf8))
+            // The throwing calls: the old ones raise an exception on a full disk, mid clean-up.
+            do {
+                try handle.seekToEnd()
+                try handle.write(contentsOf: Data(text.utf8))
+            } catch {
+                Log.app.error("Couldn't write to the clean-up log: \(error.localizedDescription)")
+            }
             try? handle.close()
         } else {
             try? text.write(to: logURL, atomically: true, encoding: .utf8)

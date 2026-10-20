@@ -136,7 +136,7 @@ struct PocketRoost: View {
         }
         let helping = asked.filter { $0.state.isWorking }.count
         let helpersStuck = asked.filter { $0.state == .stuck }.count
-        let back = cameHome.filter { $0.calledBy.map(here.contains) ?? false }.count
+        let back = here.reduce(0) { $0 + HelperBatch.back(of: $1, live: sessions, returned: cameHome, now: Date()).count }
         if helping > 0 || back > 0 {
             parts.append(helping > 0 ? "\(helping) \(helping == 1 ? "helper" : "helpers") working" + (back > 0 ? ", \(back) back" : "")
                          : "\(back) \(back == 1 ? "helper" : "helpers") back")

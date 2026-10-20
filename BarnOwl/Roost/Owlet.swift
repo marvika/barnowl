@@ -318,3 +318,16 @@ enum ModelName {
         }.joined(separator: " ")
     }
 }
+
+/// The helpers that came back to a caller from its current batch: those back
+/// since the oldest one still out started. With none out, those back in the
+/// last half hour. Earlier batches today don't count.
+enum HelperBatch {
+    static func back(of caller: String, live: [AgentSession], returned: [AgentSession], now: Date) -> [AgentSession] {
+        let mine = returned.filter { $0.calledBy == caller }
+        if let start = live.filter({ $0.calledBy == caller }).map(\.started).min() {
+            return mine.filter { $0.stateSince >= start.addingTimeInterval(-60) }
+        }
+        return mine.filter { now.timeIntervalSince($0.stateSince) < 30 * 60 }
+    }
+}

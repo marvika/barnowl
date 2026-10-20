@@ -213,6 +213,7 @@ private struct KeepAwakeCard: View {
         } label: {
             Image(systemName: "ellipsis")
         }
+        .accessibilityLabel("More keep-awake options")
         .menuStyle(.button)
         .menuIndicator(.hidden)
         .buttonStyle(.bordered)

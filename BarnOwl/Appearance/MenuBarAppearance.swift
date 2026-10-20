@@ -50,7 +50,18 @@ struct MenuBarStyle: Codable, Hashable, Sendable {
 @Observable
 final class MenuBarAppearance {
     var style: MenuBarStyle {
-        didSet {
+        didSet { applySoon() }
+    }
+
+    /// A colour picker changes the style on every tick of a drag: save and
+    /// redraw once it pauses, not dozens of times a second.
+    @ObservationIgnored private var pending: Task<Void, Never>?
+
+    private func applySoon() {
+        pending?.cancel()
+        pending = Task { [weak self] in
+            try? await Task.sleep(for: .milliseconds(60))
+            guard !Task.isCancelled, let self else { return }
             save()
             apply()
         }
