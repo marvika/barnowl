@@ -668,7 +668,7 @@ private struct MoreButton: View {
 }
 
 /// Rarer choices: exact size, opacity, dashes, alignment, numbering, and reset.
-private struct MoreOptions: View {
+struct MoreOptions: View {
     let model: EditorModel
     let kind: Mark.Kind
 

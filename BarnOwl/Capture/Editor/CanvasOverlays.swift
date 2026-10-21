@@ -83,6 +83,8 @@ struct HintStrip: View {
             if let text {
                 Text(text)
                     .font(.system(size: 11))
+                    .lineLimit(1)
+                    .truncationMode(.tail)
                     .foregroundStyle(.secondary)
                     .padding(.horizontal, 12)
                     .frame(height: 24)
@@ -101,7 +103,7 @@ struct HintStrip: View {
 
     static func hint(_ tool: EditorTool) -> String {
         switch tool {
-        case .select: "Click a mark to change it · drag to select several · ⌥-drag duplicates"
+        case .select: "⌥-drag duplicates · ⌘-drag skips snapping · Tab picks the next mark"
         case .arrow: "Drag to draw · ⇧ keeps 45° · drag the middle to bend"
         case .rectangle: "Drag to draw · click text or a window to fit it · ⇧ for a square"
         case .ellipse: "Drag to draw · click text or a window to fit it · ⇧ for a circle"

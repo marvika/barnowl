@@ -595,6 +595,12 @@ extension EditorCanvas {
     func textView(_ textView: NSTextView, doCommandBy commandSelector: Selector) -> Bool {
         switch commandSelector {
         case #selector(NSResponder.insertNewline(_:)):
+            // ⌘Return finishes, even mid-sentence (the menu usually catches it first).
+            if NSApp.currentEvent?.modifierFlags.contains(.command) == true {
+                endTextEditing()
+                onCommand?(.done)
+                return true
+            }
             // Return starts a new line in text; a label is one line, so it puts it down.
             if editsLabel {
                 endTextEditing()

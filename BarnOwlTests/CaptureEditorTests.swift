@@ -512,9 +512,9 @@ struct CaptureEditorTests {
         let bounds = CGRect(x: 0, y: 0, width: 400, height: 300)
         let block = SmartFit.box(at: CGPoint(x: 60, y: 50), insight: insight, padding: 6, within: bounds)
         #expect(block == CGRect(x: 34, y: 34, width: 212, height: 50))
-        // Outside the text, inside the window: the window, as it is.
+        // Outside the text, inside the window: the window, with the same room around it.
         let window = SmartFit.box(at: CGPoint(x: 300, y: 250), insight: insight, padding: 6, within: bounds)
-        #expect(window == CGRect(x: 20, y: 20, width: 360, height: 260))
+        #expect(window == CGRect(x: 14, y: 14, width: 372, height: 272))
         #expect(SmartFit.box(at: CGPoint(x: 5, y: 5), insight: insight, padding: 6, within: bounds) == nil)
 
         // The highlighter takes the line; Redact the whole finding, or the word.

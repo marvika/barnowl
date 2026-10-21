@@ -133,6 +133,8 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSTool
         let readout = overlay(SizeReadout(state: viewState), in: container)
         let hint = overlay(HintStrip(model: model), in: container)
         let banner = overlay(BannerHost(model: model), in: container)
+        // In a narrow window the hint gives way first, never the zoom or the size.
+        hint.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         NSLayoutConstraint.activate([
             zoom.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -12),
             zoom.bottomAnchor.constraint(equalTo: container.bottomAnchor, constant: -12),

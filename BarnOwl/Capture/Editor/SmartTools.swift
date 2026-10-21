@@ -49,8 +49,7 @@ enum SmartFit {
         }
         let windows = insight.windowRects.filter { $0.contains(point) }
         guard let window = smallest(windows) else { return nil }
-        // A window gets no padding: its edge is the edge.
-        return window.intersection(bounds)
+        return window.insetBy(dx: -padding, dy: -padding).intersection(bounds)
     }
 
     /// A Highlighter click: the line under the point, a touch taller than its glyphs.
