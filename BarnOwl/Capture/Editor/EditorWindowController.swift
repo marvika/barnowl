@@ -24,6 +24,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSTool
     private let scrollView = NSScrollView()
     private let optionsLayout = OptionsBarLayout()
     private var inspectorItem: NSSplitViewItem?
+    private var inspectorObservation: NSKeyValueObservation?
     private var toolGroup: NSToolbarItemGroup?
     private var modeGroup: NSToolbarItemGroup?
     private var copyItem: NSToolbarItem?
@@ -100,6 +101,14 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSTool
         inspector.isCollapsed = !model.showsFrame
         split.addSplitViewItem(inspector)
         inspectorItem = inspector
+        // Closed by dragging its edge: the Frame button follows.
+        inspectorObservation = inspector.observe(\.isCollapsed, options: [.new]) { [weak self] item, _ in
+            let collapsed = item.isCollapsed
+            MainActor.assumeIsolated {
+                guard let self, self.model.showsFrame == collapsed else { return }
+                self.model.showsFrame = !collapsed
+            }
+        }
         return split
     }
 

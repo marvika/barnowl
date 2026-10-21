@@ -757,8 +757,13 @@ extension EditorCanvas {
 
     func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
         switch menuItem.action {
-        case #selector(undo(_:)): return gesture == nil && model.canUndo
-        case #selector(redo(_:)): return gesture == nil && model.undoManager.canRedo
+        case #selector(undo(_:)):
+            // "Undo Add Arrow", as the system's own editors say it.
+            menuItem.title = model.undoManager.undoMenuItemTitle
+            return gesture == nil && model.canUndo
+        case #selector(redo(_:)):
+            menuItem.title = model.undoManager.redoMenuItemTitle
+            return gesture == nil && model.undoManager.canRedo
         case #selector(delete(_:)), #selector(cut(_:)): return !model.selection.isEmpty
         case #selector(paste(_:)):
             let types: [NSPasteboard.PasteboardType] = [.barnOwlMarks, .png, .tiff]
