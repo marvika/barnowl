@@ -984,7 +984,7 @@ struct CaptureActionBar: View {
     var body: some View {
         VStack(spacing: 5) {
             HStack(spacing: 4) {
-                BarButton(title: "Edit", symbol: "pencil.tip", key: "E") { act(.edit) }
+                BarButton(title: "Edit", symbol: "pencil", key: "E") { act(.edit) }
                 BarButton(title: "Pin", symbol: "pin", key: "P") { act(.pin) }
                 BarButton(title: primary, symbol: "arrow.down.doc", key: "↩", prominent: true) { act(.primary) }
                 Button { act(nil) } label: {

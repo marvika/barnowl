@@ -139,8 +139,8 @@ enum SensitiveTextFinder {
     /// side: Vision's boxes for part of a line can leave descenders showing.
     static func padded(_ rect: CGRect, line: CGRect) -> CGRect {
         let height = line.height
-        return CGRect(x: rect.minX - height * 0.25, y: line.minY - height * 0.15,
-                      width: rect.width + height * 0.5, height: height * 1.3)
+        return CGRect(x: rect.minX - height * 0.25, y: line.minY - height * 0.1,
+                      width: rect.width + height * 0.5, height: height * 1.2)
     }
 
     /// Groups lines into blocks: same left edge (within half a line), and

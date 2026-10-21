@@ -271,7 +271,7 @@ private struct CaptureCardView: View {
             IconButton(symbol: cards.isSaved(card.id) ? "folder" : "square.and.arrow.down",
                        label: cards.isSaved(card.id) ? "Show in Finder" : "Save") { cards.save(card.id) }
             IconButton(symbol: "pin", label: "Pin") { cards.pin(card.id) }
-            IconButton(symbol: "pencil.tip", label: "Edit", prominent: true) { cards.edit(card.id) }
+            IconButton(symbol: "pencil", label: "Edit", prominent: true) { cards.edit(card.id) }
         }
         .padding(.bottom, 8)
     }

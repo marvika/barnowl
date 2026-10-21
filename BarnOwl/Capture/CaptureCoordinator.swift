@@ -649,9 +649,11 @@ extension CaptureCoordinator: CaptureEditorHost {
             Task {
                 guard let image = await editor.render(), var capture = self.capture(id) else { return }
                 capture.image = image
-                // Its file still has the old picture; dragging or saving uses the new one.
+                // Its file and the clipboard still have the old picture; dragging,
+                // copying or saving uses the new one.
                 capture.unsavedEdits = capture.fileURL != nil
                 self.captures[id] = capture
+                self.copied.remove(id)
                 self.cards.add(capture, status: "Edited · not copied yet", kept: false)
             }
         }
