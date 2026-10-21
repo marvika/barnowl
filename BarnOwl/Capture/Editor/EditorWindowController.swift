@@ -58,7 +58,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSTool
         window.isReleasedWhenClosed = false
         window.tabbingMode = .disallowed
         window.delegate = self
-        window.backgroundColor = .underPageBackgroundColor
+        window.backgroundColor = EditorCanvas.backdrop
 
         let toolbar = NSToolbar(identifier: "captureEditor.toolbar")
         toolbar.delegate = self
@@ -120,7 +120,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSTool
         scrollView.contentView = clip
         scrollView.documentView = canvas
         scrollView.drawsBackground = true
-        scrollView.backgroundColor = .underPageBackgroundColor
+        scrollView.backgroundColor = EditorCanvas.backdrop
         scrollView.hasHorizontalScroller = true
         scrollView.hasVerticalScroller = true
         scrollView.autohidesScrollers = true
@@ -304,8 +304,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSTool
             item.toolTip = "Copy, save and close (↩)"
             item.isBordered = true
             item.style = .prominent
-            // A deeper lavender than the brand's, so the white label reads at 4.5:1.
-            item.backgroundTintColor = NSColor(srgbRed: 0x6A / 255, green: 0x64 / 255, blue: 0xF0 / 255, alpha: 1)
+            item.backgroundTintColor = EditorCanvas.accentFill
             item.target = self
             item.action = #selector(donePressed)
             return item

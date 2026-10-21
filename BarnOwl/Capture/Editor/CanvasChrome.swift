@@ -222,14 +222,32 @@ struct CanvasChrome {
         context.setStrokeColor(CGColor(gray: 1, alpha: 0.9))
         context.stroke(crop, width: unit)
 
-        // Corner brackets and edge bars, like Photos, with a faint shadow to read on white.
-        context.setShadow(offset: .zero, blur: 3, color: CGColor(gray: 0, alpha: 0.45))
+        // Corner brackets and edge bars, like Photos: white, with a thin dark outline and a faint
+        // shadow so they read on white captures too.
         let arm: CGFloat = min(18 * unit, crop.width / 3, crop.height / 3)
         let bar: CGFloat = 3.5 * unit
+        let inset: CGFloat = bar / 2
+        let brackets = cropBrackets(crop, arm: arm, inset: inset)
+        context.setLineCap(.round)
+        context.setLineJoin(.round)
+        context.setShadow(offset: .zero, blur: 3, color: CGColor(gray: 0, alpha: 0.3))
+        context.addPath(brackets)
+        context.setStrokeColor(CGColor(gray: 0, alpha: 0.35))
+        context.setLineWidth(bar + 2 * unit)
+        context.strokePath()
+        context.setShadow(offset: .zero, blur: 0, color: nil)
+        context.addPath(brackets)
         context.setStrokeColor(CGColor(gray: 1, alpha: 1))
         context.setLineWidth(bar)
-        context.setLineCap(.round)
-        let inset: CGFloat = bar / 2
+        context.strokePath()
+        context.restoreGState()
+
+        drawLabel("\(Int(draft.width)) × \(Int(draft.height))", inside: crop)
+    }
+
+    /// The crop's corner brackets and the bars at the middle of each edge, just inside it.
+    private func cropBrackets(_ crop: CGRect, arm: CGFloat, inset: CGFloat) -> CGPath {
+        let path = CGMutablePath()
         let corners: [(CGPoint, CGFloat, CGFloat)] = [
             (CGPoint(x: crop.minX + inset, y: crop.minY + inset), 1, 1),
             (CGPoint(x: crop.maxX - inset, y: crop.minY + inset), -1, 1),
@@ -237,23 +255,20 @@ struct CanvasChrome {
             (CGPoint(x: crop.minX + inset, y: crop.maxY - inset), 1, -1),
         ]
         for (corner, dx, dy) in corners {
-            context.move(to: CGPoint(x: corner.x, y: corner.y + arm * dy))
-            context.addLine(to: corner)
-            context.addLine(to: CGPoint(x: corner.x + arm * dx, y: corner.y))
+            path.move(to: CGPoint(x: corner.x, y: corner.y + arm * dy))
+            path.addLine(to: corner)
+            path.addLine(to: CGPoint(x: corner.x + arm * dx, y: corner.y))
         }
         let half: CGFloat = arm / 2
-        context.move(to: CGPoint(x: crop.midX - half, y: crop.minY + inset))
-        context.addLine(to: CGPoint(x: crop.midX + half, y: crop.minY + inset))
-        context.move(to: CGPoint(x: crop.midX - half, y: crop.maxY - inset))
-        context.addLine(to: CGPoint(x: crop.midX + half, y: crop.maxY - inset))
-        context.move(to: CGPoint(x: crop.minX + inset, y: crop.midY - half))
-        context.addLine(to: CGPoint(x: crop.minX + inset, y: crop.midY + half))
-        context.move(to: CGPoint(x: crop.maxX - inset, y: crop.midY - half))
-        context.addLine(to: CGPoint(x: crop.maxX - inset, y: crop.midY + half))
-        context.strokePath()
-        context.restoreGState()
-
-        drawLabel("\(Int(draft.width)) × \(Int(draft.height))", inside: crop)
+        path.move(to: CGPoint(x: crop.midX - half, y: crop.minY + inset))
+        path.addLine(to: CGPoint(x: crop.midX + half, y: crop.minY + inset))
+        path.move(to: CGPoint(x: crop.midX - half, y: crop.maxY - inset))
+        path.addLine(to: CGPoint(x: crop.midX + half, y: crop.maxY - inset))
+        path.move(to: CGPoint(x: crop.minX + inset, y: crop.midY - half))
+        path.addLine(to: CGPoint(x: crop.minX + inset, y: crop.midY + half))
+        path.move(to: CGPoint(x: crop.maxX - inset, y: crop.midY - half))
+        path.addLine(to: CGPoint(x: crop.maxX - inset, y: crop.midY + half))
+        return path
     }
 
     /// A small dark capsule with the crop's size, inside its bottom edge.

@@ -32,9 +32,13 @@ struct ZoomCapsule: View {
                 Button("100%") { zoom(.percent(1)) }
                 Button("200%") { zoom(.percent(2)) }
             } label: {
-                Text(verbatim: "\(Int((state.zoom * 100).rounded()))%")
-                    .font(.system(size: 11.5, weight: .medium).monospacedDigit())
-                    .frame(minWidth: 40)
+                HStack(spacing: 3) {
+                    Text(verbatim: "\(Int((state.zoom * 100).rounded()))%")
+                        .font(.system(size: 11.5, weight: .medium).monospacedDigit())
+                    Image(systemName: "chevron.down")
+                        .font(.system(size: 7, weight: .bold))
+                }
+                .frame(minWidth: 48)
             }
             .menuStyle(.button)
             .menuIndicator(.hidden)
@@ -98,6 +102,8 @@ struct HintStrip: View {
 
     private var toolHint: String? {
         guard model.editingText == nil, model.review == nil, model.showsToolHint(model.tool) else { return nil }
+        // Select with nothing selected has its hint in the options bar already.
+        if model.tool == .select, model.selection.isEmpty { return nil }
         return Self.hint(model.tool)
     }
 
