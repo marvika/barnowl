@@ -17,8 +17,8 @@ packages:
 settings:
   base:
     # One version for the app and its widget.
-    MARKETING_VERSION: 0.14.1
-    CURRENT_PROJECT_VERSION: 22
+    MARKETING_VERSION: 0.15.0
+    CURRENT_PROJECT_VERSION: 23
     SWIFT_VERSION: "6.0"
     MACOSX_DEPLOYMENT_TARGET: "26.0"
 targets:

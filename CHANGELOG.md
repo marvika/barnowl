@@ -3,7 +3,7 @@
 All notable changes to Barn Owl. Versions follow [semantic versioning](https://semver.org);
 before 1.0, a minor version can change behaviour.
 
-## Unreleased
+## 0.15.0
 
 - **Capture: screenshots with markup.** Optional; turn it on in Settings ›
   Capture or in the setup guide.
@@ -27,9 +27,30 @@ before 1.0, a minor version can change behaviour.
     takes your keyboard. Click it to edit, drag it into any app, or point at
     it to copy, save or pin. If the capture shows a key or token, the card
     offers to hide it.
+  - **The editor:** arrows (straight or curved), rectangles, ellipses, text,
+    numbered steps, highlighter, pen, blur and pixelate, spotlight and crop,
+    each a key away (A, R, O, T, N, H, P, B, S, C). Every mark stays movable
+    and restylable until you're done.
+    - **Smart where it helps:** click a paragraph with Rectangle or
+      Spotlight to frame it; click a word with Redact to hide it; drag the
+      highlighter across text and it follows the lines. Marks snap into line
+      with each other and the picture.
+    - **Remembers your style:** one pen colour for arrows, shapes, text and
+      steps, as CleanShot does, plus each tool's size and style, between
+      captures. Text comes in four faces, three weights, five looks
+      (including a callout) and any size.
+    - **Frame:** put the capture on a gradient, a colour or your wallpaper,
+      with padding, rounded corners, a shadow and an aspect ratio for
+      sharing.
+    - **Private info:** the editor reads the capture's text on your Mac and
+      offers to hide keys, passwords, card numbers, emails and other
+      personal details; ⇧B reviews what it found before you hide it. Done
+      asks once if a key is still showing.
+    - Done (⌘Return) copies it and saves over its file. Close without Done
+      and your marks are kept; the card offers to copy or save them.
   - **Files:** saved like macOS's own screenshots (same folder, name and
-    tags) unless you choose otherwise. Every capture stays editable for 30
-    days.
+    tags) unless you choose otherwise. Captures stay editable for 30 days, or
+    7, or not at all, as you choose in Settings › Capture.
 - **Presenter mode no longer moves your pointer.** On macOS 26 it used to hide
   the menu bar's icons by dragging them one by one, which sent the pointer to
   the menu bar and could leave it there as a call started sharing. Now an
