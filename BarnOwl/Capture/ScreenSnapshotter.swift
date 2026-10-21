@@ -26,6 +26,9 @@ struct DisplaySnapshot {
 struct CaptureOptions {
     /// Other apps' menu bar icons, for a clean menu bar.
     var hiddenWindows: Set<CGWindowID> = []
+    /// Leaves only the clock and Control Center in the menu bar: also the
+    /// system's own icons and the dot that shows the screen is being captured.
+    var cleanMenuBar = false
     var hidesDesktopIcons = false
     var showsPointer = false
 }
@@ -85,6 +88,11 @@ enum ScreenSnapshotter {
         }
         if options.hidesDesktopIcons, window.windowLayer == Int(CGWindowLevelForKey(.desktopIconWindow)),
            window.owningApplication?.bundleIdentifier == "com.apple.finder" {
+            return true
+        }
+        if options.cleanMenuBar, window.windowLayer == Int(CGWindowLevelForKey(.statusWindow)),
+           window.owningApplication?.bundleIdentifier == "com.apple.controlcenter",
+           let title = window.title, !(title == "Clock" || title.hasPrefix("BentoBox")) {
             return true
         }
         return options.hiddenWindows.contains(window.windowID)

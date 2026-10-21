@@ -5,6 +5,24 @@ before 1.0, a minor version can change behaviour.
 
 ## Unreleased
 
+- **Capture: screenshots with markup** (optional; turn it on in Settings ›
+  Capture or the setup guide).
+  - **Capturing:** ⌃⌥⌘4 freezes the screen so you can drag an area, click
+    a window, or press Space to pick windows, with a loupe that shows the
+    pixels, their position and colour. ⌃⌥⌘3 takes the whole screen, and
+    another shortcut takes the same area again. Once macOS's own shortcuts
+    are off, Barn Owl can answer ⌘⇧4 and ⌘⇧3 too.
+  - **Clean shots:** every capture leaves out other apps' menu bar icons and
+    the desktop icons, without changing anything on screen.
+  - **After a capture:** a small card in the corner copies (⌘C), saves (⌘S),
+    opens the editor (Return), pins it above your windows (P) or drags into
+    any app. Files are named and tagged like macOS's own screenshots, in the
+    same folder unless you choose another.
+  - **The editor:** tapered, bendable arrows, lines, boxes, filled boxes,
+    ellipses, text in three styles, numbered steps, highlighter, pen, redact
+    (solid, pixelate or blur), spotlight and crop. Also a frame with
+    backgrounds, padding, rounded corners, shadow and aspect ratios, and full
+    undo. Every tool has a single-letter key.
 - **Presenter mode no longer moves your pointer.** On macOS 26 it used to hide
   the menu bar's icons by dragging them one by one, which sent the pointer to
   the menu bar and could leave it there as a call started sharing. Now an

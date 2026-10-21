@@ -114,7 +114,8 @@ final class CaptureCoordinator {
             // Only the icons go; the clock and Control Center stay.
             hidden = Set(scanner.items.filter(\.isMovable).map(\.windowID)).union(ownStatusWindows())
         }
-        return CaptureOptions(hiddenWindows: hidden, hidesDesktopIcons: Preferences.captureHidesDesktopIcons,
+        return CaptureOptions(hiddenWindows: hidden, cleanMenuBar: Preferences.captureCleanMenuBar,
+                              hidesDesktopIcons: Preferences.captureHidesDesktopIcons,
                               showsPointer: Preferences.captureShowsPointer)
     }
 

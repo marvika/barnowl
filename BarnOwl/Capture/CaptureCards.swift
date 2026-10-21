@@ -185,8 +185,9 @@ private struct CaptureCardView: View {
         }
         .padding(8)
         .frame(width: CaptureCards.width)
-        .glassEffect(.regular, in: .rect(cornerRadius: 16))
-        .opacity(hovering ? 1 : 0.92)
+        // Tinted like Barn Owl's panels, so text behind doesn't show through.
+        .glassEffect(.regular.tint(Brand.indigoDeep.opacity(0.62)), in: .rect(cornerRadius: 16))
+        .opacity(hovering ? 1 : 0.96)
         .overlay(alignment: .topLeading) {
             if hovering {
                 Button { cards.remove(card.id) } label: {
