@@ -226,6 +226,8 @@ final class SelectionView: NSView {
     }
 
     private var snapshot: DisplaySnapshot
+    /// A mostly dark screen needs a deeper dim for the selection to stand out.
+    private var darkScreen: Bool
     private let targets: [WindowTarget]
     private let showsHints: Bool
     private let dim = CAShapeLayer()
@@ -254,6 +256,7 @@ final class SelectionView: NSView {
 
     init(snapshot: DisplaySnapshot, targets: [WindowTarget], mode: CaptureMode, showsHints: Bool) {
         self.snapshot = snapshot
+        darkScreen = Self.isDark(snapshot.image)
         self.targets = targets
         self.mode = mode
         self.showsHints = showsHints
@@ -280,9 +283,6 @@ final class SelectionView: NSView {
         handles.shadowOffset = CGSize(width: 0, height: -1)
         labelBackground.backgroundColor = NSColor(white: 0.08, alpha: 0.72).cgColor
         labelBackground.cornerRadius = 7
-        label.font = NSFont.monospacedDigitSystemFont(ofSize: 12, weight: .semibold)
-        label.fontSize = 12
-        label.foregroundColor = NSColor.white.cgColor
         label.alignmentMode = .center
         label.contentsScale = snapshot.scale
         labelBackground.addSublayer(label)
@@ -315,6 +315,7 @@ final class SelectionView: NSView {
 
     func replace(_ snapshot: DisplaySnapshot) {
         self.snapshot = snapshot
+        darkScreen = Self.isDark(snapshot.image)
         layer?.contents = snapshot.image
         loupe.setImage(snapshot.image, scale: snapshot.scale)
     }
@@ -493,6 +494,21 @@ final class SelectionView: NSView {
     }
 
     /// Handle points, AppKit-style: top is the larger y.
+    /// Whether a picture is mostly dark: its average brightness under a quarter.
+    static func isDark(_ image: CGImage) -> Bool {
+        var pixels = [UInt8](repeating: 0, count: 64)
+        let drawn: Bool = pixels.withUnsafeMutableBytes { buffer in
+            guard let context = CGContext(data: buffer.baseAddress, width: 8, height: 8, bitsPerComponent: 8, bytesPerRow: 8,
+                                          space: CGColorSpaceCreateDeviceGray(), bitmapInfo: CGImageAlphaInfo.none.rawValue)
+            else { return false }
+            context.interpolationQuality = .medium
+            context.draw(image, in: CGRect(x: 0, y: 0, width: 8, height: 8))
+            return true
+        }
+        guard drawn else { return false }
+        return Double(pixels.reduce(0) { $0 + Int($1) }) / 64 / 255 < 0.25
+    }
+
     static func handlePoints(of rect: CGRect) -> [(Handle, CGPoint)] {
         [(.topLeft, CGPoint(x: rect.minX, y: rect.maxY)), (.top, CGPoint(x: rect.midX, y: rect.maxY)),
          (.topRight, CGPoint(x: rect.maxX, y: rect.maxY)), (.right, CGPoint(x: rect.maxX, y: rect.midY)),
@@ -500,11 +516,19 @@ final class SelectionView: NSView {
          (.bottomLeft, CGPoint(x: rect.minX, y: rect.minY)), (.left, CGPoint(x: rect.minX, y: rect.midY))]
     }
 
+    /// The handles, kept whole on screen when the selection reaches an edge.
+    private func visibleHandles(of rect: CGRect) -> [(Handle, CGPoint)] {
+        let inside = bounds.insetBy(dx: 6, dy: 6)
+        return Self.handlePoints(of: rect).map { handle, centre in
+            (handle, CGPoint(x: min(max(centre.x, inside.minX), inside.maxX), y: min(max(centre.y, inside.minY), inside.maxY)))
+        }
+    }
+
     private func handle(at point: CGPoint, in rect: CGRect) -> Handle? {
         // Small selections keep only the corners, so the middle stays draggable.
         let corners: Set<Handle> = [.topLeft, .topRight, .bottomRight, .bottomLeft]
         let small = rect.width < 60 || rect.height < 60
-        return Self.handlePoints(of: rect).first { handle, centre in
+        return visibleHandles(of: rect).first { handle, centre in
             (!small || corners.contains(handle)) && hypot(point.x - centre.x, point.y - centre.y) <= 8
         }?.0
     }
@@ -655,7 +679,7 @@ final class SelectionView: NSView {
         dim.frame = bounds
         dim.path = path
         // Lighter before you start, so the screen stays readable.
-        dim.fillColor = NSColor.black.withAlphaComponent(focus == nil ? 0.2 : 0.42).cgColor
+        dim.fillColor = NSColor.black.withAlphaComponent(focus == nil ? 0.2 : darkScreen ? 0.62 : 0.5).cgColor
 
         // A window (hovered or clicked) gets a lavender wash; an area gets a crisp edge.
         let windowLike = selection == nil ? focus != nil && mode != .area || hovered != nil : selectedWindow != nil
@@ -669,11 +693,12 @@ final class SelectionView: NSView {
 
         // Handles once you've let go.
         handles.frame = bounds
-        if let selection, gesture == nil || resizing, !selectedScreen {
+        // A window is taken whole, so it shows none; dragging where they'd be still resizes.
+        if let selection, gesture == nil || resizing, !selectedScreen, selectedWindow == nil {
             let corners: Set<Handle> = [.topLeft, .topRight, .bottomRight, .bottomLeft]
             let small = selection.width < 60 || selection.height < 60
             let dots = CGMutablePath()
-            for (handle, centre) in Self.handlePoints(of: selection) where !small || corners.contains(handle) {
+            for (handle, centre) in visibleHandles(of: selection) where !small || corners.contains(handle) {
                 dots.addEllipse(in: CGRect(x: centre.x - 4.5, y: centre.y - 4.5, width: 9, height: 9))
             }
             handles.path = dots
@@ -694,9 +719,16 @@ final class SelectionView: NSView {
         }
         let size = "\(Int(focus.width.rounded())) × \(Int(focus.height.rounded()))"
         let name = selectedWindow?.appName ?? (selection == nil ? hovered?.appName : nil)
-        let text = name.map { "\($0)  \(size)" } ?? size
+        let font = NSFont.monospacedDigitSystemFont(ofSize: 12, weight: .semibold)
+        let text = NSMutableAttributedString()
+        if let name {
+            text.append(NSAttributedString(string: "\(name) · ", attributes: [.font: font, .foregroundColor: NSColor.white]))
+        }
+        text.append(NSAttributedString(string: size, attributes: [
+            .font: font, .foregroundColor: NSColor.white.withAlphaComponent(name == nil ? 1 : 0.7),
+        ]))
         label.string = text
-        let width = (text as NSString).size(withAttributes: [.font: NSFont.monospacedDigitSystemFont(ofSize: 12, weight: .semibold)]).width + 18
+        let width = text.size().width + 18
         let above = focus.maxY + 30 < bounds.maxY
         labelBackground.frame = CGRect(x: max(4, min(focus.minX, bounds.maxX - width - 4)),
                                        y: above ? focus.maxY + 8 : focus.maxY - 30, width: width, height: 22)
@@ -948,7 +980,7 @@ struct CaptureActionBar: View {
     var body: some View {
         VStack(spacing: 5) {
             HStack(spacing: 4) {
-                BarButton(title: "Edit", symbol: "pencil.tip.crop.circle", key: "E") { act(.edit) }
+                BarButton(title: "Edit", symbol: "pencil.tip", key: "E") { act(.edit) }
                 BarButton(title: "Pin", symbol: "pin", key: "P") { act(.pin) }
                 BarButton(title: primary, symbol: "arrow.down.doc", key: "↩", prominent: true) { act(.primary) }
                 Button { act(nil) } label: {
@@ -999,7 +1031,7 @@ struct CaptureActionBar: View {
         }
 
         private var background: AnyShapeStyle {
-            if prominent { return AnyShapeStyle(Brand.lavender.opacity(hovering ? 1 : 0.92)) }
+            if prominent { return AnyShapeStyle(Brand.lavenderFill.opacity(hovering ? 1 : 0.94)) }
             return AnyShapeStyle(.white.opacity(hovering ? 0.22 : 0.12))
         }
     }

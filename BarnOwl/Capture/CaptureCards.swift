@@ -242,6 +242,7 @@ private struct CaptureCardView: View {
             .aspectRatio(contentMode: .fit)
             .frame(maxWidth: .infinity, maxHeight: 140)
             .clipShape(.rect(cornerRadius: 8))
+            .overlay { RoundedRectangle(cornerRadius: 8).strokeBorder(.primary.opacity(0.12), lineWidth: 0.5) }
             .overlay {
                 if hovering {
                     RoundedRectangle(cornerRadius: 8).fill(.black.opacity(0.2)).allowsHitTesting(false)
@@ -264,7 +265,7 @@ private struct CaptureCardView: View {
             IconButton(symbol: cards.isSaved(card.id) ? "folder" : "square.and.arrow.down",
                        label: cards.isSaved(card.id) ? "Show in Finder" : "Save") { cards.save(card.id) }
             IconButton(symbol: "pin", label: "Pin") { cards.pin(card.id) }
-            IconButton(symbol: "pencil.tip.crop.circle", label: "Edit", prominent: true) { cards.edit(card.id) }
+            IconButton(symbol: "pencil.tip", label: "Edit", prominent: true) { cards.edit(card.id) }
         }
         .padding(.bottom, 8)
     }
@@ -273,8 +274,8 @@ private struct CaptureCardView: View {
         HStack(spacing: 6) {
             Image(systemName: card.kept ? "checkmark.circle.fill" : "exclamationmark.circle.fill")
                 .foregroundStyle(card.kept ? Color.green : Color.orange)
-                .font(.system(size: 12))
-            Text(card.status).font(.caption.weight(.medium)).foregroundStyle(.secondary)
+                .font(.system(size: 11))
+            Text(card.status).font(.system(size: 11, weight: .medium)).foregroundStyle(.secondary)
                 .lineLimit(1)
             Spacer(minLength: 4)
             if let undo = card.undo {
@@ -286,15 +287,15 @@ private struct CaptureCardView: View {
 
     private var secretsRow: some View {
         HStack(spacing: 6) {
-            Image(systemName: "eye.trianglebadge.exclamationmark").foregroundStyle(.orange).font(.system(size: 12))
+            Image(systemName: "eye.trianglebadge.exclamationmark").foregroundStyle(Brand.amber).font(.system(size: 11))
             Text("\(card.secretTitle) visible")
-                .font(.caption.weight(.medium)).lineLimit(1).truncationMode(.middle)
+                .font(.system(size: 11, weight: .medium)).lineLimit(2).fixedSize(horizontal: false, vertical: true)
             Spacer(minLength: 4)
             Button { cards.hide(card.id) } label: {
-                Text("Hide").font(.caption.weight(.semibold))
-                    .foregroundStyle(.white)
+                Text("Hide").font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(Brand.indigoDeep)
                     .padding(.horizontal, 10).padding(.vertical, 4)
-                    .background(Color.orange, in: .capsule)
+                    .background(Brand.amber, in: .capsule)
             }
             .buttonStyle(PressableStyle())
             .help("Cover them with solid bars, in the copy and the saved file")
@@ -318,7 +319,7 @@ private struct IconButton: View {
                 .font(.system(size: 12, weight: .semibold))
                 .foregroundStyle(.white)
                 .frame(width: 30, height: 30)
-                .background(prominent ? AnyShapeStyle(Brand.lavender) : AnyShapeStyle(.black.opacity(hovering ? 0.6 : 0.45)),
+                .background(prominent ? AnyShapeStyle(Brand.lavenderFill) : AnyShapeStyle(.black.opacity(hovering ? 0.6 : 0.45)),
                             in: .circle)
                 .overlay { Circle().strokeBorder(.white.opacity(0.35), lineWidth: 0.5) }
                 .scaleEffect(hovering ? 1.06 : 1)

@@ -19,7 +19,7 @@ before 1.0, a minor version can change behaviour.
     - L in the overlay brings back the last area.
     - ⌃⌥⌘E reopens the last capture with its marks still editable.
     - ? shows every key.
-    - Once macOS's own shortcuts are off, Barn Owl can answer ⌘⇧4 and ⌘⇧3.
+    - Once macOS's own shortcuts are off, Barn Owl can answer ⇧⌘4 and ⇧⌘3.
   - **Clean shots:** other apps' menu bar icons, the desktop icons and the
     "screen is being recorded" dot are left out of the picture. Nothing
     changes on screen.

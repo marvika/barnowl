@@ -104,11 +104,10 @@ struct CapturePane: View {
             LabeledContent("Capture the same area again") { KeyboardShortcuts.Recorder(for: .captureSameArea) }
             LabeledContent("Edit the last capture") { KeyboardShortcuts.Recorder(for: .editLastCapture) }
             Toggle(isOn: $appleKeys) {
-                BadgeLabel(title: "Also answer ⌘⇧4 and ⌘⇧3",
-                           subtitle: systemKeysOn
-                               ? "macOS's own screenshot shortcuts are still on. Turn them off in Keyboard Shortcuts › Screenshots; Barn Owl notices by itself."
-                               : "macOS's own screenshot shortcuts are off, so Barn Owl can take them.",
-                           symbol: "command", color: .purple)
+                Text("Also answer ⇧⌘4 and ⇧⌘3")
+                Text(systemKeysOn
+                     ? "macOS's own screenshot shortcuts are still on. Turn them off in Keyboard Shortcuts › Screenshots; Barn Owl notices by itself."
+                     : "macOS's own screenshot shortcuts are off, so Barn Owl can take them.")
             }
             if appleKeys && systemKeysOn {
                 LabeledContent("Keyboard Shortcuts") {
@@ -254,7 +253,7 @@ struct CaptureStep: View {
             if enabled {
                 Card {
                     PermissionRow(permission: .screenRecording, model: model)
-                    CardRow(title: "Also answer ⌘⇧4 and ⌘⇧3",
+                    CardRow(title: "Also answer ⇧⌘4 and ⇧⌘3",
                             subtitle: systemKeysOn ? "First switch off macOS's own, under Keyboard Shortcuts › Screenshots."
                                                    : "macOS's own are off, so Barn Owl can take them.",
                             symbol: "command", color: .purple) {

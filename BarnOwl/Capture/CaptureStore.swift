@@ -66,7 +66,7 @@ struct Capture: Identifiable {
 /// Where captures go and how they're written, copied and named.
 enum CaptureStore {
     /// The folder chosen in Settings, or the one macOS uses for its own
-    /// screenshots (the Desktop unless changed with ⌘⇧5 › Options).
+    /// screenshots (the Desktop unless changed with ⇧⌘5 › Options).
     static var folder: URL {
         let chosen = Preferences.captureFolder
         if !chosen.isEmpty, FileManager.default.fileExists(atPath: chosen) { return URL(fileURLWithPath: chosen) }
@@ -253,7 +253,7 @@ enum OtherCaptureApps {
     }
 }
 
-/// macOS's own screenshot shortcuts (⌘⇧3, ⌘⇧4, ⌘⇧5 and their clipboard
+/// macOS's own screenshot shortcuts (⇧⌘3, ⇧⌘4, ⇧⌘5 and their clipboard
 /// versions), read from System Settings. Barn Owl never changes them.
 enum SystemScreenshotShortcuts {
     /// The symbolic hot key numbers macOS uses for them.

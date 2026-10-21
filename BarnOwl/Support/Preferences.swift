@@ -259,7 +259,7 @@ enum Preferences {
         get { defaults.bool(forKey: PrefKey.captureEnabled) }
         set { defaults.set(newValue, forKey: PrefKey.captureEnabled) }
     }
-    /// Also answer ⌘⇧3 and ⌘⇧4, once macOS's own screenshot shortcuts are off.
+    /// Also answer ⇧⌘3 and ⇧⌘4, once macOS's own screenshot shortcuts are off.
     static var captureAppleKeys: Bool { defaults.bool(forKey: PrefKey.captureAppleKeys) }
     static var captureCopies: Bool { defaults.bool(forKey: PrefKey.captureCopies) }
     static var captureSaves: Bool { defaults.bool(forKey: PrefKey.captureSaves) }

@@ -46,7 +46,7 @@ final class CaptureCoordinator {
         Task.detached(priority: .background) { CaptureLibrary.prune() }
     }
 
-    /// Turns the shortcuts on or off with the setting, and takes ⌘⇧3 and ⌘⇧4
+    /// Turns the shortcuts on or off with the setting, and takes ⇧⌘3 and ⇧⌘4
     /// only while you've asked for them and macOS's own are off.
     func applySettings() {
         let names: [KeyboardShortcuts.Name] = [.captureArea, .captureScreen, .captureSameArea, .editLastCapture]
@@ -73,7 +73,8 @@ final class CaptureCoordinator {
         isCapturing = true
         rememberFrontApp()
         let appName = previousApp?.localizedName
-        Task {
+        Task { [weak self] in
+            guard let self else { return }
             do {
                 let snapshots = try await ScreenSnapshotter.snapshots(options: options)
                 guard !snapshots.isEmpty else { isCapturing = false; return }
@@ -577,7 +578,7 @@ extension CaptureCoordinator: CaptureEditorHost {
                 guard let image = await editor.render(), var capture = self.capture(id) else { return }
                 capture.image = image
                 self.captures[id] = capture
-                self.cards.add(capture, status: "Edits kept · not copied yet", kept: false)
+                self.cards.add(capture, status: "Edited · not copied yet", kept: false)
             }
         }
         // Opened with E and closed untouched: unless it was copied or saved, the
