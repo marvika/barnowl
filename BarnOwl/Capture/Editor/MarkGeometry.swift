@@ -526,7 +526,8 @@ enum MarkGeometry {
             return counterTail(mark, scale: scale) == nil ? [] : [(.end, mark.end)]
         case .text:
             // A callout's pointer can be dragged; text otherwise moves as a whole.
-            return mark.style.textStyle == .callout ? [(.end, mark.end)] : []
+            guard mark.style.textStyle == .callout else { return [] }
+            return [(.end, mark.end)]
         case .pen:
             return boxHandles(penBounds(mark.points), edges: false)
         case .image:

@@ -180,7 +180,9 @@ final class AnnotationRenderer: Sendable {
             let factor: CGFloat = max(across, down)
             let width: CGFloat = CGFloat(desktop.width) * factor
             let height: CGFloat = CGFloat(desktop.height) * factor
-            let rect = CGRect(x: (canvas.width - width) / 2, y: (canvas.height - height) / 2, width: width, height: height)
+            let x: CGFloat = (canvas.width - width) / 2
+            let y: CGFloat = (canvas.height - height) / 2
+            let rect = CGRect(x: x, y: y, width: width, height: height)
             context.saveGState()
             context.clip(to: canvas)
             drawImage(desktop, in: rect, context)

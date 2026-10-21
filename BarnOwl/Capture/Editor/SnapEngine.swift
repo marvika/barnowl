@@ -54,12 +54,18 @@ enum SnapEngine {
         return (CGPoint(x: dx, y: dy), guides)
     }
 
+    /// A rectangle's two edges and centre across one axis: x for vertical guides, y otherwise.
+    private static func edges(_ rect: CGRect, vertical: Bool) -> [CGFloat] {
+        if vertical { return [rect.minX, rect.midX, rect.maxX] }
+        return [rect.minY, rect.midY, rect.maxY]
+    }
+
     /// Every line where the moved rectangle now meets a target exactly.
     private static func lines(_ moved: CGRect, _ targets: [CGRect], vertical: Bool) -> [SnapGuide] {
         var guides: [SnapGuide] = []
-        let ours: [CGFloat] = vertical ? [moved.minX, moved.midX, moved.maxX] : [moved.minY, moved.midY, moved.maxY]
+        let ours = edges(moved, vertical: vertical)
         for target in targets {
-            let theirs: [CGFloat] = vertical ? [target.minX, target.midX, target.maxX] : [target.minY, target.midY, target.maxY]
+            let theirs = edges(target, vertical: vertical)
             for value in ours where theirs.contains(where: { abs($0 - value) < 0.5 }) {
                 let union = moved.union(target)
                 let from: CGFloat = vertical ? union.minY : union.minX

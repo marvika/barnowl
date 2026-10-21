@@ -183,7 +183,10 @@ struct CanvasChrome {
         guard let colour = ImageSampler.colour(at: point, in: model.image) else { return }
         let centre = canvas.viewPoint(fromImage: point)
         let radius: CGFloat = 16 * unit
-        let swatch = CGRect(x: centre.x + 14 * unit, y: centre.y - radius * 2 - 6 * unit, width: radius * 2, height: radius * 2)
+        let diameter: CGFloat = radius * 2
+        let x: CGFloat = centre.x + 14 * unit
+        let y: CGFloat = centre.y - diameter - 6 * unit
+        let swatch = CGRect(x: x, y: y, width: diameter, height: diameter)
         context.saveGState()
         context.setShadow(offset: CGSize(width: 0, height: -1), blur: 4, color: CGColor(gray: 0, alpha: 0.35))
         context.setFillColor(CGColor(gray: 1, alpha: 1))
@@ -260,10 +263,14 @@ struct CanvasChrome {
         let size = string.size()
         let width: CGFloat = size.width + 16 * unit
         let height: CGFloat = size.height + 6 * unit
-        let capsule = CGRect(x: rect.midX - width / 2, y: rect.maxY - height - 12 * unit, width: width, height: height)
+        let left: CGFloat = rect.midX - width / 2
+        let top: CGFloat = rect.maxY - height - 12 * unit
+        let capsule = CGRect(x: left, y: top, width: width, height: height)
         guard capsule.minY > rect.minY else { return }
         NSColor(white: 0, alpha: 0.6).setFill()
         NSBezierPath(roundedRect: capsule, xRadius: height / 2, yRadius: height / 2).fill()
-        string.draw(at: CGPoint(x: capsule.minX + 8 * unit, y: capsule.minY + 3 * unit))
+        let textX: CGFloat = capsule.minX + 8 * unit
+        let textY: CGFloat = capsule.minY + 3 * unit
+        string.draw(at: CGPoint(x: textX, y: textY))
     }
 }

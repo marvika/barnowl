@@ -119,7 +119,9 @@ enum SmartFit {
     /// A word's box at its line's full height.
     static func padded(_ rect: CGRect, line: CGRect) -> CGRect {
         let grow: CGFloat = line.height * 0.12
-        return CGRect(x: rect.minX - grow, y: line.minY - grow, width: rect.width + 2 * grow, height: line.height + 2 * grow)
+        let width: CGFloat = rect.width + 2 * grow
+        let height: CGFloat = line.height + 2 * grow
+        return CGRect(x: rect.minX - grow, y: line.minY - grow, width: width, height: height)
     }
 
     private static func smallest(_ rects: [CGRect]) -> CGRect? {
