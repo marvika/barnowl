@@ -93,6 +93,8 @@ final class AppModel {
         case .barn: showBarn()
         case .roost: showRoost(nil)
         case .showAllIcons: sections.showAll()
+        case .captureArea: capture.start(.area)
+        case .captureScreen: capture.captureScreen()
         case .settings(let pane): showSettings(SettingsPane(rawValue: pane.rawValue))
         }
     }
