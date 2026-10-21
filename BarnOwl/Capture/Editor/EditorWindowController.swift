@@ -452,9 +452,9 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSTool
         case .actualSize: canvas.setZoom(1)
         case .zoomToFit: canvas.zoomToFit()
         case .zoomIn, .fontBigger:
-            if model.isTextContext { model.stepSize(up: true) } else { canvas.zoom(by: 1.25) }
+            if model.isTextInHand { model.stepSize(up: true) } else { canvas.zoom(by: 1.25) }
         case .zoomOut, .fontSmaller:
-            if model.isTextContext { model.stepSize(up: false) } else { canvas.zoom(by: 0.8) }
+            if model.isTextInHand { model.stepSize(up: false) } else { canvas.zoom(by: 0.8) }
         case .showFrame: model.showsFrame.toggle()
         case .shortcuts: showShortcuts()
         case .bringToFront: model.bringToFront()

@@ -274,11 +274,15 @@ final class EditorModel {
         updateStyle("Change Weight") { $0.fontWeight = bold ? .semibold : .bold }
     }
 
-    /// Whether text is what ⌘B, ⌘+ and ⌘− are about: typing, text selected, or the Text tool out.
+    /// Whether text is what ⌘B is about: typing, text selected, or the Text tool out.
     var isTextContext: Bool {
+        isTextInHand || (selection.isEmpty && tool == .text)
+    }
+
+    /// Whether ⌘+ and ⌘− size text rather than zoom: only while typing or with text selected.
+    var isTextInHand: Bool {
         if editingText.flatMap({ document[$0] })?.kind == .text { return true }
-        if !selection.isEmpty { return selectedMarks.allSatisfy { $0.kind == .text } }
-        return tool == .text
+        return !selection.isEmpty && selectedMarks.allSatisfy { $0.kind == .text }
     }
 
     func resetStyle() {

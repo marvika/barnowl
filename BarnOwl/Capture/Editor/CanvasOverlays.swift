@@ -220,8 +220,14 @@ struct ShortcutsSheet: View {
     }
 
     @MainActor static func rows(_ group: EditorCommand.Group) -> [Row] {
-        var rows = EditorCommand.all.filter { $0.group == group && !$0.keyLabel.isEmpty }
-            .map { Row(title: $0.id == .done ? "Done, even while typing" : $0.title, keys: $0.keyLabel) }
+        var rows = EditorCommand.all.filter { $0.group == group && !$0.keyLabel.isEmpty }.map { command in
+            switch command.id {
+            case .done: Row(title: "Done, even while typing", keys: command.keyLabel)
+            case .smaller: Row(title: command.title, keys: "[ or −")
+            case .bigger: Row(title: command.title, keys: "] or +")
+            default: Row(title: command.title, keys: command.keyLabel)
+            }
+        }
         switch group {
         case .colourAndSize:
             rows.insert(Row(title: "Colours", keys: "1 – 8"), at: 0)

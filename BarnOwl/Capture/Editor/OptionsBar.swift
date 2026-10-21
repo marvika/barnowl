@@ -323,14 +323,14 @@ private struct SizeSection: View {
             ForEach(presets.indices, id: \.self) { index in
                 Image(nsImage: SizeSamples.image(kind: kind, index: index))
                     .accessibilityLabel(SizeLadder.presetNames[index])
-                    .help("\(SizeLadder.presetNames[index]) ([ and ] step the size)")
+                    .help("\(SizeLadder.presetNames[index]) ([ ] or − + step the size)")
                     .tag(Optional(index))
             }
         }
         .pickerStyle(.segmented)
         .labelsHidden()
         .fixedSize()
-        .help("Size ([ and ])")
+        .help("Size ([ ] or − +)")
     }
 }
 

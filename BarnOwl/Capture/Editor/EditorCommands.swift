@@ -80,6 +80,11 @@ struct EditorCommand {
 
     static let colourKeys: [ID] = [.colour1, .colour2, .colour3, .colour4, .colour5, .colour6, .colour7, .colour8]
 
+    /// − and + size marks too, alongside [ and ], on every keyboard layout.
+    static let sizeKeys: [String: ID] = ["-": .smaller, "+": .bigger, "=": .bigger]
+    /// Plain keys some layouts type with ⌥, as Norwegian does [ and ] (⌥8, ⌥9).
+    static let optionKeys: Set<String> = ["[", "]"]
+
     static func tool(_ tool: EditorTool) -> ID {
         switch tool {
         case .select: .select

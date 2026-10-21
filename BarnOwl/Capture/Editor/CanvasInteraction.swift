@@ -639,7 +639,13 @@ extension EditorCanvas {
         let step: CGFloat = flags.contains(.shift) ? 10 * scale : scale
         switch event.keyCode {
         case 53: escape()
-        case 36, 76: returnKey(command: flags.contains(.command))
+        case 36, 76:
+            if let armed = labelArmed, !flags.contains(.command) {
+                // A counter just placed: Return starts its label, as typing would.
+                beginLabelEditing(armed, typing: nil)
+            } else {
+                returnKey(command: flags.contains(.command))
+            }
         case 51, 117: model.deleteSelection()
         case 48:
             if let armed = labelArmed {
@@ -680,7 +686,12 @@ extension EditorCanvas {
     /// A plain key's command, for when no menu caught it.
     @MainActor static func bareCommand(for event: NSEvent) -> EditorCommand.ID? {
         let flags = event.modifierFlags.intersection([.command, .control, .option])
-        guard flags.isEmpty, let typed = event.characters, !typed.isEmpty else { return nil }
+        guard var typed = event.characters, !typed.isEmpty else { return nil }
+        // Caps Lock types capitals too; only ⇧ makes B mean ⇧B.
+        if !event.modifierFlags.contains(.shift) { typed = typed.lowercased() }
+        // Some layouts, Norwegian among them, type [ and ] with ⌥.
+        guard flags.isEmpty || (flags == .option && EditorCommand.optionKeys.contains(typed)) else { return nil }
+        if let size = EditorCommand.sizeKeys[typed] { return size }
         return EditorCommand.all.first { $0.isBareKey && $0.key == typed }?.id
     }
 
