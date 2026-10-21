@@ -13,8 +13,9 @@ final class CaptureCards {
         var status: String
         /// Whether it's kept somewhere (copied or saved); otherwise the card is all there is.
         var kept: Bool
-        /// Secrets found in it, offered for hiding.
+        /// Secrets found in it, offered for hiding, and what the first one is.
         var secrets = 0
+        var secretTitle = ""
         var undo: (() -> Void)?
     }
 
@@ -68,9 +69,12 @@ final class CaptureCards {
     }
 
     /// Something secret was found: the card offers to hide it.
-    func offerToHide(_ id: UUID, count: Int) {
+    func offerToHide(_ id: UUID, count: Int, title: String) {
         guard let index = cards.firstIndex(where: { $0.id == id }) else { return }
-        withAnimation(.smooth(duration: 0.25)) { cards[index].secrets = count }
+        withAnimation(.smooth(duration: 0.25)) {
+            cards[index].secrets = count
+            cards[index].secretTitle = title
+        }
         place()
     }
 
@@ -135,8 +139,10 @@ final class CaptureCards {
         timers[id] = Task { [weak self] in
             try? await Task.sleep(for: .seconds(seconds))
             while let self, !Task.isCancelled {
-                guard self.hovered == id else {
-                    if self.cards.first(where: { $0.id == id })?.kept == true { self.remove(id) }
+                // A card offering to hide a secret waits for your answer.
+                let card = self.cards.first { $0.id == id }
+                guard self.hovered == id || (card?.secrets ?? 0) > 0 else {
+                    if card?.kept == true { self.remove(id) }
                     return
                 }
                 try? await Task.sleep(for: .seconds(1))
@@ -281,11 +287,17 @@ private struct CaptureCardView: View {
     private var secretsRow: some View {
         HStack(spacing: 6) {
             Image(systemName: "eye.trianglebadge.exclamationmark").foregroundStyle(.orange).font(.system(size: 12))
-            Text(card.secrets == 1 ? "A key or token is visible" : "\(card.secrets) keys or tokens are visible")
+            Text(card.secrets == 1 ? "\(card.secretTitle) visible" : "\(card.secrets) private items visible")
                 .font(.caption.weight(.medium)).lineLimit(1)
             Spacer(minLength: 4)
-            Button("Hide") { cards.hide(card.id) }
-                .buttonStyle(.borderedProminent).tint(.orange).controlSize(.small)
+            Button { cards.hide(card.id) } label: {
+                Text("Hide").font(.caption.weight(.semibold))
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 10).padding(.vertical, 4)
+                    .background(Color.orange, in: .capsule)
+            }
+            .buttonStyle(PressableStyle())
+            .help("Cover them with solid bars, in the copy and the saved file")
         }
         .padding(.horizontal, 4)
         .transition(.opacity.combined(with: .move(edge: .top)))

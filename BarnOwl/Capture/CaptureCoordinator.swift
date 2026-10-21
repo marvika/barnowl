@@ -278,7 +278,7 @@ final class CaptureCoordinator {
             insights[id] = insight
             scans[id] = nil
             let secrets = insight.text.findings.filter { $0.kind.tier == .secret }
-            if !secrets.isEmpty { cards.offerToHide(id, count: secrets.count) }
+            if let first = secrets.first { cards.offerToHide(id, count: secrets.count, title: first.kind.title) }
         }
     }
 
