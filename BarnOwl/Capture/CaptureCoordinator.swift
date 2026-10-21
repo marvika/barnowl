@@ -95,7 +95,7 @@ final class CaptureCoordinator {
             guard let self else { return }
             do {
                 let snapshots = try await ScreenSnapshotter.snapshots(options: options)
-                guard !snapshots.isEmpty else { isCapturing = false; return }
+                guard !snapshots.isEmpty else { isCapturing = false; return NSSound.beep() }
                 targets = WindowLocator.onScreenWindows()
                 let overlay = SelectionOverlay(snapshots: snapshots, targets: targets, mode: mode) { [weak self] result in
                     guard let self else { return }
@@ -113,6 +113,7 @@ final class CaptureCoordinator {
                 overlay.show()
             } catch {
                 isCapturing = false
+                NSSound.beep()
                 Log.app.error("Capture failed: \(error.localizedDescription)")
             }
         }
@@ -125,11 +126,14 @@ final class CaptureCoordinator {
         rememberFrontApp()
         let appName = previousApp?.localizedName
         let pointer = NSEvent.mouseLocation
-        let display = NSScreen.screens.first { $0.frame.contains(pointer) }?.displayID
+        // NSMouseInRect counts the top and right edges too, where the pointer can rest.
+        let display = (NSScreen.screens.first { NSMouseInRect(pointer, $0.frame, false) } ?? NSScreen.main)?.displayID
         targets = WindowLocator.onScreenWindows()
         Task {
             defer { isCapturing = false }
-            guard let snapshot = try? await ScreenSnapshotter.snapshots(of: display, options: options).first else { return }
+            guard let snapshot = try? await ScreenSnapshotter.snapshots(of: display, options: options).first else {
+                return NSSound.beep()
+            }
             deliver(Capture(image: snapshot.image, scale: snapshot.scale, kind: .screen, date: Date(), appName: appName),
                     action: .primary, windows: windowRects(in: snapshot.frame, scale: snapshot.scale))
         }
@@ -149,7 +153,7 @@ final class CaptureCoordinator {
         Task {
             defer { isCapturing = false }
             guard let snapshot = try? await ScreenSnapshotter.snapshots(of: screen.displayID, options: options).first,
-                  let image = snapshot.crop(area) else { return }
+                  let image = snapshot.crop(area) else { return NSSound.beep() }
             deliver(Capture(image: image, scale: snapshot.scale, kind: .area, date: Date(), appName: appName),
                     action: .primary, windows: windowRects(in: area, scale: snapshot.scale))
         }
@@ -179,7 +183,10 @@ final class CaptureCoordinator {
         }
         switch target {
         case .area(let rect, let snapshot):
-            guard let image = snapshot.crop(rect) else { return giveFocusBack() }
+            guard let image = snapshot.crop(rect) else {
+                NSSound.beep()
+                return giveFocusBack()
+            }
             Preferences.captureLastArea = rect
             deliver(Capture(image: image, scale: snapshot.scale, kind: .area, date: Date(), appName: appName),
                     action: action, windows: windowRects(in: rect, scale: snapshot.scale))
@@ -193,6 +200,9 @@ final class CaptureCoordinator {
             } else if let image = snapshot.crop(window.frame) {
                 deliver(Capture(image: image, scale: snapshot.scale, kind: .window, date: Date(), appName: window.appName),
                         action: action, windows: windowRects(in: window.frame, scale: snapshot.scale))
+            } else {
+                NSSound.beep()
+                giveFocusBack()
             }
         case .screen(let snapshot):
             deliver(Capture(image: snapshot.image, scale: snapshot.scale, kind: .screen, date: Date(), appName: appName),
