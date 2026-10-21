@@ -476,12 +476,12 @@ struct CaptureModeBar: View {
                 ForEach(CaptureMode.allCases) { item in
                     Button { select(item) } label: {
                         HStack(spacing: 6) {
-                            Text(item.title).font(.system(size: 13, weight: .semibold))
+                            Text(item.title).font(.system(size: 13, weight: .semibold)).foregroundStyle(.white)
                             Text(item.key)
                                 .font(.system(size: 10.5, weight: .semibold, design: .monospaced))
                                 .padding(.horizontal, 4).padding(.vertical, 1)
                                 .background(.white.opacity(0.1), in: .rect(cornerRadius: 4))
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(.white.opacity(0.65))
                         }
                         .padding(.horizontal, 10).padding(.vertical, 6)
                         .background(item == mode ? AnyShapeStyle(.white.opacity(0.16)) : AnyShapeStyle(.clear),
