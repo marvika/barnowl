@@ -35,7 +35,10 @@ extension EditorCanvas {
     }
 
     func topmost(at point: CGPoint) -> Mark? {
-        MarkGeometry.topmost(in: model.document, at: point, tolerance: 8 * screenPoint, scale: scale)
+        // With a drawing tool out, only a click right on a mark picks it up, so text, counters
+        // and new arrows can go right beside one.
+        let reach: CGFloat = model.tool == .select ? 8 : 3
+        return MarkGeometry.topmost(in: model.document, at: point, tolerance: reach * screenPoint, scale: scale)
     }
 
     private func hover(at point: CGPoint) {
@@ -276,6 +279,10 @@ extension EditorCanvas {
                     mark.control = MarkGeometry.defaultBend(start: mark.start, end: mark.end)
                 }
             }
+            if let mark = document[id], mark.kind == .redact, mark.style.redact == .solid {
+                let colour = model.redactionColour(over: mark.rect, quick: true)
+                document.update(id) { $0.colour = colour }
+            }
             model.setLive(document)
         case .words(let from, _):
             guard let before = gestureStart, let insight = model.insight else { return }
@@ -370,6 +377,13 @@ extension EditorCanvas {
             model.selection = []
             model.placeFitted(at: origin)
             return
+        }
+        if mark.kind == .redact, mark.style.redact == .solid {
+            // The bar takes the colour of what it hides, as a click's does.
+            var document = model.document
+            let colour = model.redactionColour(over: mark.rect)
+            document.update(id) { $0.colour = colour }
+            model.setLive(document)
         }
         model.commit(from: before, "Add \(mark.kind.title)")
         if mark.kind == .counter {
@@ -628,7 +642,13 @@ extension EditorCanvas {
         let step: CGFloat = flags.contains(.shift) ? 10 * scale : scale
         switch event.keyCode {
         case 53: escape()
-        case 36, 76: returnKey(command: flags.contains(.command))
+        case 36, 76:
+            if let armed = labelArmed, !flags.contains(.command) {
+                // A counter just placed: Return starts its label, as typing would.
+                beginLabelEditing(armed, typing: nil)
+            } else {
+                returnKey(command: flags.contains(.command))
+            }
         case 51, 117: model.deleteSelection()
         case 48:
             if let armed = labelArmed {
@@ -669,7 +689,12 @@ extension EditorCanvas {
     /// A plain key's command, for when no menu caught it.
     @MainActor static func bareCommand(for event: NSEvent) -> EditorCommand.ID? {
         let flags = event.modifierFlags.intersection([.command, .control, .option])
-        guard flags.isEmpty, let typed = event.characters, !typed.isEmpty else { return nil }
+        guard var typed = event.characters, !typed.isEmpty else { return nil }
+        // Caps Lock types capitals too; only ⇧ makes B mean ⇧B.
+        if !event.modifierFlags.contains(.shift) { typed = typed.lowercased() }
+        // Some layouts, Norwegian among them, type [ and ] with ⌥.
+        guard flags.isEmpty || (flags == .option && EditorCommand.optionKeys.contains(typed)) else { return nil }
+        if let size = EditorCommand.sizeKeys[typed] { return size }
         return EditorCommand.all.first { $0.isBareKey && $0.key == typed }?.id
     }
 
@@ -724,26 +749,47 @@ extension EditorCanvas {
 
     @objc func undo(_ sender: Any?) { model.undo() }
     @objc func redo(_ sender: Any?) { model.redo() }
-    @objc func copy(_ sender: Any?) { model.perform(.copy) }
     @objc func delete(_ sender: Any?) { model.deleteSelection() }
     override func selectAll(_ sender: Any?) { model.selectAll() }
 
+    /// ⌘C: the marks you've selected with the Select tool, to paste here or into another capture;
+    /// otherwise (and with a drawing tool out, whose new mark stays selected) the whole image.
+    @objc func copy(_ sender: Any?) {
+        guard copiesMarks, putSelectedMarksOnPasteboard() else { return model.perform(.copy) }
+        let count = model.selection.count
+        model.showHint("Copied \(count == 1 ? "1 mark" : "\(count) marks") · ⇧⌘C copies the image")
+    }
+
+    /// Whether ⌘C copies marks rather than the image.
+    var copiesMarks: Bool { model.tool == .select && !model.selection.isEmpty }
+
     @objc func cut(_ sender: Any?) {
+        guard putSelectedMarksOnPasteboard() else { return }
+        model.deleteSelection()
+    }
+
+    private func putSelectedMarksOnPasteboard() -> Bool {
         let marks = model.selectedMarks
-        guard !marks.isEmpty, let data = try? JSONEncoder().encode(marks) else { return }
+        guard !marks.isEmpty, let data = try? JSONEncoder().encode(marks) else { return false }
         let pasteboard = NSPasteboard.general
         pasteboard.clearContents()
         pasteboard.setData(data, forType: .barnOwlMarks)
         if let text = marks.compactMap({ $0.kind == .text ? $0.text : nil }).first {
             pasteboard.setString(text, forType: .string)
         }
-        model.deleteSelection()
+        return true
     }
 
+    /// ⌘V: marks come back offset a step further each time they're pasted; an image comes in as a mark.
     @objc func paste(_ sender: Any?) {
         let pasteboard = NSPasteboard.general
         if let data = pasteboard.data(forType: .barnOwlMarks), let marks = try? JSONDecoder().decode([Mark].self, from: data) {
-            let offset: CGFloat = 12 * scale
+            if pasteRun.change == pasteboard.changeCount {
+                pasteRun.count += 1
+            } else {
+                pasteRun = (pasteboard.changeCount, 1)
+            }
+            let offset: CGFloat = 12 * scale * CGFloat(pasteRun.count)
             let copies: [Mark] = marks.map { mark in
                 var copy = MarkGeometry.moved(mark, by: offset, offset)
                 copy.id = UUID()

@@ -14,6 +14,8 @@ struct OptionsBarActions {
     var moreColours: () -> Void = {}
     var showFonts: () -> Void = {}
     var cropAspect: (CropAspect) -> Void = { _ in }
+    /// Back to the canvas, so the keys work again after typing in a field.
+    var focusCanvas: () -> Void = {}
 }
 
 /// Where the options bar starts, so it lines up with the tools above it.
@@ -192,9 +194,10 @@ struct SwatchButton: View {
     var body: some View {
         Button(action: action) {
             ZStack {
+                // The ring keeps white on a light bar, and ink on a dark one, from vanishing.
                 Circle()
                     .fill(Color(colour))
-                    .overlay(Circle().strokeBorder(Color(nsColor: .separatorColor), lineWidth: 0.5))
+                    .overlay(Circle().strokeBorder(Color.primary.opacity(0.22), lineWidth: 1))
                     .frame(width: 18, height: 18)
                 if selected {
                     Circle()
@@ -272,7 +275,7 @@ struct ColourPopover: View {
                 HStack {
                     Label("Pick from Capture", systemImage: "eyedropper")
                     Spacer()
-                    Text("I").foregroundStyle(.secondary)
+                    ShortcutKey(key: "I")
                 }
             }
             .buttonStyle(.plain)
@@ -287,6 +290,21 @@ struct ColourPopover: View {
         .font(.system(size: 13))
         .padding(14)
         .frame(width: 244)
+    }
+}
+
+/// A key, drawn as a small key cap so a lone letter doesn't read as a text cursor.
+private struct ShortcutKey: View {
+    let key: String
+
+    var body: some View {
+        Text(verbatim: key)
+            .font(.system(size: 10.5, weight: .semibold))
+            .foregroundStyle(.secondary)
+            .frame(minWidth: 16, minHeight: 16)
+            .padding(.horizontal, 2)
+            .overlay(RoundedRectangle(cornerRadius: 4, style: .continuous).strokeBorder(Color.secondary.opacity(0.5), lineWidth: 1))
+            .accessibilityLabel("Key \(key)")
     }
 }
 
@@ -307,14 +325,14 @@ private struct SizeSection: View {
             ForEach(presets.indices, id: \.self) { index in
                 Image(nsImage: SizeSamples.image(kind: kind, index: index))
                     .accessibilityLabel(SizeLadder.presetNames[index])
-                    .help("\(SizeLadder.presetNames[index]) ([ and ] step the size)")
+                    .help("\(SizeLadder.presetNames[index]) ([ ] or − + step the size)")
                     .tag(Optional(index))
             }
         }
         .pickerStyle(.segmented)
         .labelsHidden()
         .fixedSize()
-        .help("Size ([ and ])")
+        .help("Size ([ ] or − +)")
     }
 }
 
@@ -491,6 +509,14 @@ private struct FontSection: View {
     var body: some View {
         let style = model.shownStyle
         HStack(spacing: 6) {
+            Toggle(isOn: Binding(get: { style.fontWeight == .bold }, set: { _ in model.toggleBold() })) {
+                Image(systemName: "bold")
+                    .font(.system(size: 12, weight: .semibold))
+                    .frame(width: 16)
+            }
+            .toggleStyle(.button)
+            .help("Bold (⌘B)")
+            .accessibilityLabel("Bold")
             Menu {
                 Picker("Font", selection: Binding(get: { style.font }, set: { font in
                     model.updateStyle("Change Font") { $0.font = font }
@@ -516,8 +542,8 @@ private struct FontSection: View {
             }
             .menuStyle(.button)
             .fixedSize()
-            .help("Font (⌘B toggles bold)")
-            TextSizeField(model: model, size: style.fontSize)
+            .help("Font")
+            TextSizeField(model: model, size: style.fontSize, done: actions.focusCanvas)
         }
     }
 
@@ -531,6 +557,8 @@ private struct FontSection: View {
 private struct TextSizeField: View {
     let model: EditorModel
     let size: Double
+    /// Return in the field hands the keys back to the canvas.
+    let done: () -> Void
 
     var body: some View {
         HStack(spacing: 2) {
@@ -541,12 +569,13 @@ private struct TextSizeField: View {
             .frame(width: 34)
             .multilineTextAlignment(.trailing)
             .textFieldStyle(.roundedBorder)
+            .onSubmit(done)
             .accessibilityLabel("Text size")
             Stepper("Text size", onIncrement: { model.stepSize(up: true) }, onDecrement: { model.stepSize(up: false) })
                 .labelsHidden()
             Text("pt").font(.system(size: 11)).foregroundStyle(.secondary)
         }
-        .help("Text size ([ and ])")
+        .help("Text size ([ ] or − +)")
     }
 }
 
@@ -798,7 +827,7 @@ private struct CropOptions: View {
                 .help("Keep the image as it was (Esc)")
             Button("Crop") { model.applyCrop() }
                 .buttonStyle(.borderedProminent)
-                .tint(Color(nsColor: EditorCanvas.accent))
+                .tint(Color(nsColor: EditorCanvas.accentFill))
                 .help("Crop to the rectangle (Return)")
         }
     }
@@ -817,7 +846,7 @@ private struct ReviewChip: View {
         } label: {
             HStack(spacing: 5) {
                 Image(systemName: on ? "checkmark.circle.fill" : "circle")
-                    .foregroundStyle(on ? Color(nsColor: EditorCanvas.accent) : Color.secondary)
+                    .foregroundStyle(on ? Color(nsColor: EditorCanvas.accentFill) : Color.secondary)
                 Text(verbatim: "\(kind.title) · \(count)")
             }
         }
@@ -846,9 +875,8 @@ private struct ReviewOptions: View {
             Button("Cancel") { model.review = nil }
                 .help("Hide nothing (Esc)")
             if review.includedCount > 0 {
-                Button(review.includedCount == 1 ? "Hide 1" : "Hide \(review.includedCount)") { model.applyReview() }
-                    .buttonStyle(.borderedProminent)
-                    .tint(Color(nsColor: EditorCanvas.accent))
+                Button("Hide \(review.includedCount)") { model.applyReview() }
+                    .buttonStyle(AmberButtonStyle())
                     .help("Cover what's striped with solid bars (Return)")
             }
         }

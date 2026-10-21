@@ -133,6 +133,8 @@ struct StyleBook: Codable, Equatable, Sendable {
     var penColour = MarkColour.red
     var highlighterColour = MarkColour.yellow
     var redactColour = MarkColour.ink
+    /// You chose the redaction's colour; until then solid bars take theirs from the capture.
+    var redactColourChosen = false
     /// Keyed by `Mark.Kind`'s raw value.
     var styles: [String: MarkStyle] = [:]
     /// Custom colours, newest first.
@@ -147,6 +149,8 @@ struct StyleBook: Codable, Equatable, Sendable {
         penColour = try c.decodeIfPresent(MarkColour.self, forKey: .penColour) ?? .red
         highlighterColour = try c.decodeIfPresent(MarkColour.self, forKey: .highlighterColour) ?? .yellow
         redactColour = try c.decodeIfPresent(MarkColour.self, forKey: .redactColour) ?? .ink
+        // From before this was kept: anything but ink was chosen.
+        redactColourChosen = try c.decodeIfPresent(Bool.self, forKey: .redactColourChosen) ?? (redactColour != .ink)
         styles = try c.decodeIfPresent([String: MarkStyle].self, forKey: .styles) ?? [:]
         recents = try c.decodeIfPresent([MarkColour].self, forKey: .recents) ?? []
     }
@@ -186,7 +190,9 @@ struct StyleBook: Codable, Equatable, Sendable {
     mutating func remember(colour: MarkColour, for kind: Mark.Kind) {
         switch kind {
         case .highlighter: highlighterColour = colour
-        case .redact: redactColour = colour
+        case .redact:
+            redactColour = colour
+            redactColourChosen = true
         case .spotlight, .image: return
         default: penColour = colour
         }
@@ -202,7 +208,9 @@ struct StyleBook: Codable, Equatable, Sendable {
         styles[kind.rawValue] = nil
         switch kind {
         case .highlighter: highlighterColour = .yellow
-        case .redact: redactColour = .ink
+        case .redact:
+            redactColour = .ink
+            redactColourChosen = false
         case .spotlight, .image: break
         default: penColour = .red
         }

@@ -274,11 +274,15 @@ final class EditorModel {
         updateStyle("Change Weight") { $0.fontWeight = bold ? .semibold : .bold }
     }
 
-    /// Whether text is what ⌘B, ⌘+ and ⌘− are about: typing, text selected, or the Text tool out.
+    /// Whether text is what ⌘B is about: typing, text selected, or the Text tool out.
     var isTextContext: Bool {
+        isTextInHand || (selection.isEmpty && tool == .text)
+    }
+
+    /// Whether ⌘+ and ⌘− size text rather than zoom: only while typing or with text selected.
+    var isTextInHand: Bool {
         if editingText.flatMap({ document[$0] })?.kind == .text { return true }
-        if !selection.isEmpty { return selectedMarks.allSatisfy { $0.kind == .text } }
-        return tool == .text
+        return !selection.isEmpty && selectedMarks.allSatisfy { $0.kind == .text }
     }
 
     func resetStyle() {
@@ -466,6 +470,21 @@ final class EditorModel {
 
     func setCounterStart(_ start: Int) {
         apply("Change Numbering") { $0.counterStart = max(0, start) }
+    }
+
+    /// The capture as it was taken: no marks, crop or frame.
+    var original: EditorDocument { EditorDocument(imageSize: document.imageSize, scale: scale) }
+
+    var canRevert: Bool { document != original }
+
+    /// Takes off every mark, the crop and the frame, as one undoable step.
+    func revertToOriginal() {
+        endTextEditing?()
+        review = nil
+        if tool == .crop { cancelCrop() }
+        selection = []
+        let original = self.original
+        apply("Revert to Original") { $0 = original }
     }
 
     // MARK: Arrange

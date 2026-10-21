@@ -330,31 +330,41 @@ enum MarkGeometry {
                           align: mark.style.align)
     }
 
-    /// A callout's pointer: a wedge from inside the box out to `end`, when `end` is outside it.
-    static func calloutTail(_ mark: Mark, layout: TextLayout) -> CGPath? {
+    /// A callout's pointer: a slim wedge out to `end`, when `end` is outside the box. Its base
+    /// sits on the side of the box `end` lies furthest beyond, as near `end` as that side
+    /// allows while staying clear of the rounded corners.
+    static func calloutTail(_ mark: Mark, layout: TextLayout, scale: CGFloat) -> CGPath? {
         let box = layout.boxRect
-        guard !box.insetBy(dx: -4, dy: -4).contains(mark.end) else { return nil }
-        let centre = CGPoint(x: box.midX, y: box.midY)
-        let dx: CGFloat = mark.end.x - centre.x
-        let dy: CGFloat = mark.end.y - centre.y
-        let length: CGFloat = hypot(dx, dy)
-        guard length > 1 else { return nil }
-        // Where the line to `end` leaves the box: the pointer is widest there.
-        let reachX: CGFloat = dx == 0 ? .infinity : ((dx > 0 ? box.maxX : box.minX) - centre.x) / dx
-        let reachY: CGFloat = dy == 0 ? .infinity : ((dy > 0 ? box.maxY : box.minY) - centre.y) / dy
-        let t: CGFloat = min(reachX, reachY, 1)
-        let direction = CGPoint(x: dx / length, y: dy / length)
-        let normal = CGPoint(x: -direction.y, y: direction.x)
-        let half: CGFloat = min(box.height * 0.32, box.width * 0.25)
-        // Start a little inside, so the pointer grows out of the box's rounded edge.
-        let edge = CGPoint(x: centre.x + dx * t, y: centre.y + dy * t)
-        let base = CGPoint(x: edge.x - direction.x * half, y: edge.y - direction.y * half)
+        let end = mark.end
+        guard !box.insetBy(dx: -4, dy: -4).contains(end) else { return nil }
+        let beyondX: CGFloat = max(box.minX - end.x, end.x - box.maxX, 0)
+        let beyondY: CGFloat = max(box.minY - end.y, end.y - box.maxY, 0)
+        let half: CGFloat = min(box.height * 0.18, 9 * scale)
+        let margin: CGFloat = layout.cornerRadius + half
+        // The base starts a point inside the box, so no seam shows where they join.
+        let inset: CGFloat = scale
         let path = CGMutablePath()
-        path.move(to: CGPoint(x: base.x + normal.x * half, y: base.y + normal.y * half))
-        path.addLine(to: mark.end)
-        path.addLine(to: CGPoint(x: base.x - normal.x * half, y: base.y - normal.y * half))
+        if beyondX > beyondY {
+            let x: CGFloat = end.x > box.maxX ? box.maxX - inset : box.minX + inset
+            let y: CGFloat = clamped(end.y, box.minY + margin, box.maxY - margin)
+            path.move(to: CGPoint(x: x, y: y - half))
+            path.addLine(to: end)
+            path.addLine(to: CGPoint(x: x, y: y + half))
+        } else {
+            let y: CGFloat = end.y > box.maxY ? box.maxY - inset : box.minY + inset
+            let x: CGFloat = clamped(end.x, box.minX + margin, box.maxX - margin)
+            path.move(to: CGPoint(x: x - half, y: y))
+            path.addLine(to: end)
+            path.addLine(to: CGPoint(x: x + half, y: y))
+        }
         path.closeSubpath()
         return path
+    }
+
+    /// `value` kept between `low` and `high`, or halfway when there's no room between them.
+    static func clamped(_ value: CGFloat, _ low: CGFloat, _ high: CGFloat) -> CGFloat {
+        guard low <= high else { return (low + high) / 2 }
+        return min(max(value, low), high)
     }
 
     /// Where a new callout points: down and to the left of its box.
@@ -454,7 +464,7 @@ enum MarkGeometry {
             return penBounds(mark.points)
         case .text:
             let layout = textLayout(mark, scale: scale)
-            guard mark.style.textStyle == .callout, calloutTail(mark, layout: layout) != nil else { return layout.boxRect }
+            guard mark.style.textStyle == .callout, calloutTail(mark, layout: layout, scale: scale) != nil else { return layout.boxRect }
             return layout.boxRect.union(CGRect(origin: mark.end, size: .zero))
         case .counter:
             var rect = counterCircle(mark, scale: scale)
@@ -503,7 +513,7 @@ enum MarkGeometry {
             let layout = textLayout(mark, scale: scale)
             if layout.boxRect.insetBy(dx: -tolerance / 4, dy: -tolerance / 4).contains(point) { return true }
             guard mark.style.textStyle == .callout else { return false }
-            return calloutTail(mark, layout: layout)?.contains(point) ?? false
+            return calloutTail(mark, layout: layout, scale: scale)?.contains(point) ?? false
         case .counter:
             let radius = counterRadius(mark, scale: scale) + tolerance / 4
             if distance(point, mark.start) <= radius { return true }

@@ -132,11 +132,19 @@ enum ImageSampler {
         return MarkColour(red: r / n, green: g / n, blue: b / n)
     }
 
+    /// What hides things on dark areas, where an ink bar would vanish.
+    static let darkRedaction = MarkColour(hex: 0x8E8E93)
+
     /// The colour a redaction bar over `rect` should be: the text's own colour when there's
-    /// clearly text there, so the bar reads as hidden text; otherwise ink.
+    /// clearly text there, so the bar reads as hidden text; otherwise ink, or grey on dark areas.
     static func redactionColour(in image: CGImage, rect: CGRect) -> MarkColour {
-        guard let colours = textColours(in: image, rect: rect),
-              colours.ink.contrast(with: colours.background) >= 2 else { return .ink }
-        return colours.ink
+        guard let colours = textColours(in: image, rect: rect) else { return .ink }
+        if colours.ink.contrast(with: colours.background) >= 2 { return colours.ink }
+        return plainRedaction(onLightness: colours.background.lightness)
+    }
+
+    /// A bar on an area without text: ink, or grey where the area is dark (below 0.3).
+    static func plainRedaction(onLightness lightness: Double) -> MarkColour {
+        lightness < 0.3 ? darkRedaction : .ink
     }
 }

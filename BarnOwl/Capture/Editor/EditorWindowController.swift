@@ -20,6 +20,8 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSTool
     let viewState = CanvasViewState()
     /// Called once the window has closed.
     var onClose: (() -> Void)?
+    /// The Desktop background was chosen: its picture is wanted.
+    var onNeedsDesktop: (() -> Void)?
 
     private let scrollView = NSScrollView()
     private let optionsLayout = OptionsBarLayout()
@@ -58,7 +60,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSTool
         window.isReleasedWhenClosed = false
         window.tabbingMode = .disallowed
         window.delegate = self
-        window.backgroundColor = .underPageBackgroundColor
+        window.backgroundColor = EditorCanvas.backdrop
 
         let toolbar = NSToolbar(identifier: "captureEditor.toolbar")
         toolbar.delegate = self
@@ -120,7 +122,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSTool
         scrollView.contentView = clip
         scrollView.documentView = canvas
         scrollView.drawsBackground = true
-        scrollView.backgroundColor = .underPageBackgroundColor
+        scrollView.backgroundColor = EditorCanvas.backdrop
         scrollView.hasHorizontalScroller = true
         scrollView.hasVerticalScroller = true
         scrollView.autohidesScrollers = true
@@ -173,10 +175,10 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSTool
         alignOptionsBar()
     }
 
-    /// The options bar starts where the tools do.
+    /// The options bar starts where the traffic lights do.
     private func alignOptionsBar() {
-        guard let window, let first = toolGroup?.view ?? toolGroup?.subitems.first?.view else { return }
-        let frame = first.convert(first.bounds, to: nil)
+        guard let window, let close = window.standardWindowButton(.closeButton) else { return }
+        let frame = close.convert(close.bounds, to: nil)
         let leading: CGFloat = max(12, frame.minX.rounded())
         if abs(optionsLayout.leading - leading) > 0.5, frame.width > 0, frame.minX < window.frame.width {
             optionsLayout.leading = leading
@@ -213,6 +215,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSTool
             self.canvas.documentChanged(from: old, to: new)
             self.updateOutputSize()
             self.syncBadge()
+            if new.frame.background == .desktop, old.frame.background != .desktop { self.onNeedsDesktop?() }
         }
         model.onChromeChange = { [weak self] in
             self?.canvas.chromeChanged()
@@ -241,7 +244,11 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSTool
             pickColour: { [weak self] in self?.canvas.startPickingColour() },
             moreColours: { [weak self] in self?.showColourPanel() },
             showFonts: { [weak self] in self?.showFontPanel() },
-            cropAspect: { [weak self] aspect in self?.canvas.applyCropAspect(aspect) }
+            cropAspect: { [weak self] aspect in self?.canvas.applyCropAspect(aspect) },
+            focusCanvas: { [weak self] in
+                guard let self else { return }
+                self.window?.makeFirstResponder(self.canvas)
+            }
         )
     }
 
@@ -294,7 +301,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSTool
             item.toolTip = "Share"
             return item
         case Item.copy:
-            let item = button(identifier, symbol: "doc.on.doc", label: "Copy", tooltip: "Copy (⌘C)", action: #selector(copyPressed))
+            let item = button(identifier, symbol: "doc.on.doc", label: "Copy", tooltip: "Copy Image (⇧⌘C)", action: #selector(copyPressed))
             copyItem = item
             return item
         case Item.done:
@@ -304,8 +311,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSTool
             item.toolTip = "Copy, save and close (↩)"
             item.isBordered = true
             item.style = .prominent
-            // A deeper lavender than the brand's, so the white label reads at 4.5:1.
-            item.backgroundTintColor = NSColor(srgbRed: 0x6A / 255, green: 0x64 / 255, blue: 0xF0 / 255, alpha: 1)
+            item.backgroundTintColor = EditorCanvas.accentFill
             item.target = self
             item.action = #selector(donePressed)
             return item
@@ -435,11 +441,13 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSTool
     func perform(_ id: EditorCommand.ID) {
         guard canPerform(id) else { return }
         switch id {
-        case .copy, .copyMarks: model.perform(.copy)
+        case .copy: model.perform(.copy)
+        case .copyMarks: canvas.copy(nil)
         case .save: model.perform(.save)
         case .pin: model.perform(.pin)
         case .done: model.perform(.done)
         case .close: window?.performClose(nil)
+        case .revert: model.revertToOriginal()
         case .undo: model.undo()
         case .redo: model.redo()
         case .cut: canvas.cut(nil)
@@ -450,9 +458,9 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSTool
         case .actualSize: canvas.setZoom(1)
         case .zoomToFit: canvas.zoomToFit()
         case .zoomIn, .fontBigger:
-            if model.isTextContext { model.stepSize(up: true) } else { canvas.zoom(by: 1.25) }
+            if model.isTextInHand { model.stepSize(up: true) } else { canvas.zoom(by: 1.25) }
         case .zoomOut, .fontSmaller:
-            if model.isTextContext { model.stepSize(up: false) } else { canvas.zoom(by: 0.8) }
+            if model.isTextInHand { model.stepSize(up: false) } else { canvas.zoom(by: 0.8) }
         case .showFrame: model.showsFrame.toggle()
         case .shortcuts: showShortcuts()
         case .bringToFront: model.bringToFront()
@@ -510,6 +518,8 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSTool
             return model.isTextContext
         case .review:
             return model.insight != nil
+        case .revert:
+            return model.canRevert
         default:
             return true
         }
@@ -626,8 +636,24 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSTool
     func windowWillClose(_ notification: Notification) {
         canvas.endTextEditing()
         if let shortcutsSheet { window?.endSheet(shortcutsSheet) }
-        if NSColorPanel.sharedColorPanelExists, NSColorPanel.shared.isVisible { NSColorPanel.shared.close() }
+        releaseSharedPanels()
         onClose?()
+    }
+
+    /// The colour and font panels are shared by the whole app: once this window goes, they
+    /// mustn't send their changes here, or keep it alive.
+    private func releaseSharedPanels() {
+        if NSColorPanel.sharedColorPanelExists {
+            let panel = NSColorPanel.shared
+            if panel.isVisible { panel.close() }
+            panel.setTarget(nil)
+            panel.setAction(nil)
+        }
+        let fonts = NSFontManager.shared
+        if fonts.target === self {
+            fonts.target = nil
+            if NSFontPanel.sharedFontPanelExists, NSFontPanel.shared.isVisible { NSFontPanel.shared.close() }
+        }
     }
 
     func windowDidBecomeKey(_ notification: Notification) {

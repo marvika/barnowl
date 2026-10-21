@@ -68,6 +68,8 @@ final class EditorCanvas: NSView, NSTextViewDelegate, NSMenuItemValidation {
     var guides: [SnapGuide] = []
     var marquee: CGRect?
     var trackingArea: NSTrackingArea?
+    /// The pasteboard's marks, and how many times in a row they've been pasted.
+    var pasteRun = (change: 0, count: 0)
 
     enum Gesture {
         case draw(UUID, origin: CGPoint)
@@ -79,7 +81,42 @@ final class EditorCanvas: NSView, NSTextViewDelegate, NSMenuItemValidation {
         case pan(from: NSPoint, origin: NSPoint)
     }
 
+    /// The owl's lavender, for outlines, washes and selection rings.
     static let accent = NSColor(srgbRed: 0x8C / 255, green: 0x87 / 255, blue: 1, alpha: 1)
+    /// A deeper lavender for filled controls with a white label, which reads at 4.5:1 on it.
+    static let accentFill = NSColor(srgbRed: 0x6A / 255, green: 0x64 / 255, blue: 0xF0 / 255, alpha: 1)
+    /// Behind the canvas: a light grey in light appearance (the system's under-page grey makes
+    /// captures look heavy), and the system's own in dark.
+    static let backdrop = NSColor(name: "captureEditor.backdrop", dynamicProvider: EditorCanvas.backdrop(for:))
+
+    nonisolated static func backdrop(for appearance: NSAppearance) -> NSColor {
+        guard appearance.bestMatch(from: [.aqua, .darkAqua]) != .darkAqua else { return .underPageBackgroundColor }
+        return NSColor(srgbRed: 0xE8 / 255, green: 0xE8 / 255, blue: 0xEC / 255, alpha: 1)
+    }
+
+    /// The capture's edge on the canvas: a hairline and a soft shadow. In dark appearance a
+    /// light hairline one device pixel wide and a deeper shadow keep a dark capture from
+    /// melting into the background.
+    static func outline(_ layer: CALayer, in view: NSView, zoom: CGFloat) {
+        let dark = view.effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
+        if dark {
+            let backing: CGFloat = view.window?.backingScaleFactor ?? 2
+            layer.borderColor = CGColor(gray: 1, alpha: 0.18)
+            layer.borderWidth = 1 / (backing * zoom)
+            layer.shadowOpacity = 0.45
+            layer.shadowRadius = 16 / zoom
+        } else {
+            view.effectiveAppearance.performAsCurrentDrawingAppearance {
+                layer.borderColor = NSColor.separatorColor.cgColor
+            }
+            layer.borderWidth = 0.5 / zoom
+            layer.shadowOpacity = 0.18
+            layer.shadowRadius = 12 / zoom
+        }
+        layer.shadowColor = CGColor(gray: 0, alpha: 1)
+        layer.shadowOffset = CGSize(width: 0, height: -2 / zoom)
+        layer.shadowPath = CGPath(rect: layer.bounds, transform: nil)
+    }
 
     init(model: EditorModel) {
         self.model = model
@@ -405,15 +442,7 @@ final class PaperView: NSView {
         wantsLayer = true
         guard let layer else { return }
         if outlined {
-            effectiveAppearance.performAsCurrentDrawingAppearance {
-                layer.borderColor = NSColor.separatorColor.cgColor
-            }
-            layer.borderWidth = 0.5 / zoom
-            layer.shadowColor = CGColor(gray: 0, alpha: 1)
-            layer.shadowOpacity = 0.18
-            layer.shadowRadius = 12 / zoom
-            layer.shadowOffset = CGSize(width: 0, height: -2 / zoom)
-            layer.shadowPath = CGPath(rect: bounds, transform: nil)
+            EditorCanvas.outline(layer, in: self, zoom: zoom)
         } else {
             layer.borderWidth = 0
             layer.shadowOpacity = 0
@@ -451,15 +480,7 @@ final class ImageLayerView: NSView {
         layer.cornerRadius = cornerRadius
         layer.masksToBounds = cornerRadius > 0
         if outlined {
-            effectiveAppearance.performAsCurrentDrawingAppearance {
-                layer.borderColor = NSColor.separatorColor.cgColor
-            }
-            layer.borderWidth = 0.5 / zoom
-            layer.shadowColor = CGColor(gray: 0, alpha: 1)
-            layer.shadowOpacity = 0.18
-            layer.shadowRadius = 12 / zoom
-            layer.shadowOffset = CGSize(width: 0, height: -2 / zoom)
-            layer.shadowPath = CGPath(rect: layer.bounds, transform: nil)
+            EditorCanvas.outline(layer, in: self, zoom: zoom)
         } else {
             layer.borderWidth = 0
             layer.shadowOpacity = 0

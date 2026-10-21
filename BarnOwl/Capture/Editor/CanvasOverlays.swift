@@ -32,9 +32,13 @@ struct ZoomCapsule: View {
                 Button("100%") { zoom(.percent(1)) }
                 Button("200%") { zoom(.percent(2)) }
             } label: {
-                Text(verbatim: "\(Int((state.zoom * 100).rounded()))%")
-                    .font(.system(size: 11.5, weight: .medium).monospacedDigit())
-                    .frame(minWidth: 40)
+                HStack(spacing: 3) {
+                    Text(verbatim: "\(Int((state.zoom * 100).rounded()))%")
+                        .font(.system(size: 11.5, weight: .medium).monospacedDigit())
+                    Image(systemName: "chevron.down")
+                        .font(.system(size: 7, weight: .bold))
+                }
+                .frame(minWidth: 48)
             }
             .menuStyle(.button)
             .menuIndicator(.hidden)
@@ -98,6 +102,8 @@ struct HintStrip: View {
 
     private var toolHint: String? {
         guard model.editingText == nil, model.review == nil, model.showsToolHint(model.tool) else { return nil }
+        // Select with nothing selected has its hint in the options bar already.
+        if model.tool == .select, model.selection.isEmpty { return nil }
         return Self.hint(model.tool)
     }
 
@@ -118,21 +124,22 @@ struct HintStrip: View {
     }
 }
 
-/// Top centre, below the toolbar: a key or token is visible.
+/// Top centre, below the toolbar: a key or token is visible, perhaps with other private things.
+/// It speaks as the capture card does, and hides the same things.
 struct SecretBanner: View {
     let model: EditorModel
 
     var body: some View {
         HStack(spacing: 10) {
-            Image(systemName: "exclamationmark.shield.fill")
-                .foregroundStyle(Color(red: 0.96, green: 0.65, blue: 0.2))
+            Image(systemName: "eye.trianglebadge.exclamationmark")
+                .foregroundStyle(Brand.amber)
                 .accessibilityHidden(true)
-            Text(model.visibleSecrets.count > 1 ? "Keys or tokens are visible." : "A key or token is visible.")
+            Text(model.privateSentence)
                 .font(.system(size: 12.5, weight: .medium))
-            Button("Hide") { model.hideSecrets() }
-                .buttonStyle(.borderedProminent)
-                .tint(Color(nsColor: EditorCanvas.accent))
-                .help("Cover them with solid bars")
+                .lineLimit(1)
+            Button(model.hidePrivateTitle) { model.hidePrivate() }
+                .buttonStyle(AmberButtonStyle())
+                .help(model.privateCount == 1 ? "Cover it with a solid bar" : "Cover them with solid bars")
             Button("Review") { model.beginReview() }
                 .help("See everything private before hiding it (⇧B)")
             Button {
@@ -150,6 +157,22 @@ struct SecretBanner: View {
         .padding(.trailing, 12)
         .frame(height: 36)
         .glassEffect(.regular, in: .capsule)
+    }
+}
+
+/// Hiding private things: amber with a deep indigo label, as on the capture card.
+struct AmberButtonStyle: ButtonStyle {
+    @Environment(\.isEnabled) private var isEnabled
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(.system(size: 11.5, weight: .semibold))
+            .foregroundStyle(Brand.indigoDeep)
+            .padding(.horizontal, 10)
+            .frame(height: 22)
+            .background(Brand.amber.opacity(configuration.isPressed ? 0.8 : 1), in: .capsule)
+            .opacity(isEnabled ? 1 : 0.5)
+            .contentShape(.capsule)
     }
 }
 
@@ -197,8 +220,14 @@ struct ShortcutsSheet: View {
     }
 
     @MainActor static func rows(_ group: EditorCommand.Group) -> [Row] {
-        var rows = EditorCommand.all.filter { $0.group == group && !$0.keyLabel.isEmpty }
-            .map { Row(title: $0.id == .done ? "Done, even while typing" : $0.title, keys: $0.keyLabel) }
+        var rows = EditorCommand.all.filter { $0.group == group && !$0.keyLabel.isEmpty }.map { command in
+            switch command.id {
+            case .done: Row(title: "Done, even while typing", keys: command.keyLabel)
+            case .smaller: Row(title: command.title, keys: "[ or −")
+            case .bigger: Row(title: command.title, keys: "] or +")
+            default: Row(title: command.title, keys: command.keyLabel)
+            }
+        }
         switch group {
         case .colourAndSize:
             rows.insert(Row(title: "Colours", keys: "1 – 8"), at: 0)

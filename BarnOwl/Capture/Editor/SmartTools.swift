@@ -143,10 +143,30 @@ extension EditorModel {
     /// Keys, tokens, passwords and card numbers in view that aren't hidden yet.
     var visibleSecrets: [SensitiveTextFinder.Finding] { uncoveredFindings(minimum: .secret) }
 
-    /// The count on the Redact tool: personal things (emails, phones…) not hidden yet.
-    var privateCount: Int { uncoveredFindings(minimum: .personal).count }
+    /// Secrets and personal things (emails, phones…) in view that aren't hidden yet: what's
+    /// hidden unless you say otherwise.
+    var visiblePrivate: [SensitiveTextFinder.Finding] { uncoveredFindings(minimum: .personal) }
 
-    /// Whether to show the banner about a visible key.
+    /// The count on the Redact tool.
+    var privateCount: Int { visiblePrivate.count }
+
+    /// "A key or token and an email address are visible.": secrets named first.
+    var privateSentence: String {
+        let findings = visiblePrivate
+        let ordered = findings.filter { $0.kind.tier == .secret } + findings.filter { $0.kind.tier != .secret }
+        return "\(CaptureCoordinator.describe(ordered)) \(findings.count == 1 ? "is" : "are") visible."
+    }
+
+    /// The banner's button: Hide, Hide Both or Hide All.
+    var hidePrivateTitle: String {
+        switch privateCount {
+        case 1: "Hide"
+        case 2: "Hide Both"
+        default: "Hide All"
+        }
+    }
+
+    /// Whether to show the banner: only a secret interrupts, though Hide covers everything private.
     var showsSecretBanner: Bool { !secretBannerDismissed && !visibleSecrets.isEmpty && review == nil }
 
     /// Whether Done should ask about a key first: there is one, and you haven't dealt with it.
@@ -178,10 +198,19 @@ extension EditorModel {
         self.review = nil
     }
 
-    /// The banner's Hide: every visible key or token, at once.
-    func hideSecrets() {
-        hide(visibleSecrets, name: "Hide Keys")
+    /// The banner's Hide: every visible secret and personal detail, at once.
+    func hidePrivate() {
+        hide(visiblePrivate, name: "Hide Private Info")
         secretBannerDismissed = true
+    }
+
+    /// A solid redaction's colour over `rect`: the one you chose, or else the text's own colour,
+    /// so the bar reads as hidden text (grey on dark areas, where ink would vanish). `quick`
+    /// only looks at how light the area is, for while a bar is being dragged out.
+    func redactionColour(over rect: CGRect, quick: Bool = false) -> MarkColour {
+        if styleBook.redactColourChosen { return styleBook.redactColour }
+        guard quick else { return ImageSampler.redactionColour(in: image, rect: rect) }
+        return ImageSampler.plainRedaction(onLightness: renderer.luminance?.mean(in: rect) ?? 1)
     }
 
     /// Solid bars in the colour of the text under them, so they read as hidden text.
@@ -221,7 +250,7 @@ extension EditorModel {
         mark.origin = MarkOrigin(source: .fit, category: nil)
         if kind == .redact, mark.style.redact == .solid, let insight,
            let hit = SmartFit.redaction(at: point, insight: insight) {
-            mark.colour = ImageSampler.redactionColour(in: image, rect: hit.rect)
+            mark.colour = redactionColour(over: hit.rect)
             if let finding = hit.finding { mark.origin = MarkOrigin(source: .privateInfo, category: finding.kind.rawValue) }
         }
         add(mark)

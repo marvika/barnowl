@@ -288,8 +288,16 @@ final class AnnotationRenderer: Sendable {
                 drawImage(part, in: area, context)
             }
         }
-        context.setBlendMode(screens ? .screen : .multiply)
-        context.setFillColor(mark.colour.cgColor(alpha: screens ? 0.45 : 0.6))
+        if screens {
+            // On dark areas the highlight adds light; yellow leans amber, which reads as a
+            // highlight there, where a dimmed yellow turns olive.
+            let colour = mark.colour.isLight ? mark.colour.mixed(with: .amber, 0.4) : mark.colour
+            context.setBlendMode(.plusLighter)
+            context.setFillColor(colour.cgColor(alpha: 0.42))
+        } else {
+            context.setBlendMode(.multiply)
+            context.setFillColor(mark.colour.cgColor(alpha: 0.6))
+        }
         context.fill(mark.rect)
         context.restoreGState()
     }
@@ -533,7 +541,7 @@ final class AnnotationRenderer: Sendable {
             setShadow(context, offset: em * 0.05, blur: em * 0.22, colour: CGColor(gray: 0, alpha: 0.28))
             context.beginTransparencyLayer(auxiliaryInfo: nil)
             context.setFillColor(box.cgColor())
-            if mark.style.textStyle == .callout, let tail = MarkGeometry.calloutTail(mark, layout: layout) {
+            if mark.style.textStyle == .callout, let tail = MarkGeometry.calloutTail(mark, layout: layout, scale: scale) {
                 context.addPath(tail)
                 context.fillPath()
             }
@@ -544,6 +552,15 @@ final class AnnotationRenderer: Sendable {
         }
         guard !mark.text.isEmpty else { return }
         switch mark.style.textStyle {
+        case .plain where colour.isLight:
+            // Yellow and white text: a fine ink edge and a soft shadow, not a thick ring that
+            // makes it look like a sticker.
+            context.saveGState()
+            setShadow(context, offset: 1 * scale, blur: 2 * scale, colour: CGColor(gray: 0, alpha: 0.3))
+            context.beginTransparencyLayer(auxiliaryInfo: nil)
+            drawLines(layout, stroke: MarkColour.ink.cgColor(alpha: 0.4), strokeWidth: 2 * scale, in: context)
+            context.endTransparencyLayer()
+            context.restoreGState()
         case .plain:
             let large: Bool = mark.style.fontSize >= 32
             let halo: CGFloat = (large ? 2 : 1.5) * scale
