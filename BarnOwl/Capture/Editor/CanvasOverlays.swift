@@ -118,21 +118,22 @@ struct HintStrip: View {
     }
 }
 
-/// Top centre, below the toolbar: a key or token is visible.
+/// Top centre, below the toolbar: a key or token is visible, perhaps with other private things.
+/// It speaks as the capture card does, and hides the same things.
 struct SecretBanner: View {
     let model: EditorModel
 
     var body: some View {
         HStack(spacing: 10) {
-            Image(systemName: "exclamationmark.shield.fill")
-                .foregroundStyle(Color(red: 0.96, green: 0.65, blue: 0.2))
+            Image(systemName: "eye.trianglebadge.exclamationmark")
+                .foregroundStyle(Brand.amber)
                 .accessibilityHidden(true)
-            Text(model.visibleSecrets.count > 1 ? "Keys or tokens are visible." : "A key or token is visible.")
+            Text(model.privateSentence)
                 .font(.system(size: 12.5, weight: .medium))
-            Button("Hide") { model.hideSecrets() }
-                .buttonStyle(.borderedProminent)
-                .tint(Color(nsColor: EditorCanvas.accent))
-                .help("Cover them with solid bars")
+                .lineLimit(1)
+            Button(model.hidePrivateTitle) { model.hidePrivate() }
+                .buttonStyle(AmberButtonStyle())
+                .help(model.privateCount == 1 ? "Cover it with a solid bar" : "Cover them with solid bars")
             Button("Review") { model.beginReview() }
                 .help("See everything private before hiding it (⇧B)")
             Button {
@@ -150,6 +151,22 @@ struct SecretBanner: View {
         .padding(.trailing, 12)
         .frame(height: 36)
         .glassEffect(.regular, in: .capsule)
+    }
+}
+
+/// Hiding private things: amber with a deep indigo label, as on the capture card.
+struct AmberButtonStyle: ButtonStyle {
+    @Environment(\.isEnabled) private var isEnabled
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(.system(size: 11.5, weight: .semibold))
+            .foregroundStyle(Brand.indigoDeep)
+            .padding(.horizontal, 10)
+            .frame(height: 22)
+            .background(Brand.amber.opacity(configuration.isPressed ? 0.8 : 1), in: .capsule)
+            .opacity(isEnabled ? 1 : 0.5)
+            .contentShape(.capsule)
     }
 }
 

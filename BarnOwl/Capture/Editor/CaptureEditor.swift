@@ -196,21 +196,21 @@ final class CaptureEditor {
         }
     }
 
-    /// Done with a key still showing: ask once.
+    /// Done with a key still showing: hide everything private (as the banner would), copy it as
+    /// it is, or go back to editing.
     private func askAboutSecrets(in window: NSWindow) {
-        askedAboutSecrets = true
         let alert = NSAlert()
-        let several = model.visibleSecrets.count > 1
-        alert.messageText = several ? "Hide the keys before copying?" : "Hide the key before copying?"
-        alert.informativeText = several
-            ? "Keys or tokens are visible in this capture. Anyone you share it with could use them."
-            : "A key or token is visible in this capture. Anyone you share it with could use it."
+        alert.messageText = model.privateSentence
+        alert.informativeText = "Anyone you share this capture with could see \(model.privateCount == 1 ? "it" : "them")."
         alert.addButton(withTitle: "Hide and Copy")
         alert.addButton(withTitle: "Copy Anyway")
+        // Titled Cancel, it answers Esc.
+        alert.addButton(withTitle: "Cancel")
         alert.beginSheetModal(for: window) { [weak self] response in
             MainActor.assumeIsolated {
-                guard let self else { return }
-                if response == .alertFirstButtonReturn { self.model.hideSecrets() }
+                guard let self, response != .alertThirdButtonReturn else { return }
+                self.askedAboutSecrets = true
+                if response == .alertFirstButtonReturn { self.model.hidePrivate() }
                 self.model.secretBannerDismissed = true
                 self.perform(.done)
             }

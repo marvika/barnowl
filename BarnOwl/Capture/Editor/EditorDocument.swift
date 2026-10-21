@@ -65,6 +65,15 @@ struct MarkColour: Codable, Hashable, Sendable {
         return r + g + b
     }
 
+    /// How light the colour looks, from 0 to 1, as a greyscale copy shows it: gamma-encoded,
+    /// so 0.5 is mid grey (unlike `luminance`).
+    var lightness: Double {
+        let r: Double = 0.2126 * red
+        let g: Double = 0.7152 * green
+        let b: Double = 0.0722 * blue
+        return r + g + b
+    }
+
     /// The WCAG contrast ratio between two colours, from 1 to 21.
     func contrast(with other: MarkColour) -> Double {
         let a: Double = luminance + 0.05

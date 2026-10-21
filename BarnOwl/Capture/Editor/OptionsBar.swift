@@ -846,9 +846,8 @@ private struct ReviewOptions: View {
             Button("Cancel") { model.review = nil }
                 .help("Hide nothing (Esc)")
             if review.includedCount > 0 {
-                Button(review.includedCount == 1 ? "Hide 1" : "Hide \(review.includedCount)") { model.applyReview() }
-                    .buttonStyle(.borderedProminent)
-                    .tint(Color(nsColor: EditorCanvas.accent))
+                Button("Hide \(review.includedCount)") { model.applyReview() }
+                    .buttonStyle(AmberButtonStyle())
                     .help("Cover what's striped with solid bars (Return)")
             }
         }

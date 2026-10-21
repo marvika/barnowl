@@ -276,6 +276,10 @@ extension EditorCanvas {
                     mark.control = MarkGeometry.defaultBend(start: mark.start, end: mark.end)
                 }
             }
+            if let mark = document[id], mark.kind == .redact, mark.style.redact == .solid {
+                let colour = model.redactionColour(over: mark.rect, quick: true)
+                document.update(id) { $0.colour = colour }
+            }
             model.setLive(document)
         case .words(let from, _):
             guard let before = gestureStart, let insight = model.insight else { return }
@@ -370,6 +374,13 @@ extension EditorCanvas {
             model.selection = []
             model.placeFitted(at: origin)
             return
+        }
+        if mark.kind == .redact, mark.style.redact == .solid {
+            // The bar takes the colour of what it hides, as a click's does.
+            var document = model.document
+            let colour = model.redactionColour(over: mark.rect)
+            document.update(id) { $0.colour = colour }
+            model.setLive(document)
         }
         model.commit(from: before, "Add \(mark.kind.title)")
         if mark.kind == .counter {
