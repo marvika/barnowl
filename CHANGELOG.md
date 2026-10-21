@@ -3,6 +3,17 @@
 All notable changes to Barn Owl. Versions follow [semantic versioning](https://semver.org);
 before 1.0, a minor version can change behaviour.
 
+## Unreleased
+
+- **Presenter mode no longer moves your pointer.** On macOS 26 it used to hide
+  the menu bar's icons by dragging them one by one, which sent the pointer to
+  the menu bar and could leave it there as a call started sharing. Now an
+  invisible curtain next to the arrow covers them all at once, and they come
+  back exactly where they were. While presenting, the Perch lists them too.
+- When Barn Owl does drag an icon (arranging, or opening one from the Perch),
+  the pointer goes back only once the drag has landed, so it can't be left
+  in the menu bar.
+
 ## 0.14.1
 
 - **Explore's basket is stricter.** It no longer takes a protected folder

@@ -13,6 +13,9 @@ final class PresenterMode {
     private(set) var isChanging = false
     /// True when the current session started because screen sharing began.
     private(set) var startedAutomatically = false
+    /// True while the curtain keeps the visible icons out of view where they
+    /// are, rather than moved into the hidden section.
+    var iconsBehindCurtain: Bool { isPresenting && sections.items.curtain != nil }
     @ObservationIgnored var onChange: ((Bool) -> Void)?
 
     @ObservationIgnored private let sections: SectionController
@@ -74,9 +77,11 @@ final class PresenterMode {
         Log.app.info("Presenter mode \(presenting ? "on" : "off")\(automatically ? " (screen sharing)" : "")")
         onChange?(presenting)
         sections.collapse()
-        if !(await sections.engine.setPresenting(presenting)) {
+        let hidesInPlace = await sections.engine.setPresenting(presenting) && presenting
+        if !hidesInPlace {
             presenting ? await hideVisibleIcons() : await restoreIcons()
         }
+        scanner.updateFrames()
         keepAwake.setPresenting(presenting && Preferences.presenterKeepAwake)
         let switchesDesktop = Self.switchesDesktopIcons(presenting: presenting,
                                                         enabled: Preferences.presenterHideDesktopIcons,

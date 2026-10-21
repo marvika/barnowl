@@ -13,6 +13,10 @@ final class StatusItems {
     static let toggleName = "BarnOwlToggle"
     static let separatorName = "BarnOwlSeparator"
     static let alwaysHiddenName = "BarnOwlAlwaysHidden"
+    static let curtainName = "BarnOwlPresenterCurtain"
+
+    /// While presenting on macOS 26: an invisible item right next to the arrow.
+    private(set) var curtain: NSStatusItem?
 
     init() {
         Self.seedPositions()
@@ -58,6 +62,44 @@ final class StatusItems {
         let separator = defaults.object(forKey: "NSStatusItem Preferred Position \(separatorName)") as? Double
         defaults.set(separator.map { (toggle + $0) / 2 } ?? toggle + 0.5, forKey: key)
     }
+
+    /// Hides every icon left of the arrow at once, for presenting: an invisible
+    /// item is made directly left of the arrow and widened, pushing everything
+    /// past it off screen, the way the "|" divider hides its section. Nothing is
+    /// dragged, so the pointer stays where it is. Made afresh each time, so it
+    /// lands next to the arrow wherever the arrow is now. False if it can't be
+    /// placed (no remembered arrow position, or macOS 27, which ignores these).
+    func raiseCurtain(length: CGFloat) -> Bool {
+        lowerCurtain()
+        guard ProcessInfo.processInfo.operatingSystemVersion.majorVersion < 27 else { return false }
+        let defaults = UserDefaults.standard
+        guard let toggle = defaults.object(forKey: Self.positionKey(Self.toggleName)) as? Double else { return false }
+        // Smaller is further right: just left of the arrow, before any other icon.
+        defaults.set(toggle + 0.5, forKey: Self.positionKey(Self.curtainName))
+        let item = NSStatusBar.system.statusItem(withLength: 0)
+        item.autosaveName = Self.curtainName
+        item.button?.setAccessibilityElement(false)
+        item.length = length
+        curtain = item
+        return true
+    }
+
+    /// Whether the curtain is where it should be: left of the arrow, which is
+    /// still on screen.
+    var curtainIsLeftOfArrow: Bool {
+        guard let arrow = Self.frame(of: toggle), let curtain = Self.layoutFrame(of: curtain) else { return false }
+        return curtain.maxX <= arrow.minX + 1
+    }
+
+    /// Takes the curtain away, and its remembered place with it.
+    func lowerCurtain() {
+        guard let item = curtain else { return }
+        NSStatusBar.system.removeStatusItem(item)
+        curtain = nil
+        UserDefaults.standard.removeObject(forKey: Self.positionKey(Self.curtainName))
+    }
+
+    private static func positionKey(_ name: String) -> String { "NSStatusItem Preferred Position \(name)" }
 
     /// Created lazily so people who never use the section don't get a gap for it.
     func ensureAlwaysHiddenItem() -> NSStatusItem {

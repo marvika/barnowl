@@ -174,9 +174,10 @@ final class ItemMover {
             return event
         }
         let savedCursor = CGEvent(source: nil)?.location
+        var lastPoint = mouseDown
         CGDisplayHideCursor(CGMainDisplayID())
         defer {
-            if let savedCursor { CGWarpMouseCursorPosition(savedCursor) }
+            if let savedCursor { SyntheticEvents.restorePointer(to: savedCursor, after: lastPoint) }
             CGDisplayShowCursor(CGMainDisplayID())
         }
 
@@ -195,7 +196,8 @@ final class ItemMover {
         // No target any more: drop where the drag started rather than at (0, 0),
         // the top-left hot corner.
         let target = frames[destination.targetWindowID] ?? originalFrame
-        event(.leftMouseUp, destination.dropPoint(targetFrame: target))?.post(tap: .cgSessionEventTap)
+        lastPoint = destination.dropPoint(targetFrame: target)
+        event(.leftMouseUp, lastPoint)?.post(tap: .cgSessionEventTap)
         usleep(20_000)
         return liftedSnapshots >= 3
     }
@@ -212,5 +214,24 @@ enum SyntheticEvents {
 
     nonisolated static func isMarked(_ event: NSEvent) -> Bool {
         event.cgEvent?.getIntegerValueField(.eventSourceUserData) == tag
+    }
+
+    /// Puts the pointer back where it was after posted events moved it to
+    /// `last`. Posted events are handled later than a warp, so warping right
+    /// away can let the last event win and leave the pointer in the menu bar:
+    /// wait (briefly) until it has arrived, then warp, and check it stayed.
+    nonisolated static func restorePointer(to saved: CGPoint, after last: CGPoint) {
+        func isNear(_ point: CGPoint) -> Bool {
+            guard let now = CGEvent(source: nil)?.location else { return true }
+            return abs(now.x - point.x) <= 1 && abs(now.y - point.y) <= 1
+        }
+        for _ in 0..<25 where !isNear(last) { usleep(8_000) }
+        for _ in 0..<3 {
+            CGWarpMouseCursorPosition(saved)
+            // A warp freezes the pointer for a moment unless it's tied back to the mouse.
+            CGAssociateMouseAndMouseCursorPosition(1)
+            usleep(15_000)
+            if isNear(saved) { return }
+        }
     }
 }
