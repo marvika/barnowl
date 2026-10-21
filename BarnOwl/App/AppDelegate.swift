@@ -75,6 +75,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
         }
         model.showSetup = { [weak self] in self?.onboardingWindow.show() }
+        model.showCaptureSetup = { [weak self] in self?.onboardingWindow.show(at: .capture) }
         model.openSettingsWindow = { [weak self] in self?.settingsWindow.show() }
         barnWindow = BarnWindowController(barn: model.barn)
         model.showBarn = { [weak self] in self?.barnWindow.show() }
@@ -90,6 +91,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         barnWatch.start()
         quickPanel = QuickPanelController(model: model)
         quickPanel.syncOwlIcon()
+        model.capture.ownStatusWindows = { [weak self] in
+            guard let self else { return [] }
+            let own: [NSStatusItem?] = [self.items.toggle, self.items.separator, self.items.alwaysHidden,
+                                        self.quickPanel?.owlItem] + self.groupIcons.allStatusItems
+            return Set(own.compactMap { StatusItems.windowID(of: $0) })
+        }
         model.watcher.onSurface = { [weak self] frame in self?.quickPanel.glance(toward: frame) }
         keepAwake.agentsWorking = { [weak self] in self?.model.agents.keepsAwake ?? false }
         island = IslandController(model: model)
@@ -343,6 +350,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                         Log.app.error("No menu bar item for \(app)")
                     }
                 }
+            case ("capture", _):
+                // barnowl://capture, or ?mode=window, screen or same (the last area again)
+                switch query?.first(where: { $0.name == "mode" })?.value {
+                case "screen": model.capture.captureScreen()
+                case "same": model.capture.captureSameArea()
+                case "window": model.capture.start(.window)
+                default: model.capture.start(.area)
+                }
             case ("setup", _):
                 // barnowl://setup, or ?step=agents to open the guide at one step
                 onboardingWindow.show(at: query?.first { $0.name == "step" }?.value.flatMap(OnboardingView.Step.init(name:)))
@@ -484,6 +499,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func preferencesChanged() {
         if Preferences.agentsEnabled != model.agents.isRunning, !DemoMode.isOn { model.agents.applySettings() }
         model.presenter.applySettings()
+        model.capture.applySettings()
         island?.update()
         if Preferences.displayProfiles != lastDisplayProfiles {
             if lastDisplayProfiles != nil { Task { await model.layout.updateProfile() } }

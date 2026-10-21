@@ -24,6 +24,8 @@ final class AppModel {
     let barn = BarnModel()
     /// The coding agents on this Mac, as owlets.
     let agents = AgentWatcher()
+    /// Screenshots and markup.
+    @ObservationIgnored let capture: CaptureCoordinator
     @ObservationIgnored var showBarn: () -> Void = {}
     /// Opens the Roost, showing one session if given.
     @ObservationIgnored var showRoost: (String?) -> Void = { _ in }
@@ -32,6 +34,8 @@ final class AppModel {
     /// Opens the week's recap card.
     @ObservationIgnored var showRecap: (WeekSummary) -> Void = { _ in }
     @ObservationIgnored var showSetup: () -> Void = {}
+    /// Opens the setup guide at its Capture step.
+    @ObservationIgnored var showCaptureSetup: () -> Void = {}
     @ObservationIgnored var openSettingsWindow: () -> Void = {}
     @ObservationIgnored var showSearch: () -> Void = {}
     @ObservationIgnored var syncGroupIcons: () -> Void = {}
@@ -59,6 +63,7 @@ final class AppModel {
         self.mover = mover
         self.groups = groups
         opener = ItemOpener(sections: sections, mover: mover)
+        capture = CaptureCoordinator(scanner: scanner)
         layout = LayoutController(scanner: scanner, mover: mover, statusItems: sections.items, sections: sections,
                                   groups: groups)
         layout.images = images

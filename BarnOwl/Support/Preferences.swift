@@ -55,6 +55,25 @@ enum PrefKey {
     static let agentsLimitAlerts = "agentsLimitAlerts"
     static let agentsIsland = "agentsIsland"
     static let roostSky = "roostSky"
+    static let captureEnabled = "captureEnabled"
+    static let captureAppleKeys = "captureAppleKeys"
+    static let captureCopies = "captureCopies"
+    static let captureSaves = "captureSaves"
+    static let captureShowsCard = "captureShowsCard"
+    static let captureOpensEditor = "captureOpensEditor"
+    static let captureFolder = "captureFolder"
+    static let captureNamePrefix = "captureNamePrefix"
+    static let captureNameIncludesApp = "captureNameIncludesApp"
+    static let captureFormat = "captureFormat"
+    static let captureAtOneX = "captureAtOneX"
+    static let captureCleanMenuBar = "captureCleanMenuBar"
+    static let captureHidesDesktopIcons = "captureHidesDesktopIcons"
+    static let captureWindowShadow = "captureWindowShadow"
+    static let captureShowsPointer = "captureShowsPointer"
+    static let captureSound = "captureSound"
+    static let captureCardCorner = "captureCardCorner"
+    static let captureCardSeconds = "captureCardSeconds"
+    static let captureLastArea = "captureLastArea"
 }
 
 enum Preferences {
@@ -109,6 +128,26 @@ enum Preferences {
             PrefKey.agentsLimitAlerts: true,
             PrefKey.agentsIsland: IslandMode.attention.rawValue,
             PrefKey.roostSky: RoostSky.follow.rawValue,
+            // Off until you choose it, in the setup guide or Settings: you may
+            // already have a capture app on these shortcuts.
+            PrefKey.captureEnabled: false,
+            PrefKey.captureAppleKeys: false,
+            PrefKey.captureCopies: true,
+            PrefKey.captureSaves: true,
+            PrefKey.captureShowsCard: true,
+            PrefKey.captureOpensEditor: false,
+            PrefKey.captureFolder: "",
+            PrefKey.captureNamePrefix: "Screenshot",
+            PrefKey.captureNameIncludesApp: false,
+            PrefKey.captureFormat: CaptureFormat.png.rawValue,
+            PrefKey.captureAtOneX: false,
+            PrefKey.captureCleanMenuBar: true,
+            PrefKey.captureHidesDesktopIcons: true,
+            PrefKey.captureWindowShadow: true,
+            PrefKey.captureShowsPointer: false,
+            PrefKey.captureSound: true,
+            PrefKey.captureCardCorner: CardCorner.bottomLeft.rawValue,
+            PrefKey.captureCardSeconds: 8,
         ])
     }
 
@@ -208,6 +247,51 @@ enum Preferences {
     static var agentsLimitAlerts: Bool { defaults.bool(forKey: PrefKey.agentsLimitAlerts) }
     static var agentsIsland: IslandMode {
         IslandMode(rawValue: defaults.string(forKey: PrefKey.agentsIsland) ?? "") ?? .attention
+    }
+    /// Screenshots and markup, on Barn Owl's shortcuts.
+    static var captureEnabled: Bool {
+        get { defaults.bool(forKey: PrefKey.captureEnabled) }
+        set { defaults.set(newValue, forKey: PrefKey.captureEnabled) }
+    }
+    /// Also answer ⌘⇧3 and ⌘⇧4, once macOS's own screenshot shortcuts are off.
+    static var captureAppleKeys: Bool { defaults.bool(forKey: PrefKey.captureAppleKeys) }
+    static var captureCopies: Bool { defaults.bool(forKey: PrefKey.captureCopies) }
+    static var captureSaves: Bool { defaults.bool(forKey: PrefKey.captureSaves) }
+    static var captureShowsCard: Bool { defaults.bool(forKey: PrefKey.captureShowsCard) }
+    static var captureOpensEditor: Bool { defaults.bool(forKey: PrefKey.captureOpensEditor) }
+    /// Empty means wherever macOS saves its own screenshots.
+    static var captureFolder: String { defaults.string(forKey: PrefKey.captureFolder) ?? "" }
+    static var captureNamePrefix: String {
+        let prefix = (defaults.string(forKey: PrefKey.captureNamePrefix) ?? "").trimmingCharacters(in: .whitespaces)
+        return prefix.isEmpty ? "Screenshot" : prefix
+    }
+    static var captureNameIncludesApp: Bool { defaults.bool(forKey: PrefKey.captureNameIncludesApp) }
+    static var captureFormat: CaptureFormat {
+        CaptureFormat(rawValue: defaults.string(forKey: PrefKey.captureFormat) ?? "") ?? .png
+    }
+    /// Save Retina captures at half their pixels, the size they look on screen.
+    static var captureAtOneX: Bool { defaults.bool(forKey: PrefKey.captureAtOneX) }
+    static var captureCleanMenuBar: Bool { defaults.bool(forKey: PrefKey.captureCleanMenuBar) }
+    static var captureHidesDesktopIcons: Bool { defaults.bool(forKey: PrefKey.captureHidesDesktopIcons) }
+    static var captureWindowShadow: Bool { defaults.bool(forKey: PrefKey.captureWindowShadow) }
+    static var captureShowsPointer: Bool { defaults.bool(forKey: PrefKey.captureShowsPointer) }
+    static var captureSound: Bool { defaults.bool(forKey: PrefKey.captureSound) }
+    static var captureCardCorner: CardCorner {
+        CardCorner(rawValue: defaults.string(forKey: PrefKey.captureCardCorner) ?? "") ?? .bottomLeft
+    }
+    /// 0 keeps cards until you close them.
+    static var captureCardSeconds: Int { max(0, defaults.integer(forKey: PrefKey.captureCardSeconds)) }
+    /// The last area captured, as "x,y,width,height" in screen points, for "the same area again".
+    static var captureLastArea: CGRect? {
+        get {
+            let parts = (defaults.string(forKey: PrefKey.captureLastArea) ?? "").split(separator: ",").compactMap { Double($0) }
+            guard parts.count == 4 else { return nil }
+            return CGRect(x: parts[0], y: parts[1], width: parts[2], height: parts[3])
+        }
+        set {
+            let value = newValue.map { "\($0.minX),\($0.minY),\($0.width),\($0.height)" }
+            defaults.set(value, forKey: PrefKey.captureLastArea)
+        }
     }
     static var hasShownWelcome: Bool {
         get { defaults.bool(forKey: PrefKey.hasShownWelcome) }

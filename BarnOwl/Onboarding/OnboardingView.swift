@@ -2,10 +2,10 @@ import KeyboardShortcuts
 import ServiceManagement
 import SwiftUI
 
-/// First-run setup: seven short steps under a dusk sky, with the owl along.
+/// First-run setup: eight short steps under a dusk sky, with the owl along.
 struct OnboardingView: View {
     enum Step: Int, CaseIterable {
-        case welcome, display, arrange, shortcuts, preferences, agents, done
+        case welcome, display, arrange, shortcuts, preferences, agents, capture, done
 
         /// "agents" in barnowl://setup?step=agents
         init?(name: String) {
@@ -35,6 +35,7 @@ struct OnboardingView: View {
                 case .shortcuts: shortcuts
                 case .preferences: preferences
                 case .agents: AgentsStep()
+                case .capture: CaptureStep(model: model)
                 case .done: done
                 }
             }
@@ -334,7 +335,7 @@ enum LaunchAtLogin {
 }
 
 /// A step's title with a small owl peeking in from the side.
-private struct StepHeader: View {
+struct StepHeader: View {
     let title: String
     let subtitle: String
     @State private var peeked = false
