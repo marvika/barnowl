@@ -11,6 +11,8 @@ struct CapturePane: View {
     @AppStorage(PrefKey.captureThen) private var then = CaptureThen.card
     @AppStorage(PrefKey.captureAdjusts) private var adjusts = true
     @AppStorage(PrefKey.capturePrivateInfo) private var privateInfo = true
+    @AppStorage(PrefKey.captureKeepDays) private var keepDays = 30
+    @State private var cleared = false
     @AppStorage(PrefKey.captureFolder) private var folder = ""
     @AppStorage(PrefKey.captureNamePrefix) private var namePrefix = "Screenshot"
     @AppStorage(PrefKey.captureNameIncludesApp) private var nameIncludesApp = false
@@ -34,6 +36,10 @@ struct CapturePane: View {
                                subtitle: "Capture an area, a window or the whole screen, then mark it up and hand it on.",
                                symbol: "camera.viewfinder", color: Brand.amber)
                 }
+                // Until it's allowed, the permission comes first.
+                if enabled && !model.screenRecordingAllowed {
+                    PermissionRow(permission: .screenRecording, model: model)
+                }
             } footer: {
                 if let other = others.first {
                     Text(enabled
@@ -50,9 +56,30 @@ struct CapturePane: View {
             }
             .disabled(!enabled)
             Section {
-                PermissionRow(permission: .screenRecording, model: model)
+                Picker("Keep captures editable", selection: $keepDays) {
+                    Text("For 30 days").tag(30)
+                    Text("For 7 days").tag(7)
+                    Text("Don't keep them").tag(0)
+                }
+                LabeledContent("Kept captures") {
+                    Button(cleared ? "Cleared" : "Clear Now") {
+                        CaptureLibrary.clear()
+                        cleared = true
+                    }
+                    .disabled(cleared)
+                }
+            } header: {
+                Text("History")
             } footer: {
-                Text("Captures need Screen Recording, like the real pictures of hidden icons. Barn Owl asks the first time you capture.")
+                Text("⌃⌥⌘E reopens your last capture with its marks still movable. To do that, Barn Owl keeps each original, as captured and before anything was hidden, in Application Support on your Mac.")
+            }
+            .disabled(!enabled)
+            if model.screenRecordingAllowed || !enabled {
+                Section {
+                    PermissionRow(permission: .screenRecording, model: model)
+                } footer: {
+                    Text("Captures need Screen Recording, like the real pictures of hidden icons. Barn Owl asks the first time you capture.")
+                }
             }
             Section {
                 LabeledContent("New to Capture?") {

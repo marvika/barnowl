@@ -16,6 +16,8 @@ final class CaptureCoordinator {
     @ObservationIgnored private var pins: [CapturePin] = []
     /// Editors closed with Done, so their close isn't mistaken for leaving.
     @ObservationIgnored private var finished: Set<UUID> = []
+    /// Captures that went to the clipboard.
+    @ObservationIgnored private var copied: Set<UUID> = []
     /// The last few captures, in memory; older ones come back from the library.
     @ObservationIgnored private var captures: [UUID: Capture] = [:]
     @ObservationIgnored private var order: [UUID] = []
@@ -163,6 +165,7 @@ final class CaptureCoordinator {
             deliver(Capture(image: image, scale: snapshot.scale, kind: .area, date: Date(), appName: appName),
                     action: action, windows: windowRects(in: rect, scale: snapshot.scale))
         case .window(let window, let snapshot):
+            Preferences.captureLastArea = window.frame
             // The window on its own, with its shadow; the frozen pixels if that fails.
             if let picture = try? await ScreenSnapshotter.window(window.windowID, shadow: Preferences.captureWindowShadow) {
                 let whole = [CGRect(x: 0, y: 0, width: picture.0.width, height: picture.0.height)]
@@ -200,6 +203,7 @@ final class CaptureCoordinator {
         }
         if Preferences.captureSound { shutter?.stop(); shutter?.play() }
         if saves { capture.fileURL = CaptureStore.reserveURL(for: capture) }
+        if copies { copied.insert(capture.id) }
         remember(capture)
         lastCaptureID = capture.id
         writeInBackground(capture, copies: copies, saves: saves)
@@ -280,8 +284,11 @@ final class CaptureCoordinator {
             insights[id] = insight
             scans[id] = nil
             editors.values.first { $0.captureID == id }?.editor.update(insight: insight)
-            let secrets = insight.text.findings.filter { $0.kind.tier == .secret }
-            if let first = secrets.first { cards.offerToHide(id, count: secrets.count, title: first.kind.title) }
+            // Only secrets interrupt; once offered, Hide covers everything private.
+            let findings = insight.text.findings.filter(\.kind.isDefault)
+            if findings.contains(where: { $0.kind.tier == .secret }) {
+                cards.offerToHide(id, count: findings.count, title: Self.describe(findings))
+            }
         }
     }
 
@@ -331,25 +338,30 @@ final class CaptureCoordinator {
         let askedBefore = UserDefaults.standard.bool(forKey: "captureAskedPermission")
         if askedBefore {
             alert.messageText = "Screen Recording is off for Barn Owl"
-            alert.informativeText = "Turn on Barn Owl in System Settings › Privacy & Security › Screen & System Audio Recording, then relaunch Barn Owl."
+            alert.informativeText = "Turn on Barn Owl in System Settings › Privacy & Security › Screen & System Audio Recording, then choose Relaunch. Barn Owl can't capture until it restarts."
+            alert.addButton(withTitle: "Relaunch Barn Owl")
             alert.addButton(withTitle: "Open System Settings")
             alert.addButton(withTitle: "Cancel")
         } else {
             alert.messageText = "Let Barn Owl see your screen"
-            alert.informativeText = "macOS asks you to allow Screen Recording before Barn Owl can capture. Nothing leaves your Mac."
+            alert.informativeText = "macOS asks you to allow Screen Recording before Barn Owl can capture. Nothing leaves your Mac. Once it's allowed, relaunch Barn Owl and press the shortcut again."
             alert.addButton(withTitle: "Continue")
             alert.addButton(withTitle: "Not Now")
         }
         NSApp.activate()
-        guard alert.runModal() == .alertFirstButtonReturn else { return false }
+        let answer = alert.runModal()
         if askedBefore {
-            if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture") {
+            if answer == .alertFirstButtonReturn {
+                Relaunch.now()
+            } else if answer == .alertSecondButtonReturn,
+                      let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture") {
                 NSWorkspace.shared.open(url)
             }
-        } else {
-            UserDefaults.standard.set(true, forKey: "captureAskedPermission")
-            _ = CGRequestScreenCaptureAccess()
+            return false
         }
+        guard answer == .alertFirstButtonReturn else { return false }
+        UserDefaults.standard.set(true, forKey: "captureAskedPermission")
+        _ = CGRequestScreenCaptureAccess()
         return false
     }
 
@@ -410,7 +422,7 @@ final class CaptureCoordinator {
     /// again; the library keeps the original.
     func hideSecrets(_ id: UUID) {
         guard var capture = capture(id), let insight = insights[id] else { return }
-        let findings = insight.text.findings.filter { $0.kind.tier == .secret }
+        let findings = insight.text.findings.filter(\.kind.isDefault)
         let before = CaptureLibrary.document(id)
         var document = storedDocument(id) ?? EditorDocument(imageSize: CGSize(width: capture.image.width, height: capture.image.height),
                                                              scale: capture.scale)
@@ -440,6 +452,26 @@ final class CaptureCoordinator {
         })
     }
 
+    /// "A key or token", "A card number and an email address", "4 private details".
+    static func describe(_ findings: [SensitiveTextFinder.Finding]) -> String {
+        var kinds: [SensitiveTextFinder.Kind] = []
+        for finding in findings where !kinds.contains(finding.kind) { kinds.append(finding.kind) }
+        func named(_ kind: SensitiveTextFinder.Kind) -> String {
+            let title = kind.title.lowercased()
+            return (["a", "e", "i", "o", "u"].contains(title.prefix(1)) ? "an " : "a ") + title
+        }
+        switch kinds.count {
+        case 1 where findings.count == 1:
+            let name = named(kinds[0])
+            return name.prefix(1).uppercased() + name.dropFirst()
+        case 2 where findings.count == 2:
+            let name = "\(named(kinds[0])) and \(named(kinds[1]))"
+            return name.prefix(1).uppercased() + name.dropFirst()
+        default:
+            return "\(findings.count) private details"
+        }
+    }
+
     private func storedDocument(_ id: UUID) -> EditorDocument? {
         guard let data = CaptureLibrary.document(id), !data.isEmpty else { return nil }
         return try? JSONDecoder().decode(EditorDocument.self, from: data)
@@ -465,7 +497,7 @@ final class CaptureCoordinator {
         // Never under a frozen screen.
         overlay?.finish(.cancelled)
         rememberFrontApp()
-        guard let id = lastCaptureID ?? CaptureLibrary.latest()?.id else { return }
+        guard let id = lastCaptureID ?? CaptureLibrary.latest()?.id else { return NSSound.beep() }
         openEditor(id)
     }
 
@@ -547,6 +579,11 @@ extension CaptureCoordinator: CaptureEditorHost {
                 self.captures[id] = capture
                 self.cards.add(capture, status: "Edits kept · not copied yet", kept: false)
             }
+        }
+        // Opened with E and closed untouched: unless it was copied or saved, the
+        // card is the only place it lives.
+        if let id, !edited, !finished.contains(id), let capture = capture(id), capture.fileURL == nil, !copied.contains(id) {
+            cards.add(capture, status: status(copied: false, saved: false), kept: false)
         }
         if let id { finished.remove(id) }
         editors[ObjectIdentifier(editor)] = nil

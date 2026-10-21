@@ -95,6 +95,8 @@ final class AppModel {
         case .showAllIcons: sections.showAll()
         case .captureArea: capture.start(.area)
         case .captureScreen: capture.captureScreen()
+        case .captureSameArea: capture.captureSameArea()
+        case .editLastCapture: capture.editLastCapture()
         case .settings(let pane): showSettings(SettingsPane(rawValue: pane.rawValue))
         }
     }

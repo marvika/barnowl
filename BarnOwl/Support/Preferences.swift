@@ -63,6 +63,7 @@ enum PrefKey {
     static let captureAdjusts = "captureAdjusts"
     static let capturePrivateInfo = "capturePrivateInfo"
     static let captureHintCount = "captureHintCount"
+    static let captureKeepDays = "captureKeepDays"
     static let captureFolder = "captureFolder"
     static let captureNamePrefix = "captureNamePrefix"
     static let captureNameIncludesApp = "captureNameIncludesApp"
@@ -140,6 +141,7 @@ enum Preferences {
             PrefKey.captureAdjusts: true,
             PrefKey.capturePrivateInfo: true,
             PrefKey.captureHintCount: 0,
+            PrefKey.captureKeepDays: 30,
             PrefKey.captureFolder: "",
             PrefKey.captureNamePrefix: "Screenshot",
             PrefKey.captureNameIncludesApp: false,
@@ -269,6 +271,8 @@ enum Preferences {
     static var captureAdjusts: Bool { defaults.bool(forKey: PrefKey.captureAdjusts) }
     /// Read each capture's text in the background, to offer hiding what looks private.
     static var capturePrivateInfo: Bool { defaults.bool(forKey: PrefKey.capturePrivateInfo) }
+    /// How long captures stay editable; 0 keeps none.
+    static var captureKeepDays: Int { max(0, defaults.integer(forKey: PrefKey.captureKeepDays)) }
     /// How many captures have shown the hints; they stop after ten.
     static var captureHintCount: Int {
         get { defaults.integer(forKey: PrefKey.captureHintCount) }

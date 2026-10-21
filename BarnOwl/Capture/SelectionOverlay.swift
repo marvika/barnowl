@@ -28,7 +28,7 @@ enum CaptureMode: String, CaseIterable, Identifiable {
     }
     var hint: String {
         switch self {
-        case .area: "Drag an area or click a window · Space for windows · ? for keys"
+        case .area: "Drag an area or click a window · L for the last area · ? for keys"
         case .window: "Click a window · Space to drag an area · ? for keys"
         case .screen: "Click a screen · ? for keys"
         }
@@ -241,6 +241,8 @@ final class SelectionView: NSView {
     private var keysSheet: NSHostingView<CaptureKeysSheet>?
 
     private var gesture: Gesture?
+    /// The selection before a move or resize, for Esc.
+    private var beforeGesture: CGRect?
     private var spaceHeld = false
     private var lastPoint: CGPoint = .zero
     /// The selection, in this view's coordinates.
@@ -379,11 +381,13 @@ final class SelectionView: NSView {
         window?.makeFirstResponder(self)
         if let selection {
             if let handle = handle(at: point, in: selection) {
+                beforeGesture = selection
                 gesture = .resizing(handle: handle, from: selection)
                 return
             }
             if selection.contains(point) {
                 if event.clickCount == 2 { return act(.primary) }
+                beforeGesture = selection
                 gesture = .moving(offset: CGSize(width: point.x - selection.minX, height: point.y - selection.minY))
                 NSCursor.closedHand.set()
                 return
@@ -513,8 +517,9 @@ final class SelectionView: NSView {
         switch event.keyCode {
         case 53: // Esc steps back: the gesture, then the selection, then the overlay.
             if gesture != nil {
+                // A move or resize goes back to where it started; a new selection goes.
+                if case .drawing = gesture { selection = nil } else { selection = beforeGesture }
                 gesture = nil
-                selection = nil
                 update()
             } else if keysSheet != nil {
                 toggleKeys()
@@ -524,8 +529,12 @@ final class SelectionView: NSView {
                 onResult?(.cancelled)
             }
             return
-        case 36, 76: // Return
+        case 36, 76: // Return: the selection, or the window or screen you're pointing at.
             if selection == nil, mode == .screen { selectedScreen = true; selection = bounds }
+            if selection == nil, let hovered {
+                selectedWindow = hovered
+                selection = hovered.frame.offsetBy(dx: -snapshot.frame.minX, dy: -snapshot.frame.minY).intersection(bounds)
+            }
             if selection != nil { act(.primary) }
             return
         case 49: // Space
@@ -579,7 +588,7 @@ final class SelectionView: NSView {
 
     /// Brings back the area you captured last, if it's on this display.
     private func restoreLastArea() {
-        guard let area = Preferences.captureLastArea, snapshot.frame.intersects(area) else { return }
+        guard let area = Preferences.captureLastArea, snapshot.frame.intersects(area) else { return NSSound.beep() }
         onSelect?()
         selection = area.offsetBy(dx: -snapshot.frame.minX, dy: -snapshot.frame.minY).intersection(bounds)
         selectedWindow = nil

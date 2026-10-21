@@ -17,6 +17,8 @@ enum AppCommand: Hashable, Sendable, Identifiable {
     case showAllIcons
     case captureArea
     case captureScreen
+    case captureSameArea
+    case editLastCapture
     case settings(SettingsPaneID)
 
     var id: Self { self }
@@ -39,6 +41,8 @@ enum AppCommand: Hashable, Sendable, Identifiable {
         case .showAllIcons: "Show all menu bar icons"
         case .captureArea: "Capture an area or a window"
         case .captureScreen: "Capture the whole screen"
+        case .captureSameArea: "Capture the same area again"
+        case .editLastCapture: "Edit the last capture"
         case .settings(let pane): pane == .layout ? "Arrange menu bar icons" : "\(pane.title) settings"
         }
     }
@@ -59,6 +63,8 @@ enum AppCommand: Hashable, Sendable, Identifiable {
         case .showAllIcons: "eye.circle"
         case .captureArea: "camera.viewfinder"
         case .captureScreen: "rectangle.dashed"
+        case .captureSameArea: "arrow.counterclockwise.circle"
+        case .editLastCapture: "pencil.tip.crop.circle"
         case .settings(let pane): pane == .layout ? "square.grid.3x1.below.line.grid.1x2" : "gearshape"
         }
     }
@@ -81,6 +87,8 @@ enum AppCommand: Hashable, Sendable, Identifiable {
         case .showAllIcons: ["show", "all", "icons", "reveal"]
         case .captureArea: ["capture", "screenshot", "snap", "grab", "area", "window"]
         case .captureScreen: ["capture", "screenshot", "snap", "grab", "screen", "whole"]
+        case .captureSameArea: ["capture", "screenshot", "same", "again", "repeat", "last"]
+        case .editLastCapture: ["edit", "capture", "screenshot", "last", "markup", "annotate"]
         case .settings(let pane): ["settings", "preferences", pane.rawValue.lowercased()] + pane.extraKeywords
         }
     }
@@ -131,7 +139,7 @@ enum CommandParser {
         var all: [AppCommand] = [.stopKeepAwake, .presenter, .darkMode, .microphone, .desktopIcons,
                                      .hiddenFiles, .sleepDisplay, .clipboard, .barn, .showAllIcons]
         if Preferences.agentsEnabled { all.append(.roost) }
-        if Preferences.captureEnabled { all += [.captureArea, .captureScreen] }
+        if Preferences.captureEnabled { all += [.captureArea, .captureScreen, .captureSameArea, .editLastCapture] }
         all += SettingsPaneID.allCases.map(AppCommand.settings)
 
         var results: [AppCommand] = []

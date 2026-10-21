@@ -51,6 +51,16 @@ struct QuickPanelView: View {
                 close()
                 model.showClipboard()
             }
+            if Preferences.captureEnabled {
+                QuickFooterButton(symbol: "camera.viewfinder", help: "Capture an area or a window") {
+                    close()
+                    // Once the panel has gone.
+                    Task {
+                        try? await Task.sleep(for: .milliseconds(200))
+                        model.capture.start(.area)
+                    }
+                }
+            }
             QuickFooterButton(symbol: "menubar.rectangle", help: "Arrange menu bar icons") {
                 close()
                 model.showSettings(.layout)

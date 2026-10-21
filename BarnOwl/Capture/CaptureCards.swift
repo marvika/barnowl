@@ -287,8 +287,8 @@ private struct CaptureCardView: View {
     private var secretsRow: some View {
         HStack(spacing: 6) {
             Image(systemName: "eye.trianglebadge.exclamationmark").foregroundStyle(.orange).font(.system(size: 12))
-            Text(card.secrets == 1 ? "\(card.secretTitle) visible" : "\(card.secrets) private items visible")
-                .font(.caption.weight(.medium)).lineLimit(1)
+            Text("\(card.secretTitle) visible")
+                .font(.caption.weight(.medium)).lineLimit(1).truncationMode(.middle)
             Spacer(minLength: 4)
             Button { cards.hide(card.id) } label: {
                 Text("Hide").font(.caption.weight(.semibold))

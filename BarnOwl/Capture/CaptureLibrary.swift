@@ -17,8 +17,10 @@ enum CaptureLibrary {
     }
 
     static let attribute = "io.github.marvika.barnowl.capture"
-    static let keepDays = 30
+    static var keepDays: Int { Preferences.captureKeepDays }
     static let keepCount = 200
+    /// Whether captures are kept at all.
+    static var isOn: Bool { keepDays > 0 }
 
     static var folder: URL {
         let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
@@ -31,6 +33,7 @@ enum CaptureLibrary {
 
     /// Stores a new capture's original and its entry. Runs off the main thread.
     static func store(_ image: CGImage, entry: Entry, in root: URL = folder) throws {
+        guard root != folder || isOn else { return }
         let dir = folder(for: entry.id, in: root)
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         let png = try CaptureStore.encode(image, scale: entry.scale, as: .png, atOneX: false)
@@ -102,11 +105,16 @@ enum CaptureLibrary {
 
     // MARK: Tidying
 
-    /// Lets go of captures older than 30 days, and of any beyond 200.
-    static func prune(now: Date = Date(), in root: URL = folder) {
-        let cutoff = now.addingTimeInterval(-Double(keepDays) * 86_400)
+    /// Lets go of captures older than the setting allows, and of any beyond 200.
+    static func prune(now: Date = Date(), days: Int = keepDays, in root: URL = folder) {
+        let cutoff = now.addingTimeInterval(-Double(days) * 86_400)
         for (index, entry) in entries(in: root).enumerated() where entry.date < cutoff || index >= keepCount {
             try? FileManager.default.removeItem(at: folder(for: entry.id, in: root))
         }
+    }
+
+    /// Lets go of every kept capture now.
+    static func clear(in root: URL = folder) {
+        for entry in entries(in: root) { try? FileManager.default.removeItem(at: folder(for: entry.id, in: root)) }
     }
 }
