@@ -89,8 +89,13 @@ final class SelectionOverlay {
         Preferences.captureHintCount += 1
         // Keys and the crosshair only reach an active app.
         NSApp.activate()
-        for window in windows { window.orderFrontRegardless() }
+        let pointer = NSEvent.mouseLocation
+        for window in windows {
+            if window.frame.contains(pointer) { window.makeKeyAndOrderFront(nil) } else { window.orderFrontRegardless() }
+        }
         pointerMoved()
+        // Activation finishes a moment later; claim the keys again then.
+        DispatchQueue.main.async { [weak self] in self?.pointerMoved() }
         // A display, Space or sleep change leaves the frozen pictures wrong.
         let center = NotificationCenter.default, workspace = NSWorkspace.shared.notificationCenter
         observers = [
@@ -102,6 +107,9 @@ final class SelectionOverlay {
             },
             workspace.addObserver(forName: NSWorkspace.willSleepNotification, object: nil, queue: .main) { [weak self] _ in
                 MainActor.assumeIsolated { self?.finish(.cancelled) }
+            },
+            center.addObserver(forName: NSApplication.didBecomeActiveNotification, object: nil, queue: .main) { [weak self] _ in
+                MainActor.assumeIsolated { self?.pointerMoved() }
             },
             // Switching to another app (⌘Tab) ends the capture; it never leaves a frozen screen behind.
             center.addObserver(forName: NSApplication.didResignActiveNotification, object: nil, queue: .main) { [weak self] _ in
