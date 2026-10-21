@@ -545,7 +545,7 @@ extension CaptureCoordinator: CaptureEditorHost {
                 guard let image = await editor.render(), var capture = self.capture(id) else { return }
                 capture.image = image
                 self.captures[id] = capture
-                self.cards.add(capture, status: "Edits kept · not copied yet")
+                self.cards.add(capture, status: "Edits kept · not copied yet", kept: false)
             }
         }
         if let id { finished.remove(id) }

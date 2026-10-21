@@ -34,10 +34,10 @@ final class CaptureCards {
 
     var corner: CardCorner { Preferences.captureCardCorner }
 
-    func add(_ capture: Capture, status: String) {
+    func add(_ capture: Capture, status: String, kept: Bool? = nil) {
         let small = CaptureStore.thumbnail(capture.image, width: Self.width * 2)
         let thumbnail = NSImage(cgImage: small, size: capture.pointSize)
-        let kept = status != coordinator?.status(copied: false, saved: false)
+        let kept = kept ?? (status != coordinator?.status(copied: false, saved: false))
         withAnimation(.spring(response: 0.4, dampingFraction: 0.85)) {
             cards.append(Card(id: capture.id, thumbnail: thumbnail, status: status, kept: kept))
         }
