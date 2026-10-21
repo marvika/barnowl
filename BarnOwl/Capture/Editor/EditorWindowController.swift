@@ -175,10 +175,10 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSTool
         alignOptionsBar()
     }
 
-    /// The options bar starts where the tools do.
+    /// The options bar starts where the traffic lights do.
     private func alignOptionsBar() {
-        guard let window, let first = toolGroup?.view ?? toolGroup?.subitems.first?.view else { return }
-        let frame = first.convert(first.bounds, to: nil)
+        guard let window, let close = window.standardWindowButton(.closeButton) else { return }
+        let frame = close.convert(close.bounds, to: nil)
         let leading: CGFloat = max(12, frame.minX.rounded())
         if abs(optionsLayout.leading - leading) > 0.5, frame.width > 0, frame.minX < window.frame.width {
             optionsLayout.leading = leading
