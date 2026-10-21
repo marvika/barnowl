@@ -215,7 +215,7 @@ Click it to mark it up, or drag it into Slack, Mail or any other app.
 
 The **editor** has tapered, bendable arrows, numbered steps with labels,
 text in five styles and four typefaces, boxes, highlighter, pen, spotlight,
-crop, and redaction that covers or pixelates. Every tool has a single-letter
+crop, and redaction that covers, blurs or pixelates. Every tool has a single-letter
 key and remembers how you last used it. **Frame** puts the capture on a
 background, with padding, rounded corners and a shadow, ready to share.
 
