@@ -394,6 +394,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationWillTerminate(_ notification: Notification) {
+        model?.capture.keepOpenEditors()
         if KeepAwakeController.saveSessionOnQuit { keepAwake.saveSession() }
         keepAwake.stop()
         // Never leave the Mac unable to sleep after Barn Owl is gone. Keep

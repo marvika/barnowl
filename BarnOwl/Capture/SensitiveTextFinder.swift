@@ -64,6 +64,17 @@ enum SensitiveTextFinder {
             }
         }
 
+        /// The kind in a sentence: "a key or token", "an ID number", "your user name".
+        var phrase: String {
+            switch self {
+            case .homeFolder: "your user name"
+            case .ipAddress: "an IP address"
+            case .email: "an email address"
+            case .nationalID: "an ID number"
+            default: "a " + title.prefix(1).lowercased() + title.dropFirst()
+            }
+        }
+
         /// Offered for hiding unless you choose otherwise.
         var isDefault: Bool { tier > .info }
     }

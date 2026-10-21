@@ -48,8 +48,9 @@ enum CaptureLibrary {
 
     /// The markup, as the editor's document encodes it.
     static func storeDocument(_ data: Data, for id: UUID, in root: URL = folder) throws {
+        guard root != folder || isOn else { return }
         let dir = folder(for: id, in: root)
-        guard FileManager.default.fileExists(atPath: dir.path) else { return }
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         try data.write(to: dir.appending(path: "document.json"), options: .atomic)
         if var entry = entry(id, in: root), !entry.edited {
             entry.edited = true

@@ -129,6 +129,21 @@ struct CaptureFlowTests {
         #expect(SelectionView.handlePoints(of: rect).count == 8)
     }
 
+    @Test func twoCapturesInOneSecondGetTheirOwnNames() {
+        let folder = FileManager.default.temporaryDirectory.appending(path: "capture-names-\(UUID())")
+        let first = CaptureStore.freeURL(in: folder, baseName: "Shot", fileExtension: "png")
+        let second = CaptureStore.freeURL(in: folder, baseName: "Shot", fileExtension: "png")
+        #expect(first != second)
+    }
+
+    @MainActor @Test func describesWhatIsVisible() {
+        func finding(_ kind: SensitiveTextFinder.Kind) -> SensitiveTextFinder.Finding { .init(rect: .zero, kind: kind, text: "") }
+        #expect(CaptureCoordinator.describe([finding(.key)]) == "A key or token")
+        #expect(CaptureCoordinator.describe([finding(.key), finding(.homeFolder)]) == "A key or token and your user name")
+        #expect(CaptureCoordinator.describe([finding(.nationalID)]) == "An ID number")
+        #expect(CaptureCoordinator.describe([finding(.key), finding(.key), finding(.email)]) == "3 private details")
+    }
+
     @Test func savingAgainKeepsTheFilesFormat() {
         #expect(CaptureStore.format(of: URL(fileURLWithPath: "/tmp/a.jpg")) == .jpeg)
         #expect(CaptureStore.format(of: URL(fileURLWithPath: "/tmp/a.HEIC")) == .heic)

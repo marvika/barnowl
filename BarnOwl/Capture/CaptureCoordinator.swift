@@ -25,6 +25,11 @@ final class CaptureCoordinator {
     @ObservationIgnored private var scans: [UUID: Task<Void, Never>] = [:]
     /// The app you were in when the capture started, to give the keyboard back to.
     @ObservationIgnored private var previousApp: NSRunningApplication?
+    /// The last app other than Barn Owl you were in, for when Barn Owl is in front.
+    @ObservationIgnored private var lastOtherApp: NSRunningApplication?
+    /// Each capture's file, clipboard and library writes, one after another.
+    @ObservationIgnored private var writes: [UUID: Task<Void, Never>] = [:]
+    @ObservationIgnored private var lastKeepDays: Int?
     @ObservationIgnored private var targets: [WindowTarget] = []
     @ObservationIgnored private var lastAppleKeys: Bool?
     @ObservationIgnored private lazy var shutter = NSSound(
@@ -42,8 +47,15 @@ final class CaptureCoordinator {
         KeyboardShortcuts.onKeyUp(for: .captureAreaApple) { [weak self] in self?.start(.area) }
         KeyboardShortcuts.onKeyUp(for: .captureScreenApple) { [weak self] in self?.captureScreen() }
         KeyboardShortcuts.onKeyUp(for: .editLastCapture) { [weak self] in self?.editLastCapture() }
+        NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.didActivateApplicationNotification,
+                                                          object: nil, queue: .main) { [weak self] note in
+            let app = note.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication
+            MainActor.assumeIsolated {
+                if let app, app != .current { self?.lastOtherApp = app }
+            }
+        }
         applySettings()
-        Task.detached(priority: .background) { CaptureLibrary.prune() }
+        Task.detached(priority: .background) { CaptureStore.tidyTemporaryFiles() }
     }
 
     /// Turns the shortcuts on or off with the setting, and takes ⇧⌘3 and ⇧⌘4
@@ -51,6 +63,12 @@ final class CaptureCoordinator {
     func applySettings() {
         let names: [KeyboardShortcuts.Name] = [.captureArea, .captureScreen, .captureSameArea, .editLastCapture]
         if Preferences.captureEnabled { KeyboardShortcuts.enable(names) } else { KeyboardShortcuts.disable(names) }
+        // At launch, and whenever you keep captures for less time.
+        if CaptureLibrary.keepDays != lastKeepDays {
+            lastKeepDays = CaptureLibrary.keepDays
+            let days = CaptureLibrary.keepDays
+            Task.detached(priority: .background) { CaptureLibrary.prune(days: days) }
+        }
         let apple = Preferences.captureEnabled && Preferences.captureAppleKeys && !SystemScreenshotShortcuts.anyEnabled
         // Setting a shortcut writes to the defaults, which calls this again: only on a change.
         guard apple != lastAppleKeys else { return }
@@ -150,7 +168,7 @@ final class CaptureCoordinator {
 
     private func rememberFrontApp() {
         let front = NSWorkspace.shared.frontmostApplication
-        previousApp = front == .current ? previousApp : front
+        previousApp = front == nil || front == .current ? lastOtherApp ?? previousApp : front
     }
 
     private func finish(_ result: SelectionResult, appName: String?) async {
@@ -239,7 +257,7 @@ final class CaptureCoordinator {
         let fileURL = saves ? capture.fileURL : nil
         let atOneX = Preferences.captureAtOneX
         let kind = capture.kind
-        Task {
+        inOrder(id) { [self] in
             let png: Data? = try? await Task.detached(priority: .userInitiated) {
                 try CaptureStore.encode(image, scale: scale, as: .png, atOneX: false)
             }.value
@@ -271,6 +289,50 @@ final class CaptureCoordinator {
         }
     }
 
+    /// Runs a capture's writes in the order they were asked for, so a quick
+    /// Hide or edit never loses to the first save still encoding.
+    @discardableResult
+    private func inOrder<T: Sendable>(_ id: UUID, _ work: @escaping @MainActor () async -> T) -> Task<T, Never> {
+        let previous = writes[id]
+        let task = Task { @MainActor in
+            await previous?.value
+            return await work()
+        }
+        writes[id] = Task { _ = await task.value }
+        return task
+    }
+
+    /// Writes over the capture's file, or a new one in the capture folder, off the main thread.
+    @discardableResult
+    private func saveFile(_ id: UUID, image: CGImage? = nil) -> Task<URL?, Never> {
+        inOrder(id) { [self] in
+            guard var capture = capture(id) else { return nil }
+            let picture = image ?? capture.image
+            let url = capture.fileURL ?? CaptureStore.reserveURL(for: capture)
+            let scale = capture.scale, kind = capture.kind, atOneX = Preferences.captureAtOneX
+            let saved = await Task.detached(priority: .userInitiated) {
+                do {
+                    let data = try CaptureStore.encode(picture, scale: scale, as: CaptureStore.format(of: url), atOneX: atOneX)
+                    try data.write(to: url, options: .atomic)
+                    CaptureStore.markAsScreenshot(url, kind: kind)
+                    return true
+                } catch {
+                    return false
+                }
+            }.value
+            guard saved else {
+                Log.app.error("Saving a capture failed")
+                return nil
+            }
+            capture = self.capture(id) ?? capture
+            capture.fileURL = url
+            capture.unsavedEdits = false
+            captures[id] = capture
+            CaptureLibrary.setFile(url, for: id)
+            return url
+        }
+    }
+
     private func scanInBackground(_ capture: Capture, windows: [CGRect]) {
         let image = capture.image, id = capture.id
         guard Preferences.capturePrivateInfo else {
@@ -297,9 +359,9 @@ final class CaptureCoordinator {
         captures[capture.id] = capture
         order.removeAll { $0 == capture.id }
         order.append(capture.id)
-        // Three in memory; the library has the rest. Open editors keep theirs.
+        // Three in memory; the library has the rest. Open editors and cards keep theirs.
         let open = Set(editors.values.map(\.captureID))
-        while order.count > 3, let oldest = order.first(where: { !open.contains($0) }) {
+        while order.count > 3, let oldest = order.first(where: { !open.contains($0) && !cards.has($0) && $0 != capture.id }) {
             order.removeAll { $0 == oldest }
             captures[oldest] = nil
             insights[oldest] = nil
@@ -372,35 +434,39 @@ final class CaptureCoordinator {
         guard let capture = capture(id) else { return }
         Task {
             await CaptureStore.copy(capture.image, scale: capture.scale)
-            cards.update(id, status: capture.fileURL == nil ? "Copied" : "Copied and saved", kept: true)
+            copied.insert(id)
+            cards.update(id, status: status(copied: true, saved: isSaved(id)), kept: true)
         }
     }
 
     /// Saves it, or shows it in Finder if it's saved already.
     func save(_ id: UUID) {
-        guard var capture = capture(id) else { return }
-        if let url = capture.fileURL {
+        guard let capture = capture(id) else { return }
+        if let url = capture.fileURL, !capture.unsavedEdits {
             NSWorkspace.shared.activateFileViewerSelecting([url])
             return
         }
-        do {
-            let url = try CaptureStore.save(capture)
-            capture.fileURL = url
-            captures[id] = capture
-            CaptureLibrary.setFile(url, for: id)
-            cards.update(id, status: "Saved", kept: true)
-        } catch {
-            Log.app.error("Saving a capture failed: \(error.localizedDescription)")
+        let saving = saveFile(id)
+        Task {
+            let saved = await saving.value != nil
+            let copies = copied.contains(id)
+            cards.update(id, status: saved ? status(copied: copies, saved: true) : "Couldn't save · drag or copy it",
+                         kept: saved || copies)
         }
     }
 
-    /// A file to drag: the saved one, or a temporary copy.
+    /// A file to drag: the saved one, or a temporary copy of what the card shows.
     func fileForDragging(_ id: UUID) -> URL? {
         guard let capture = capture(id) else { return nil }
-        return capture.fileURL ?? CaptureStore.temporaryFile(for: capture)
+        if let url = capture.fileURL, !capture.unsavedEdits { return url }
+        return CaptureStore.temporaryFile(for: capture)
     }
 
-    func isSaved(_ id: UUID) -> Bool { capture(id)?.fileURL != nil }
+    /// Saved, and the file is what the card shows. Never decodes a picture.
+    func isSaved(_ id: UUID) -> Bool {
+        if let capture = captures[id] { return capture.fileURL != nil && !capture.unsavedEdits }
+        return CaptureLibrary.entry(id)?.fileURL != nil
+    }
 
     func pin(_ id: UUID) {
         guard let capture = capture(id) else { return }
@@ -422,7 +488,7 @@ final class CaptureCoordinator {
     /// The bars are ordinary redaction marks, so the editor can take them off
     /// again; the library keeps the original.
     func hideSecrets(_ id: UUID) {
-        guard var capture = capture(id), let insight = insights[id] else { return }
+        guard let capture = capture(id), let insight = insights[id] else { return }
         let findings = insight.text.findings.filter(\.kind.isDefault)
         let before = CaptureLibrary.document(id)
         var document = storedDocument(id) ?? EditorDocument(imageSize: CGSize(width: capture.image.width, height: capture.image.height),
@@ -437,40 +503,38 @@ final class CaptureCoordinator {
             document.marks.append(mark)
         }
         let renderer = AnnotationRenderer(image: original, scale: capture.scale)
-        guard let covered = renderer.render(document) else { return }
-        store(document, for: id)
-        capture.image = covered
-        captures[id] = capture
-        rewrite(capture)
-        cards.update(id, image: covered, status: "Hidden", undo: { [weak self] in
-            guard let self, var restored = self.capture(id) else { return }
-            restored.image = original
-            self.captures[id] = restored
-            try? CaptureLibrary.storeDocument(before ?? Data(), for: id)
-            self.rewrite(restored)
-            let status = self.status(copied: Preferences.captureCopies, saved: restored.fileURL != nil)
-            self.cards.update(id, image: original, status: status, undo: nil)
-        })
+        let covering = document
+        Task {
+            guard let covered = await Task.detached(priority: .userInitiated, operation: { renderer.render(covering) }).value,
+                  var capture = self.capture(id) else { return NSSound.beep() }
+            store(covering, for: id)
+            capture.image = covered
+            captures[id] = capture
+            rewrite(capture)
+            cards.update(id, image: covered, status: "Hidden", undo: { [weak self] in
+                guard let self, var restored = self.capture(id) else { return }
+                restored.image = original
+                self.captures[id] = restored
+                let data = before ?? Data()
+                self.inOrder(id) { try? CaptureLibrary.storeDocument(data, for: id) }
+                self.rewrite(restored)
+                let status = self.status(copied: self.copied.contains(id), saved: restored.fileURL != nil)
+                self.cards.update(id, image: original, status: status, undo: nil)
+            })
+        }
     }
 
     /// "A key or token", "A card number and an email address", "4 private details".
     static func describe(_ findings: [SensitiveTextFinder.Finding]) -> String {
         var kinds: [SensitiveTextFinder.Kind] = []
         for finding in findings where !kinds.contains(finding.kind) { kinds.append(finding.kind) }
-        func named(_ kind: SensitiveTextFinder.Kind) -> String {
-            let title = kind.title.lowercased()
-            return (["a", "e", "i", "o", "u"].contains(title.prefix(1)) ? "an " : "a ") + title
-        }
+        let name: String
         switch kinds.count {
-        case 1 where findings.count == 1:
-            let name = named(kinds[0])
-            return name.prefix(1).uppercased() + name.dropFirst()
-        case 2 where findings.count == 2:
-            let name = "\(named(kinds[0])) and \(named(kinds[1]))"
-            return name.prefix(1).uppercased() + name.dropFirst()
-        default:
-            return "\(findings.count) private details"
+        case 1 where findings.count == 1: name = kinds[0].phrase
+        case 2 where findings.count == 2: name = "\(kinds[0].phrase) and \(kinds[1].phrase)"
+        default: return "\(findings.count) private details"
         }
+        return name.prefix(1).uppercased() + name.dropFirst()
     }
 
     private func storedDocument(_ id: UUID) -> EditorDocument? {
@@ -480,14 +544,21 @@ final class CaptureCoordinator {
 
     private func store(_ document: EditorDocument, for id: UUID) {
         guard let data = try? JSONEncoder().encode(document) else { return }
-        try? CaptureLibrary.storeDocument(data, for: id)
+        inOrder(id) { try? CaptureLibrary.storeDocument(data, for: id) }
     }
 
-    /// Puts a changed capture back on the clipboard and over its file.
+    /// Puts a changed capture back on the clipboard, if it went there, and over its file.
     private func rewrite(_ capture: Capture) {
-        Task {
-            await CaptureStore.copy(capture.image, scale: capture.scale)
-            if capture.fileURL != nil { _ = try? CaptureStore.save(capture) }
+        let id = capture.id, image = capture.image, scale = capture.scale
+        if copied.contains(id) { inOrder(id) { await CaptureStore.copy(image, scale: scale) } }
+        if capture.fileURL != nil { saveFile(id, image: image) }
+    }
+
+    /// Quitting: every open editor's marks are kept straight away.
+    func keepOpenEditors() {
+        for (editor, id) in editors.values where editor.model.isEdited {
+            guard let data = try? JSONEncoder().encode(editor.model.document) else { continue }
+            try? CaptureLibrary.storeDocument(data, for: id)
         }
     }
 
@@ -504,6 +575,7 @@ final class CaptureCoordinator {
 
     func openEditor(_ id: UUID) {
         guard let capture = capture(id) else { return }
+        if editors.isEmpty { rememberFrontApp() }
         cards.remove(id)
         if let open = editors.values.first(where: { $0.captureID == id }) {
             open.editor.show()
@@ -532,16 +604,9 @@ extension CaptureCoordinator: CaptureEditorHost {
         Task { await CaptureStore.copy(image, scale: capture.scale) }
     }
 
-    func editor(_ editor: CaptureEditor, save image: CGImage) {
-        guard let id = captureID(for: editor), var capture = capture(id) else { return }
-        do {
-            let url = try CaptureStore.save(capture, image: image)
-            capture.fileURL = url
-            captures[id] = capture
-            CaptureLibrary.setFile(url, for: id)
-        } catch {
-            Log.app.error("Saving an edited capture failed: \(error.localizedDescription)")
-        }
+    func editor(_ editor: CaptureEditor, save image: CGImage) async -> URL? {
+        guard let id = captureID(for: editor) else { return nil }
+        return await saveFile(id, image: image).value
     }
 
     func editor(_ editor: CaptureEditor, pin image: CGImage) {
@@ -553,15 +618,22 @@ extension CaptureCoordinator: CaptureEditorHost {
         guard let id = captureID(for: editor), var capture = capture(id) else { return }
         finished.insert(id)
         Task { await CaptureStore.copy(image, scale: capture.scale) }
-        // Saved over its file if it has one; saved anew only if saving is on.
+        copied.insert(id)
+        // The card comes back with what you made; saved over its file if it
+        // has one, saved anew only if saving is on.
         let saves = capture.fileURL != nil || Preferences.captureSaves
-        if saves { self.editor(editor, save: image) }
-        // The card comes back with what you made.
-        capture = self.capture(id) ?? capture
         capture.image = image
+        capture.unsavedEdits = false
         captures[id] = capture
-        if Preferences.captureThen != .nothing {
-            cards.add(capture, status: saves ? "Edited · copied and saved" : "Edited · copied")
+        let showsCard = Preferences.captureThen != .nothing
+        if showsCard { cards.add(capture, status: saves ? "Edited · copied, saving…" : "Edited · copied") }
+        guard saves else { return }
+        let saving = saveFile(id, image: image)
+        Task {
+            let saved = await saving.value != nil
+            if showsCard {
+                cards.update(id, status: saved ? "Edited · copied and saved" : "Edited · copied · couldn't save", kept: true)
+            }
         }
     }
 
@@ -577,6 +649,8 @@ extension CaptureCoordinator: CaptureEditorHost {
             Task {
                 guard let image = await editor.render(), var capture = self.capture(id) else { return }
                 capture.image = image
+                // Its file still has the old picture; dragging or saving uses the new one.
+                capture.unsavedEdits = capture.fileURL != nil
                 self.captures[id] = capture
                 self.cards.add(capture, status: "Edited · not copied yet", kept: false)
             }

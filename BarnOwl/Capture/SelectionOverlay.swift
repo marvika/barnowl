@@ -570,12 +570,15 @@ final class SelectionView: NSView {
             let dx: CGFloat = event.keyCode == 123 ? -step : event.keyCode == 124 ? step : 0
             let dy: CGFloat = event.keyCode == 125 ? -step : event.keyCode == 126 ? step : 0
             if event.modifierFlags.contains(.option) {
-                selection = CGRect(x: current.minX, y: current.minY + min(dy, 0),
-                                   width: max(4, current.width + dx), height: max(4, current.height + abs(dy) * (dy < 0 ? 1 : -1)))
+                // The top left stays; the right and bottom edges follow the arrows.
+                let width = max(4, current.width + dx), height = max(4, current.height - dy)
+                selection = CGRect(x: current.minX, y: current.maxY - height, width: width, height: height).intersection(bounds)
             } else {
-                selection = current.offsetBy(dx: dx, dy: dy)
+                // Stops at the edge rather than shrinking.
+                let x = min(max(current.minX + dx, 0), bounds.width - current.width)
+                let y = min(max(current.minY + dy, 0), bounds.height - current.height)
+                selection = CGRect(x: x, y: y, width: current.width, height: current.height)
             }
-            selection = selection?.intersection(bounds)
             selectedWindow = nil
             selectedScreen = false
             update()
@@ -622,6 +625,7 @@ final class SelectionView: NSView {
 
     private func act(_ action: CaptureAction) {
         guard let selection else { return }
+        guard selection.width >= 1, selection.height >= 1 else { return NSSound.beep() }
         if selectedScreen, selection == bounds {
             onResult?(.done(.screen(snapshot), action))
         } else if let selectedWindow {
@@ -1063,7 +1067,7 @@ struct CaptureKeysSheet: View {
                     ("Space", "switch area and window"), ("L", "the last area again")]),
         ("Shape it", [("⇧ drag", "square"), ("⌥ drag", "from the centre"), ("Space while dragging", "move it"),
                       ("Arrows", "nudge (⇧ 10 pt)"), ("⌥ Arrows", "resize")]),
-        ("Then", [("Return", "copy and save"), ("E", "edit"), ("P", "pin"), ("⌘C · ⌘S", "copy only · save only"),
+        ("Then", [("Return", SelectionView.primaryTitle.lowercased()), ("E", "edit"), ("P", "pin"), ("⌘C · ⌘S", "copy only · save only"),
                   ("Esc", "start over, then cancel")]),
     ]
 

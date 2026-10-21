@@ -71,14 +71,16 @@ struct CapturePane: View {
             } header: {
                 Text("History")
             } footer: {
-                Text("⌃⌥⌘E reopens your last capture with its marks still movable. To do that, Barn Owl keeps each original, as captured and before anything was hidden, in Application Support on your Mac.")
+                Text(keepDays > 0
+                     ? "⌃⌥⌘E reopens your last capture with its marks still movable. To do that, Barn Owl keeps each original, as captured and before anything was hidden, in Application Support on your Mac."
+                     : "Barn Owl keeps nothing, so marks can't be moved again once you're done.")
             }
             .disabled(!enabled)
             if model.screenRecordingAllowed || !enabled {
                 Section {
                     PermissionRow(permission: .screenRecording, model: model)
                 } footer: {
-                    Text("Captures need Screen Recording, like the real pictures of hidden icons. Barn Owl asks the first time you capture.")
+                    Text("Capturing needs Screen Recording, the same permission Barn Owl uses to picture hidden icons. Barn Owl asks the first time you capture.")
                 }
             }
             Section {

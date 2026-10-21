@@ -790,7 +790,7 @@ private final class RecordingHost: CaptureEditorHost {
     var closed: [Bool] = []
 
     func editor(_ editor: CaptureEditor, copy image: CGImage) {}
-    func editor(_ editor: CaptureEditor, save image: CGImage) {}
+    func editor(_ editor: CaptureEditor, save image: CGImage) async -> URL? { nil }
     func editor(_ editor: CaptureEditor, pin image: CGImage) {}
     func editor(_ editor: CaptureEditor, finish image: CGImage) {}
     func editor(_ editor: CaptureEditor, didChange document: EditorDocument) { changes.append(document) }

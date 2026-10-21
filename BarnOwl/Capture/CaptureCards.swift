@@ -48,9 +48,14 @@ final class CaptureCards {
 
     func update(_ id: UUID, status: String, kept: Bool) {
         guard let index = cards.firstIndex(where: { $0.id == id }) else { return }
+        let wasKept = cards[index].kept
         cards[index].status = status
         cards[index].kept = kept
+        // Kept somewhere now, so it can go in its own time.
+        if kept, !wasKept { scheduleClose(id) }
     }
+
+    func has(_ id: UUID) -> Bool { cards.contains { $0.id == id } }
 
     /// A new picture (after hiding secrets), with an Undo for a few seconds.
     func update(_ id: UUID, image: CGImage, status: String, undo: (() -> Void)?) {
@@ -136,6 +141,7 @@ final class CaptureCards {
     private func scheduleClose(_ id: UUID) {
         let seconds = Preferences.captureCardSeconds
         guard seconds > 0 else { return }
+        timers[id]?.cancel()
         timers[id] = Task { [weak self] in
             try? await Task.sleep(for: .seconds(seconds))
             while let self, !Task.isCancelled {

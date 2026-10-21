@@ -1,4 +1,5 @@
 import AppKit
+import Synchronization
 import UniformTypeIdentifiers
 
 enum CaptureFormat: String, CaseIterable, Identifiable {
@@ -58,6 +59,8 @@ struct Capture: Identifiable {
     let appName: String?
     /// Where it was saved, once it is.
     var fileURL: URL?
+    /// Edited since it was saved, so the file is behind what the card shows.
+    var unsavedEdits = false
 
     /// Its size on screen, in points.
     var pointSize: CGSize { CGSize(width: CGFloat(image.width) / scale, height: CGFloat(image.height) / scale) }
@@ -93,15 +96,21 @@ enum CaptureStore {
         return name.replacingOccurrences(of: "/", with: "-").replacingOccurrences(of: ":", with: "-")
     }
 
+    /// Names handed out but maybe not written yet, so two captures in one second never share one.
+    private static let reserved = Mutex<Set<String>>([])
+
     /// A file name that isn't taken yet in `folder`: "Name", then "Name 2", "Name 3"…
     static func freeURL(in folder: URL, baseName: String, fileExtension: String) -> URL {
-        var url = folder.appending(path: "\(baseName).\(fileExtension)")
-        var number = 2
-        while FileManager.default.fileExists(atPath: url.path) {
-            url = folder.appending(path: "\(baseName) \(number).\(fileExtension)")
-            number += 1
+        reserved.withLock { reserved in
+            var url = folder.appending(path: "\(baseName).\(fileExtension)")
+            var number = 2
+            while FileManager.default.fileExists(atPath: url.path) || reserved.contains(url.path) {
+                url = folder.appending(path: "\(baseName) \(number).\(fileExtension)")
+                number += 1
+            }
+            reserved.insert(url.path)
+            return url
         }
-        return url
     }
 
     /// Writes the capture into the capture folder, or over its own file if it has one.
@@ -134,13 +143,26 @@ enum CaptureStore {
 
     /// A copy in a temporary folder, for dragging out a capture that isn't saved.
     static func temporaryFile(for capture: Capture, image: CGImage? = nil) -> URL? {
-        let folder = FileManager.default.temporaryDirectory.appending(path: "Barn Owl Captures")
+        // One folder per capture, so captures from the same second keep their own files.
+        let folder = temporaryFolder.appending(path: capture.id.uuidString)
         try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         let name = baseName(prefix: Preferences.captureNamePrefix, date: capture.date, appName: nil)
         let url = folder.appending(path: "\(name).png")
         guard let data = try? encode(image ?? capture.image, scale: capture.scale, as: .png, atOneX: false),
               (try? data.write(to: url, options: .atomic)) != nil else { return nil }
         return url
+    }
+
+    static var temporaryFolder: URL { FileManager.default.temporaryDirectory.appending(path: "Barn Owl Captures") }
+
+    /// Lets go of the copies made for dragging, once they're a day old.
+    static func tidyTemporaryFiles(now: Date = Date()) {
+        let folder = temporaryFolder
+        let items = (try? FileManager.default.contentsOfDirectory(at: folder, includingPropertiesForKeys: [.contentModificationDateKey])) ?? []
+        for item in items {
+            let date = (try? item.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate ?? now
+            if now.timeIntervalSince(date) > 86_400 { try? FileManager.default.removeItem(at: item) }
+        }
     }
 
     /// Image data at the right size and resolution, so a Retina capture opens

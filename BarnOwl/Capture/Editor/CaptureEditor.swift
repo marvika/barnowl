@@ -5,7 +5,8 @@ import AppKit
 @MainActor
 protocol CaptureEditorHost: AnyObject {
     func editor(_ editor: CaptureEditor, copy image: CGImage)
-    func editor(_ editor: CaptureEditor, save image: CGImage)
+    /// Saves over the capture's file, or as a new one. Returns the file, or nil if it couldn't be saved.
+    func editor(_ editor: CaptureEditor, save image: CGImage) async -> URL?
     func editor(_ editor: CaptureEditor, pin image: CGImage)
     /// Done: the host copies (and saves per settings); the editor closes itself right after.
     func editor(_ editor: CaptureEditor, finish image: CGImage)
@@ -173,19 +174,19 @@ final class CaptureEditor {
                 NSSound.beep()
                 return
             }
-            self.deliver(action, image)
+            await self.deliver(action, image)
         }
     }
 
-    private func deliver(_ action: EditorAction, _ image: CGImage) {
+    private func deliver(_ action: EditorAction, _ image: CGImage) async {
         guard !closed else { return }
         switch action {
         case .copy:
             host?.editor(self, copy: image)
             controller?.confirmCopy()
         case .save:
-            host?.editor(self, save: image)
-            controller?.announce("Saved")
+            let url = await host?.editor(self, save: image)
+            controller?.announce(url.map { "Saved · \($0.lastPathComponent)" } ?? "Couldn't save")
         case .pin:
             host?.editor(self, pin: image)
         case .done:
