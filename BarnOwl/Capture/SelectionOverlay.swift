@@ -19,56 +19,123 @@ enum CaptureMode: String, CaseIterable, Identifiable {
         case .screen: "F"
         }
     }
+    var symbol: String {
+        switch self {
+        case .area: "rectangle.dashed"
+        case .window: "macwindow"
+        case .screen: "display"
+        }
+    }
     var hint: String {
         switch self {
-        case .area: "Drag to capture · click a window · Space for windows · ⇧ square · ⌥ from the centre · Esc cancels"
-        case .window: "Click a window · Space to drag an area · Esc cancels"
-        case .screen: "Click a screen · Esc cancels"
+        case .area: "Drag an area or click a window · Space for windows · ? for keys"
+        case .window: "Click a window · Space to drag an area · ? for keys"
+        case .screen: "Click a screen · ? for keys"
         }
     }
 }
 
-enum SelectionResult {
+/// What to do with what you've selected.
+enum CaptureAction {
+    /// Copy and save, as Settings › Capture says.
+    case primary
+    case edit, pin, copy, save
+}
+
+/// What you've selected.
+enum CaptureTarget {
     /// A rect in AppKit screen coordinates, on one display.
     case area(CGRect, DisplaySnapshot)
+    /// A window, captured on its own with its shadow.
     case window(WindowTarget, DisplaySnapshot)
     case screen(DisplaySnapshot)
+}
+
+enum SelectionResult {
+    case done(CaptureTarget, CaptureAction)
     case cancelled
 }
 
 /// The frozen screens you select on: one window per display, each showing
-/// the picture taken when you pressed the shortcut.
+/// the picture taken when you pressed the shortcut. After you let go, the
+/// selection stays adjustable, with a small bar of what to do with it.
 @MainActor
 final class SelectionOverlay {
     private var windows: [OverlayWindow] = []
     private var mode: CaptureMode
     private let completion: (SelectionResult) -> Void
     private var finished = false
-    private var previousApp: NSRunningApplication?
+    private var observers: [NSObjectProtocol] = []
+    private var pointerMonitor: Any?
+    /// Asks for new pictures when an option that changes them is switched.
+    var onOptionsChanged: (() -> Void)?
 
     init(snapshots: [DisplaySnapshot], targets: [WindowTarget], mode: CaptureMode,
          completion: @escaping (SelectionResult) -> Void) {
         self.mode = mode
         self.completion = completion
+        let hints = Preferences.captureHintCount < 10
         for snapshot in snapshots {
-            let window = OverlayWindow(snapshot: snapshot, targets: targets, mode: mode)
+            let window = OverlayWindow(snapshot: snapshot, targets: targets, mode: mode, showsHints: hints)
             window.selection.onResult = { [weak self] in self?.finish($0) }
             window.selection.onMode = { [weak self] in self?.setMode($0) }
+            window.selection.onSelect = { [weak self, weak window] in self?.selectionStarted(in: window) }
+            window.selection.onOptions = { [weak self] in self?.onOptionsChanged?() }
             windows.append(window)
         }
     }
 
     func show() {
-        previousApp = NSWorkspace.shared.frontmostApplication
+        Preferences.captureHintCount += 1
         // Keys and the crosshair only reach an active app.
         NSApp.activate()
-        let pointer = NSEvent.mouseLocation
-        for window in windows {
-            window.orderFrontRegardless()
-            if window.frame.contains(pointer) { window.makeKey() }
+        for window in windows { window.orderFrontRegardless() }
+        pointerMoved()
+        // A display, Space or sleep change leaves the frozen pictures wrong.
+        let center = NotificationCenter.default, workspace = NSWorkspace.shared.notificationCenter
+        observers = [
+            center.addObserver(forName: NSApplication.didChangeScreenParametersNotification, object: nil, queue: .main) { [weak self] _ in
+                MainActor.assumeIsolated { self?.finish(.cancelled) }
+            },
+            workspace.addObserver(forName: NSWorkspace.activeSpaceDidChangeNotification, object: nil, queue: .main) { [weak self] _ in
+                MainActor.assumeIsolated { self?.finish(.cancelled) }
+            },
+            workspace.addObserver(forName: NSWorkspace.willSleepNotification, object: nil, queue: .main) { [weak self] _ in
+                MainActor.assumeIsolated { self?.finish(.cancelled) }
+            },
+        ]
+        // Which display has the bars and the keys follows the pointer.
+        pointerMonitor = NSEvent.addLocalMonitorForEvents(matching: [.mouseMoved, .leftMouseDragged]) { [weak self] event in
+            self?.pointerMoved()
+            return event
         }
-        if !windows.contains(where: \.isKeyWindow) { windows.first?.makeKey() }
-        windows.forEach { $0.selection.pointerMoved(to: pointer) }
+    }
+
+    /// New pictures, after an option changed what's left out of them.
+    func replace(_ snapshots: [DisplaySnapshot]) {
+        for window in windows {
+            if let snapshot = snapshots.first(where: { $0.displayID == window.selection.displayID }) {
+                window.selection.replace(snapshot)
+            }
+        }
+    }
+
+    private func pointerMoved() {
+        let pointer = NSEvent.mouseLocation
+        let active = windows.first { $0.frame.contains(pointer) } ?? windows.first
+        for window in windows {
+            window.selection.isActiveDisplay = window === active
+            window.selection.pointerMoved(to: pointer)
+        }
+        if let active, !active.isKeyWindow {
+            active.makeKey()
+            active.makeFirstResponder(active.selection)
+        }
+    }
+
+    private func selectionStarted(in window: OverlayWindow?) {
+        // One selection at a time, across displays.
+        for other in windows where other !== window { other.selection.clearSelection() }
     }
 
     func setMode(_ mode: CaptureMode) {
@@ -79,19 +146,29 @@ final class SelectionOverlay {
     func finish(_ result: SelectionResult) {
         guard !finished else { return }
         finished = true
-        windows.forEach { $0.orderOut(nil); $0.close() }
-        windows = []
-        // Back to the app you were in, unless the capture opens the editor.
-        if case .cancelled = result { previousApp?.activate() } else if !Preferences.captureOpensEditor { previousApp?.activate() }
+        observers.forEach {
+            NotificationCenter.default.removeObserver($0)
+            NSWorkspace.shared.notificationCenter.removeObserver($0)
+        }
+        observers = []
+        if let pointerMonitor { NSEvent.removeMonitor(pointerMonitor) }
+        pointerMonitor = nil
+        let windows = self.windows
+        self.windows = []
         completion(result)
+        // After the result is handled (the editor may already be in front),
+        // and after the click that ended it has finished with these windows.
+        DispatchQueue.main.async {
+            windows.forEach { $0.orderOut(nil); $0.close() }
+        }
     }
 }
 
 final class OverlayWindow: NSPanel {
     let selection: SelectionView
 
-    init(snapshot: DisplaySnapshot, targets: [WindowTarget], mode: CaptureMode) {
-        selection = SelectionView(snapshot: snapshot, targets: targets, mode: mode)
+    init(snapshot: DisplaySnapshot, targets: [WindowTarget], mode: CaptureMode, showsHints: Bool) {
+        selection = SelectionView(snapshot: snapshot, targets: targets, mode: mode, showsHints: showsHints)
         super.init(contentRect: snapshot.frame, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered,
                    defer: false)
         isReleasedWhenClosed = false
@@ -109,58 +186,98 @@ final class OverlayWindow: NSPanel {
     override var canBecomeKey: Bool { true }
 }
 
-/// Draws the frozen screen, the dimming, the selection and the loupe, and
-/// turns mouse and keys into a result.
+/// Draws one frozen display with the dimming, the selection, its handles,
+/// the bars and the loupe, and turns mouse and keys into a result.
 final class SelectionView: NSView {
     var onResult: ((SelectionResult) -> Void)?
     var onMode: ((CaptureMode) -> Void)?
+    var onSelect: (() -> Void)?
+    var onOptions: (() -> Void)?
     var mode: CaptureMode {
         didSet { modeChanged() }
     }
+    /// The display under the pointer shows the bars.
+    var isActiveDisplay = false {
+        didSet { if isActiveDisplay != oldValue { update() } }
+    }
+    var displayID: CGDirectDisplayID { snapshot.displayID }
 
-    private let snapshot: DisplaySnapshot
+    private enum Gesture {
+        case drawing(start: CGPoint)
+        case moving(offset: CGSize)
+        case resizing(handle: Handle, from: CGRect)
+    }
+
+    enum Handle: CaseIterable {
+        case topLeft, top, topRight, right, bottomRight, bottom, bottomLeft, left
+    }
+
+    private var snapshot: DisplaySnapshot
     private let targets: [WindowTarget]
+    private let showsHints: Bool
     private let dim = CAShapeLayer()
-    private let outline = CAShapeLayer()
+    private let edgeOuter = CAShapeLayer()
+    private let edgeInner = CAShapeLayer()
+    private let highlight = CAShapeLayer()
+    private let handles = CAShapeLayer()
     private let label = CATextLayer()
     private let labelBackground = CALayer()
     private let loupe = Loupe()
-    private var bar: NSHostingView<CaptureModeBar>?
+    private var modeBar: NSHostingView<CaptureModeBar>?
+    private var actionBar: NSHostingView<CaptureActionBar>?
+    private var keysSheet: NSHostingView<CaptureKeysSheet>?
 
-    private var dragStart: CGPoint?
-    private var dragCurrent: CGPoint?
-    private var lastPoint: CGPoint = .zero
+    private var gesture: Gesture?
     private var spaceHeld = false
+    private var lastPoint: CGPoint = .zero
+    /// The selection, in this view's coordinates.
     private var selection: CGRect?
+    /// Set while the selection is exactly a window you clicked.
+    private var selectedWindow: WindowTarget?
+    private var selectedScreen = false
     private var hovered: WindowTarget?
 
-    init(snapshot: DisplaySnapshot, targets: [WindowTarget], mode: CaptureMode) {
+    init(snapshot: DisplaySnapshot, targets: [WindowTarget], mode: CaptureMode, showsHints: Bool) {
         self.snapshot = snapshot
         self.targets = targets
         self.mode = mode
+        self.showsHints = showsHints
         super.init(frame: CGRect(origin: .zero, size: snapshot.frame.size))
         wantsLayer = true
         guard let layer else { return }
         layer.contents = snapshot.image
         layer.contentsGravity = .resize
         dim.fillRule = .evenOdd
-        dim.fillColor = NSColor.black.withAlphaComponent(0.45).cgColor
-        outline.fillColor = nil
-        outline.strokeColor = NSColor.white.cgColor
-        outline.lineWidth = 1
+        edgeOuter.fillColor = nil
+        edgeOuter.strokeColor = NSColor.black.withAlphaComponent(0.4).cgColor
+        edgeOuter.lineWidth = 1
+        edgeInner.fillColor = nil
+        edgeInner.strokeColor = NSColor.white.cgColor
+        edgeInner.lineWidth = 1
+        highlight.fillColor = NSColor(Brand.lavender).withAlphaComponent(0.18).cgColor
+        highlight.strokeColor = NSColor(Brand.lavender).cgColor
+        highlight.lineWidth = 1.5
+        handles.fillColor = NSColor.white.cgColor
+        handles.strokeColor = NSColor.black.withAlphaComponent(0.35).cgColor
+        handles.lineWidth = 0.75
+        handles.shadowOpacity = 0.3
+        handles.shadowRadius = 2
+        handles.shadowOffset = CGSize(width: 0, height: -1)
         labelBackground.backgroundColor = NSColor(white: 0.08, alpha: 0.72).cgColor
         labelBackground.cornerRadius = 7
-        label.fontSize = 12
         label.font = NSFont.monospacedDigitSystemFont(ofSize: 12, weight: .semibold)
+        label.fontSize = 12
         label.foregroundColor = NSColor.white.cgColor
         label.alignmentMode = .center
         label.contentsScale = snapshot.scale
         labelBackground.addSublayer(label)
-        for sublayer in [dim, outline, labelBackground, loupe.layer] { layer.addSublayer(sublayer) }
+        for sublayer in [dim, highlight, edgeOuter, edgeInner, handles, labelBackground, loupe.layer] {
+            layer.addSublayer(sublayer)
+        }
         loupe.setImage(snapshot.image, scale: snapshot.scale)
-        let bar = NSHostingView(rootView: CaptureModeBar(mode: mode) { [weak self] in self?.onMode?($0) })
-        addSubview(bar)
-        self.bar = bar
+        let modeBar = NSHostingView(rootView: modeBarView)
+        addSubview(modeBar)
+        self.modeBar = modeBar
         update()
     }
 
@@ -170,99 +287,156 @@ final class SelectionView: NSView {
     override var acceptsFirstResponder: Bool { true }
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
 
+    // The picture is the layer's content; a redraw must put it back, not wipe it.
+    override var wantsUpdateLayer: Bool { true }
+    override func updateLayer() { layer?.contents = snapshot.image }
+
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
-        window?.makeFirstResponder(self)
-        addTrackingArea(NSTrackingArea(rect: .zero, options: [.mouseMoved, .activeAlways, .inVisibleRect, .cursorUpdate,
-                                                              .mouseEnteredAndExited],
+        addTrackingArea(NSTrackingArea(rect: .zero, options: [.mouseMoved, .activeAlways, .inVisibleRect, .cursorUpdate],
                                        owner: self))
     }
 
-    override func layout() {
-        super.layout()
-        guard let bar else { return }
-        let size = bar.fittingSize
-        bar.frame = CGRect(x: (bounds.width - size.width) / 2, y: 28, width: size.width, height: size.height)
+    func replace(_ snapshot: DisplaySnapshot) {
+        self.snapshot = snapshot
+        layer?.contents = snapshot.image
+        loupe.setImage(snapshot.image, scale: snapshot.scale)
     }
 
-    override func cursorUpdate(with event: NSEvent) {
-        (mode == .area ? NSCursor.crosshair : NSCursor.arrow).set()
+    func clearSelection() {
+        guard selection != nil || gesture != nil else { return }
+        selection = nil
+        selectedWindow = nil
+        selectedScreen = false
+        gesture = nil
+        update()
+    }
+
+    private var modeBarView: CaptureModeBar {
+        CaptureModeBar(mode: mode, showsHints: showsHints, select: { [weak self] in self?.onMode?($0) },
+                       options: { [weak self] in self?.onOptions?() })
     }
 
     // MARK: Pointer
 
-    /// The pointer's place in this view, from a global position.
-    private func local(_ global: CGPoint) -> CGPoint {
-        CGPoint(x: global.x - snapshot.frame.minX, y: global.y - snapshot.frame.minY)
-    }
-
     func pointerMoved(to global: CGPoint) {
-        lastPoint = local(global)
-        hovered = mode == .window ? WindowLocator.window(at: global, in: targets) : nil
+        let point = CGPoint(x: global.x - snapshot.frame.minX, y: global.y - snapshot.frame.minY)
+        guard gesture == nil else { return }
+        lastPoint = point
+        hovered = selection == nil && mode != .screen ? WindowLocator.window(at: global, in: targets) : nil
+        updateCursor()
         update()
-    }
-
-    override func mouseEntered(with event: NSEvent) {
-        // The display under the pointer takes the keys.
-        window?.makeKey()
-        window?.makeFirstResponder(self)
     }
 
     override func mouseMoved(with event: NSEvent) {
         pointerMoved(to: NSEvent.mouseLocation)
-        cursorUpdate(with: event)
+    }
+
+    override func cursorUpdate(with event: NSEvent) { updateCursor() }
+
+    private func updateCursor() {
+        if let selection {
+            if let handle = handle(at: lastPoint, in: selection) {
+                cursor(for: handle).set()
+            } else if selection.contains(lastPoint) {
+                NSCursor.openHand.set()
+            } else {
+                (mode == .area ? NSCursor.crosshair : NSCursor.arrow).set()
+            }
+        } else {
+            (mode == .area ? NSCursor.crosshair : NSCursor.arrow).set()
+        }
+    }
+
+    private func cursor(for handle: Handle) -> NSCursor {
+        switch handle {
+        case .top, .bottom: .resizeUpDown
+        case .left, .right: .resizeLeftRight
+        case .topLeft, .bottomRight: .frameResize(position: .topLeft, directions: .all)
+        case .topRight, .bottomLeft: .frameResize(position: .topRight, directions: .all)
+        }
     }
 
     override func mouseDown(with event: NSEvent) {
         let point = convert(event.locationInWindow, from: nil)
         lastPoint = point
-        switch mode {
-        case .area:
-            dragStart = point
-            dragCurrent = point
-            selection = nil
-        case .window:
-            if let hovered { onResult?(.window(hovered, snapshot)) }
-        case .screen:
-            onResult?(.screen(snapshot))
+        if let selection {
+            if let handle = handle(at: point, in: selection) {
+                gesture = .resizing(handle: handle, from: selection)
+                return
+            }
+            if selection.contains(point) {
+                if event.clickCount == 2 { return act(.primary) }
+                gesture = .moving(offset: CGSize(width: point.x - selection.minX, height: point.y - selection.minY))
+                NSCursor.closedHand.set()
+                return
+            }
         }
-    }
-
-    override func mouseDragged(with event: NSEvent) {
-        guard mode == .area, let start = dragStart, let current = dragCurrent else { return }
-        let point = convert(event.locationInWindow, from: nil)
-        if spaceHeld {
-            // Space moves the selection instead of resizing it.
-            let dx = point.x - current.x, dy = point.y - current.y
-            dragStart = CGPoint(x: start.x + dx, y: start.y + dy)
-        }
-        dragCurrent = point
-        lastPoint = point
-        selection = Self.rect(from: dragStart ?? start, to: point, flags: event.modifierFlags)
-            .intersection(bounds)
+        // A new selection, here.
+        selection = nil
+        selectedWindow = nil
+        selectedScreen = false
+        onSelect?()
+        gesture = .drawing(start: point)
         update()
     }
 
-    override func mouseUp(with event: NSEvent) {
-        guard mode == .area else { return }
-        defer { dragStart = nil; dragCurrent = nil }
-        guard let selection, selection.width >= 4, selection.height >= 4 else {
-            // A click without a drag takes the window under the pointer.
-            selection = nil
-            let global = CGPoint(x: lastPoint.x + snapshot.frame.minX, y: lastPoint.y + snapshot.frame.minY)
-            if let target = WindowLocator.window(at: global, in: targets) {
-                onResult?(.window(target, snapshot))
-            } else {
-                update()
+    override func mouseDragged(with event: NSEvent) {
+        let point = convert(event.locationInWindow, from: nil)
+        defer { lastPoint = point; update() }
+        switch gesture {
+        case .drawing(let start):
+            var origin = start
+            if spaceHeld {
+                // Space moves the selection being drawn.
+                origin = CGPoint(x: start.x + point.x - lastPoint.x, y: start.y + point.y - lastPoint.y)
+                gesture = .drawing(start: origin)
             }
+            selection = Self.rect(from: origin, to: point, flags: event.modifierFlags).intersection(bounds)
+            hovered = nil
+        case .moving(let offset):
+            guard let current = selection else { return }
+            let x = min(max(point.x - offset.width, 0), bounds.width - current.width)
+            let y = min(max(point.y - offset.height, 0), bounds.height - current.height)
+            selection = CGRect(x: x, y: y, width: current.width, height: current.height)
+            selectedWindow = nil
+            selectedScreen = false
+        case .resizing(let handle, let from):
+            selection = Self.resize(from, handle: handle, to: point).intersection(bounds)
+            selectedWindow = nil
+            selectedScreen = false
+        case nil:
+            break
+        }
+    }
+
+    override func mouseUp(with event: NSEvent) {
+        let point = convert(event.locationInWindow, from: nil)
+        lastPoint = point
+        let ended = gesture
+        gesture = nil
+        defer { updateCursor(); update() }
+        guard case .drawing = ended else { return }
+        if let selection, selection.width >= 4, selection.height >= 4 {
+            if !Preferences.captureAdjusts { act(.primary) }
             return
         }
-        onResult?(.area(selection.offsetBy(dx: snapshot.frame.minX, dy: snapshot.frame.minY), snapshot))
+        // A click: the window under it, or the whole display.
+        selection = nil
+        let global = CGPoint(x: point.x + snapshot.frame.minX, y: point.y + snapshot.frame.minY)
+        if mode != .screen, let target = WindowLocator.window(at: global, in: targets) {
+            selectedWindow = target
+            selection = target.frame.offsetBy(dx: -snapshot.frame.minX, dy: -snapshot.frame.minY).intersection(bounds)
+        } else if mode == .screen || Preferences.captureAdjusts {
+            selectedScreen = true
+            selection = bounds
+        }
+        if selection != nil, !Preferences.captureAdjusts { act(.primary) }
     }
 
     override func flagsChanged(with event: NSEvent) {
-        guard let start = dragStart, let current = dragCurrent else { return }
-        selection = Self.rect(from: start, to: current, flags: event.modifierFlags).intersection(bounds)
+        guard case .drawing(let start) = gesture else { return }
+        selection = Self.rect(from: start, to: lastPoint, flags: event.modifierFlags).intersection(bounds)
         update()
     }
 
@@ -281,23 +455,95 @@ final class SelectionView: NSView {
         return CGRect(x: min(start.x, start.x + dx), y: min(start.y, start.y + dy), width: abs(dx), height: abs(dy))
     }
 
+    /// A rect with one handle dragged to `point`; the opposite edges stay put.
+    static func resize(_ rect: CGRect, handle: Handle, to point: CGPoint) -> CGRect {
+        var minX = rect.minX, maxX = rect.maxX, minY = rect.minY, maxY = rect.maxY
+        switch handle {
+        case .topLeft: minX = point.x; maxY = point.y
+        case .top: maxY = point.y
+        case .topRight: maxX = point.x; maxY = point.y
+        case .right: maxX = point.x
+        case .bottomRight: maxX = point.x; minY = point.y
+        case .bottom: minY = point.y
+        case .bottomLeft: minX = point.x; minY = point.y
+        case .left: minX = point.x
+        }
+        return CGRect(x: min(minX, maxX), y: min(minY, maxY), width: abs(maxX - minX), height: abs(maxY - minY))
+    }
+
+    /// Handle points, AppKit-style: top is the larger y.
+    static func handlePoints(of rect: CGRect) -> [(Handle, CGPoint)] {
+        [(.topLeft, CGPoint(x: rect.minX, y: rect.maxY)), (.top, CGPoint(x: rect.midX, y: rect.maxY)),
+         (.topRight, CGPoint(x: rect.maxX, y: rect.maxY)), (.right, CGPoint(x: rect.maxX, y: rect.midY)),
+         (.bottomRight, CGPoint(x: rect.maxX, y: rect.minY)), (.bottom, CGPoint(x: rect.midX, y: rect.minY)),
+         (.bottomLeft, CGPoint(x: rect.minX, y: rect.minY)), (.left, CGPoint(x: rect.minX, y: rect.midY))]
+    }
+
+    private func handle(at point: CGPoint, in rect: CGRect) -> Handle? {
+        // Small selections keep only the corners, so the middle stays draggable.
+        let corners: Set<Handle> = [.topLeft, .topRight, .bottomRight, .bottomLeft]
+        let small = rect.width < 60 || rect.height < 60
+        return Self.handlePoints(of: rect).first { handle, centre in
+            (!small || corners.contains(handle)) && hypot(point.x - centre.x, point.y - centre.y) <= 8
+        }?.0
+    }
+
     // MARK: Keys
 
     override func keyDown(with event: NSEvent) {
+        let command = event.modifierFlags.contains(.command)
+        let key = event.charactersIgnoringModifiers?.lowercased() ?? ""
         switch event.keyCode {
-        case 53: // Esc
-            onResult?(.cancelled)
-        case 49: // Space
-            if dragStart != nil { spaceHeld = true } else { onMode?(mode == .window ? .area : .window) }
-        case 36, 76: // Return
-            if mode == .screen { onResult?(.screen(snapshot)) }
-        default:
-            switch event.charactersIgnoringModifiers?.lowercased() {
-            case "a": onMode?(.area)
-            case "w": onMode?(.window)
-            case "f": onMode?(.screen)
-            default: super.keyDown(with: event)
+        case 53: // Esc steps back: the gesture, then the selection, then the overlay.
+            if gesture != nil {
+                gesture = nil
+                selection = nil
+                update()
+            } else if keysSheet != nil {
+                toggleKeys()
+            } else if selection != nil {
+                clearSelection()
+            } else {
+                onResult?(.cancelled)
             }
+            return
+        case 36, 76: // Return
+            if selection == nil, mode == .screen { selectedScreen = true; selection = bounds }
+            if selection != nil { act(.primary) }
+            return
+        case 49: // Space
+            if case .drawing = gesture { spaceHeld = true } else if selection == nil { onMode?(mode == .window ? .area : .window) }
+            return
+        case 123, 124, 125, 126: // Arrows nudge; ⇧ by 10; ⌥ resizes
+            guard let current = selection else { return }
+            let step: CGFloat = event.modifierFlags.contains(.shift) ? 10 : 1
+            let dx: CGFloat = event.keyCode == 123 ? -step : event.keyCode == 124 ? step : 0
+            let dy: CGFloat = event.keyCode == 125 ? -step : event.keyCode == 126 ? step : 0
+            if event.modifierFlags.contains(.option) {
+                selection = CGRect(x: current.minX, y: current.minY + min(dy, 0),
+                                   width: max(4, current.width + dx), height: max(4, current.height + abs(dy) * (dy < 0 ? 1 : -1)))
+            } else {
+                selection = current.offsetBy(dx: dx, dy: dy)
+            }
+            selection = selection?.intersection(bounds)
+            selectedWindow = nil
+            selectedScreen = false
+            update()
+            return
+        default:
+            break
+        }
+        switch (key, command) {
+        case ("c", true): if selection != nil { act(.copy) }
+        case ("s", true): if selection != nil { act(.save) }
+        case ("e", false): if selection != nil { act(.edit) }
+        case ("p", false): if selection != nil { act(.pin) }
+        case ("a", false): onMode?(.area)
+        case ("w", false): onMode?(.window)
+        case ("f", false): onMode?(.screen)
+        case ("l", false): restoreLastArea()
+        case ("?", _), ("/", _): toggleKeys()
+        default: super.keyDown(with: event)
         }
     }
 
@@ -305,15 +551,50 @@ final class SelectionView: NSView {
         if event.keyCode == 49 { spaceHeld = false }
     }
 
+    /// Brings back the area you captured last, if it's on this display.
+    private func restoreLastArea() {
+        guard let area = Preferences.captureLastArea, snapshot.frame.intersects(area) else { return }
+        onSelect?()
+        selection = area.offsetBy(dx: -snapshot.frame.minX, dy: -snapshot.frame.minY).intersection(bounds)
+        selectedWindow = nil
+        selectedScreen = false
+        if Preferences.captureAdjusts { update() } else { act(.primary) }
+    }
+
+    private func act(_ action: CaptureAction) {
+        guard let selection else { return }
+        if selectedScreen, selection == bounds {
+            onResult?(.done(.screen(snapshot), action))
+        } else if let selectedWindow {
+            onResult?(.done(.window(selectedWindow, snapshot), action))
+        } else {
+            onResult?(.done(.area(selection.offsetBy(dx: snapshot.frame.minX, dy: snapshot.frame.minY), snapshot), action))
+        }
+    }
+
     private func modeChanged() {
-        dragStart = nil
-        dragCurrent = nil
+        gesture = nil
         selection = nil
+        selectedWindow = nil
+        selectedScreen = false
         hovered = mode == .window ? WindowLocator.window(at: NSEvent.mouseLocation, in: targets) : nil
-        bar?.rootView = CaptureModeBar(mode: mode) { [weak self] in self?.onMode?($0) }
-        needsLayout = true
-        window?.invalidateCursorRects(for: self)
+        modeBar?.rootView = modeBarView
+        updateCursor()
         update()
+    }
+
+    private func toggleKeys() {
+        if let keysSheet {
+            keysSheet.removeFromSuperview()
+            self.keysSheet = nil
+        } else {
+            let sheet = NSHostingView(rootView: CaptureKeysSheet())
+            addSubview(sheet)
+            let size = sheet.fittingSize
+            sheet.frame = CGRect(x: (bounds.width - size.width) / 2, y: (bounds.height - size.height) / 2,
+                                 width: size.width, height: size.height)
+            keysSheet = sheet
+        }
     }
 
     // MARK: Drawing
@@ -322,43 +603,116 @@ final class SelectionView: NSView {
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         defer { CATransaction.commit() }
-        let pointerHere = bounds.contains(lastPoint) && (window?.frame.contains(NSEvent.mouseLocation) ?? false)
-        // What stays bright: the selection, the window under the pointer, or the whole screen.
-        var focus: CGRect?
-        switch mode {
-        case .area: focus = selection
-        case .window: focus = hovered.map { $0.frame.offsetBy(dx: -snapshot.frame.minX, dy: -snapshot.frame.minY) }
-        case .screen: focus = pointerHere ? bounds : nil
+        let drawing: Bool = { if case .drawing = gesture { return true } else { return false } }()
+        let resizing: Bool = { if case .resizing = gesture { return true } else { return false } }()
+        // What stays bright: the selection, or the window or screen you'd get by clicking.
+        var focus = selection
+        if focus == nil, isActiveDisplay {
+            if let hovered, mode != .screen {
+                focus = hovered.frame.offsetBy(dx: -snapshot.frame.minX, dy: -snapshot.frame.minY)
+            } else if mode == .screen {
+                focus = bounds
+            }
         }
         let path = CGMutablePath()
         path.addRect(bounds)
         if let focus { path.addRect(focus) }
         dim.frame = bounds
         dim.path = path
-        // Lighter before you start, so you can still read the screen.
-        dim.fillColor = NSColor.black.withAlphaComponent(focus == nil ? 0.22 : 0.45).cgColor
-        outline.frame = bounds
-        outline.path = focus.map { CGPath(rect: $0.insetBy(dx: -0.5, dy: -0.5), transform: nil) }
-        outline.strokeColor = (mode == .area ? NSColor.white : NSColor(Brand.lavender)).cgColor
-        outline.lineWidth = mode == .area ? 1 : 3
+        // Lighter before you start, so the screen stays readable.
+        dim.fillColor = NSColor.black.withAlphaComponent(focus == nil ? 0.2 : 0.42).cgColor
 
-        if let focus, mode != .screen {
-            label.string = mode == .window
-                ? "\(hovered?.appName ?? "")  \(Int(focus.width)) × \(Int(focus.height))"
-                : "\(Int(focus.width)) × \(Int(focus.height))"
-            let text = (label.string as? String) ?? ""
-            let width = (text as NSString).size(withAttributes: [.font: NSFont.monospacedDigitSystemFont(ofSize: 12, weight: .semibold)]).width + 18
-            let above = focus.maxY + 30 < bounds.maxY
-            labelBackground.frame = CGRect(x: max(4, min(focus.minX, bounds.maxX - width - 4)),
-                                           y: above ? focus.maxY + 8 : focus.maxY - 30, width: width, height: 22)
-            label.frame = labelBackground.bounds.insetBy(dx: 0, dy: 3)
-            labelBackground.isHidden = false
+        // A window (hovered or clicked) gets a lavender wash; an area gets a crisp edge.
+        let windowLike = selection == nil ? focus != nil && mode != .area || hovered != nil : selectedWindow != nil
+        highlight.frame = bounds
+        highlight.path = windowLike ? focus.map { CGPath(roundedRect: $0.insetBy(dx: 0.75, dy: 0.75), cornerWidth: 10, cornerHeight: 10, transform: nil) } : nil
+        let edge = !windowLike ? (selection ?? (drawing ? selection : nil)) : nil
+        edgeOuter.frame = bounds
+        edgeInner.frame = bounds
+        edgeOuter.path = edge.map { CGPath(rect: $0.insetBy(dx: -0.5, dy: -0.5), transform: nil) }
+        edgeInner.path = edge.map { CGPath(rect: $0.insetBy(dx: 0.5, dy: 0.5), transform: nil) }
+
+        // Handles once you've let go.
+        handles.frame = bounds
+        if let selection, gesture == nil || resizing, !selectedScreen {
+            let corners: Set<Handle> = [.topLeft, .topRight, .bottomRight, .bottomLeft]
+            let small = selection.width < 60 || selection.height < 60
+            let dots = CGMutablePath()
+            for (handle, centre) in Self.handlePoints(of: selection) where !small || corners.contains(handle) {
+                dots.addEllipse(in: CGRect(x: centre.x - 4.5, y: centre.y - 4.5, width: 9, height: 9))
+            }
+            handles.path = dots
         } else {
-            labelBackground.isHidden = true
+            handles.path = nil
         }
 
-        loupe.layer.isHidden = mode != .area || !pointerHere
+        updateLabel(focus: focus)
+        loupe.layer.isHidden = !(drawing || resizing)
         if !loupe.layer.isHidden { loupe.show(at: lastPoint, in: bounds, snapshot: snapshot) }
+        updateBars(drawing: drawing || resizing)
+    }
+
+    private func updateLabel(focus: CGRect?) {
+        guard let focus, isActiveDisplay || selection != nil, !(selectedScreen && gesture == nil && selection == nil) else {
+            labelBackground.isHidden = true
+            return
+        }
+        let size = "\(Int(focus.width.rounded())) × \(Int(focus.height.rounded()))"
+        let name = selectedWindow?.appName ?? (selection == nil ? hovered?.appName : nil)
+        let text = name.map { "\($0)  \(size)" } ?? size
+        label.string = text
+        let width = (text as NSString).size(withAttributes: [.font: NSFont.monospacedDigitSystemFont(ofSize: 12, weight: .semibold)]).width + 18
+        let above = focus.maxY + 30 < bounds.maxY
+        labelBackground.frame = CGRect(x: max(4, min(focus.minX, bounds.maxX - width - 4)),
+                                       y: above ? focus.maxY + 8 : focus.maxY - 30, width: width, height: 22)
+        label.frame = labelBackground.bounds.insetBy(dx: 0, dy: 3)
+        labelBackground.isHidden = false
+    }
+
+    private func updateBars(drawing: Bool) {
+        // The mode bar until there's a selection; then the action bar under it.
+        let showsModeBar = isActiveDisplay && selection == nil && !drawing
+        if let modeBar {
+            modeBar.isHidden = !showsModeBar
+            if showsModeBar {
+                let size = modeBar.fittingSize
+                modeBar.frame = CGRect(x: (bounds.width - size.width) / 2, y: 28, width: size.width, height: size.height)
+            }
+        }
+        if let selection, gesture == nil {
+            let bar = actionBar ?? {
+                let bar = NSHostingView(rootView: actionBarView)
+                addSubview(bar)
+                actionBar = bar
+                return bar
+            }()
+            bar.rootView = actionBarView
+            let size = bar.fittingSize
+            var y = selection.minY - size.height - 10
+            if y < 12 { y = selection.maxY + 10 }
+            if y + size.height > bounds.maxY - 12 { y = selection.minY + 12 }
+            let x = min(max(selection.midX - size.width / 2, 12), bounds.width - size.width - 12)
+            bar.frame = CGRect(x: x, y: y, width: size.width, height: size.height)
+            bar.isHidden = false
+        } else {
+            actionBar?.isHidden = true
+        }
+    }
+
+    private var actionBarView: CaptureActionBar {
+        CaptureActionBar(primary: Self.primaryTitle, showsHint: showsHints) { [weak self] action in
+            if let action { self?.act(action) } else { self?.clearSelection() }
+        }
+    }
+
+    /// "Copy & Save", "Copy" or "Save", as Settings › Capture says.
+    static var primaryTitle: String {
+        switch (Preferences.captureCopies, Preferences.captureSaves) {
+        case (true, true): "Copy & Save"
+        case (true, false): "Copy"
+        case (false, true): "Save"
+        case (false, false): "Capture"
+        }
     }
 }
 
@@ -369,6 +723,7 @@ private final class Loupe {
     private let lens = CALayer()
     private let grid = CAShapeLayer()
     private let centre = CAShapeLayer()
+    private let centreDark = CAShapeLayer()
     private let caption = CATextLayer()
     private let captionBackground = CALayer()
     /// Pixels across the lens.
@@ -395,14 +750,21 @@ private final class Loupe {
         grid.strokeColor = NSColor.black.withAlphaComponent(0.12).cgColor
         grid.lineWidth = 0.5
         grid.frame = lens.bounds
+        // The pixel you're on: white and black hairlines, visible on anything.
         let middle = (pixels - 1) / 2 * cell
-        centre.path = CGPath(rect: CGRect(x: middle, y: middle, width: cell, height: cell), transform: nil)
-        centre.strokeColor = NSColor.systemRed.cgColor
+        let square = CGRect(x: middle, y: middle, width: cell, height: cell)
+        centreDark.path = CGPath(rect: square.insetBy(dx: -1, dy: -1), transform: nil)
+        centreDark.strokeColor = NSColor.black.withAlphaComponent(0.6).cgColor
+        centreDark.fillColor = nil
+        centreDark.lineWidth = 1
+        centre.path = CGPath(rect: square, transform: nil)
+        centre.strokeColor = NSColor.white.cgColor
         centre.fillColor = nil
-        centre.lineWidth = 1.5
-        centre.frame = lens.bounds
-        lens.addSublayer(grid)
-        lens.addSublayer(centre)
+        centre.lineWidth = 1
+        for sublayer in [grid, centreDark, centre] {
+            sublayer.frame = lens.bounds
+            lens.addSublayer(sublayer)
+        }
         captionBackground.backgroundColor = NSColor(white: 0.08, alpha: 0.72).cgColor
         captionBackground.cornerRadius = 6
         caption.font = NSFont.monospacedDigitSystemFont(ofSize: 11, weight: .medium)
@@ -424,23 +786,24 @@ private final class Loupe {
     }
 
     func show(at point: CGPoint, in bounds: CGRect, snapshot: DisplaySnapshot) {
-        // The lens sits below right of the pointer, and flips at the edges.
+        // Below right of the pointer, flipping at the edges.
         var origin = CGPoint(x: point.x + 22, y: point.y - size - 48)
         if origin.x + size > bounds.maxX { origin.x = point.x - size - 22 }
         if origin.y < bounds.minY { origin.y = point.y + 22 }
         layer.frame = CGRect(x: origin.x, y: origin.y, width: size, height: size + 26)
         let width = imageSize.width, height = imageSize.height
         guard width > 0, height > 0 else { return }
-        let pixelX = point.x * snapshot.scale, pixelY = point.y * snapshot.scale
-        let half = pixels / 2
+        // The pixel under the pointer, counted from the bottom like the view.
+        let pixelX = (point.x * snapshot.scale).rounded(.down)
+        let pixelY = (point.y * snapshot.scale).rounded(.down)
+        let half = (pixels - 1) / 2
         lens.contentsRect = CGRect(x: (pixelX - half) / width, y: (pixelY - half) / height,
                                    width: pixels / width, height: pixels / height)
         // Points from the top left, the way the screen is usually measured.
         let x = Int(point.x), y = Int(bounds.height - point.y)
         var text = "\(x), \(y)"
-        if let hex = Self.hexColour(in: snapshot.image, x: Int(pixelX), y: Int(CGFloat(snapshot.image.height) - pixelY)) {
-            text += " · \(hex)"
-        }
+        let row = Int(height) - 1 - Int(pixelY)
+        if let hex = Self.hexColour(in: snapshot.image, x: Int(pixelX), y: row) { text += " · \(hex)" }
         caption.string = text
         let textWidth = (text as NSString).size(withAttributes: [.font: NSFont.monospacedDigitSystemFont(ofSize: 11, weight: .medium)]).width + 14
         captionBackground.frame = CGRect(x: (size - textWidth) / 2, y: 0, width: textWidth, height: 20)
@@ -465,40 +828,186 @@ private final class Loupe {
     }
 }
 
-/// The glass bar at the bottom: which kind of capture, and how.
+/// The glass bar at the bottom: which kind of capture, and what's left out of it.
 struct CaptureModeBar: View {
     let mode: CaptureMode
+    let showsHints: Bool
     let select: (CaptureMode) -> Void
+    let options: () -> Void
+    @AppStorage(PrefKey.captureCleanMenuBar) private var cleanMenuBar = true
+    @AppStorage(PrefKey.captureHidesDesktopIcons) private var hidesDesktopIcons = true
+    @AppStorage(PrefKey.captureShowsPointer) private var showsPointer = false
 
     var body: some View {
-        VStack(spacing: 8) {
-            HStack(spacing: 4) {
+        VStack(spacing: 6) {
+            HStack(spacing: 2) {
                 ForEach(CaptureMode.allCases) { item in
                     Button { select(item) } label: {
                         HStack(spacing: 6) {
-                            Text(item.title).font(.system(size: 13, weight: .semibold)).foregroundStyle(.white)
-                            Text(item.key)
-                                .font(.system(size: 10.5, weight: .semibold, design: .monospaced))
-                                .padding(.horizontal, 4).padding(.vertical, 1)
-                                .background(.white.opacity(0.1), in: .rect(cornerRadius: 4))
-                                .foregroundStyle(.white.opacity(0.65))
+                            Image(systemName: item.symbol).font(.system(size: 13, weight: .medium))
+                            Text(item.title).font(.system(size: 13, weight: .semibold))
+                            KeyCap(item.key)
                         }
+                        .foregroundStyle(.white)
                         .padding(.horizontal, 10).padding(.vertical, 6)
-                        .background(item == mode ? AnyShapeStyle(.white.opacity(0.16)) : AnyShapeStyle(.clear),
-                                    in: .rect(cornerRadius: 10))
-                        .contentShape(.rect)
+                        .background(item == mode ? AnyShapeStyle(.white.opacity(0.18)) : AnyShapeStyle(.clear),
+                                    in: .capsule)
+                        .contentShape(.capsule)
                     }
                     .buttonStyle(.plain)
                     .help("\(item.title) (\(item.key))")
+                    .accessibilityAddTraits(item == mode ? .isSelected : [])
+                }
+                Divider().frame(height: 18).padding(.horizontal, 4)
+                Menu {
+                    Toggle("Clean Menu Bar", isOn: binding($cleanMenuBar))
+                    Toggle("Hide Desktop Icons", isOn: binding($hidesDesktopIcons))
+                    Toggle("Show the Pointer", isOn: binding($showsPointer))
+                } label: {
+                    Image(systemName: "slider.horizontal.3").font(.system(size: 13, weight: .medium))
+                        .foregroundStyle(.white)
+                        .frame(width: 30, height: 28)
+                }
+                .menuStyle(.button)
+                .buttonStyle(.plain)
+                .menuIndicator(.hidden)
+                .fixedSize()
+                .help("What to leave out of the picture")
+            }
+            if showsHints {
+                Text(mode.hint)
+                    .font(.system(size: 11))
+                    .foregroundStyle(.white.opacity(0.7))
+                    .padding(.bottom, 2)
+            }
+        }
+        .padding(6)
+        .glassEffect(.regular.tint(Brand.indigoDeep.opacity(0.5)), in: .rect(cornerRadius: 20))
+        .environment(\.colorScheme, .dark)
+        .fixedSize()
+    }
+
+    /// Changing what's left out takes new pictures.
+    private func binding(_ value: Binding<Bool>) -> Binding<Bool> {
+        Binding(get: { value.wrappedValue }, set: { value.wrappedValue = $0; options() })
+    }
+}
+
+/// What to do with the selection: the main action on Return, and the others with a letter each.
+struct CaptureActionBar: View {
+    let primary: String
+    let showsHint: Bool
+    /// nil closes the selection.
+    let act: (CaptureAction?) -> Void
+
+    var body: some View {
+        VStack(spacing: 5) {
+            HStack(spacing: 4) {
+                BarButton(title: "Edit", symbol: "pencil.tip.crop.circle", key: "E") { act(.edit) }
+                BarButton(title: "Pin", symbol: "pin", key: "P") { act(.pin) }
+                BarButton(title: primary, symbol: "arrow.down.doc", key: "↩", prominent: true) { act(.primary) }
+                Button { act(nil) } label: {
+                    Image(systemName: "xmark").font(.system(size: 11, weight: .bold))
+                        .foregroundStyle(.white.opacity(0.75))
+                        .frame(width: 26, height: 26)
+                        .contentShape(.circle)
+                }
+                .buttonStyle(.plain)
+                .help("Start over (Esc)")
+                .accessibilityLabel("Start over")
+            }
+            if showsHint {
+                Text("Drag the edges to adjust · drag inside to move · Esc to start over")
+                    .font(.system(size: 11))
+                    .foregroundStyle(.white.opacity(0.7))
+            }
+        }
+        .padding(5)
+        .glassEffect(.regular.tint(Brand.indigoDeep.opacity(0.5)), in: .rect(cornerRadius: 18))
+        .environment(\.colorScheme, .dark)
+        .fixedSize()
+    }
+
+    private struct BarButton: View {
+        let title: String
+        let symbol: String
+        let key: String
+        var prominent = false
+        let action: () -> Void
+        @State private var hovering = false
+
+        var body: some View {
+            Button(action: action) {
+                HStack(spacing: 6) {
+                    Image(systemName: symbol).font(.system(size: 12, weight: .semibold))
+                    Text(title).font(.system(size: 13, weight: .semibold))
+                    KeyCap(key, onAccent: prominent)
+                }
+                .foregroundStyle(.white)
+                .padding(.horizontal, 11).padding(.vertical, 6)
+                .background(background, in: .capsule)
+                .contentShape(.capsule)
+            }
+            .buttonStyle(PressableStyle())
+            .onHover { hovering = $0 }
+            .help("\(title) (\(key))")
+        }
+
+        private var background: AnyShapeStyle {
+            if prominent { return AnyShapeStyle(Brand.lavender.opacity(hovering ? 1 : 0.92)) }
+            return AnyShapeStyle(.white.opacity(hovering ? 0.22 : 0.12))
+        }
+    }
+}
+
+/// A key's letter in a small rounded box.
+private struct KeyCap: View {
+    let key: String
+    var onAccent = false
+
+    init(_ key: String, onAccent: Bool = false) {
+        self.key = key
+        self.onAccent = onAccent
+    }
+
+    var body: some View {
+        Text(key)
+            .font(.system(size: 10.5, weight: .semibold, design: .rounded))
+            .padding(.horizontal, 4).padding(.vertical, 1)
+            .background(.white.opacity(onAccent ? 0.22 : 0.1), in: .rect(cornerRadius: 4))
+            .foregroundStyle(.white.opacity(0.8))
+    }
+}
+
+/// Every key, on "?".
+struct CaptureKeysSheet: View {
+    private let groups: [(String, [(String, String)])] = [
+        ("Choose", [("Drag", "an area"), ("Click", "a window, or the screen"), ("A · W · F", "area, window, screen"),
+                    ("Space", "switch area and window"), ("L", "the last area again")]),
+        ("Shape it", [("⇧ drag", "square"), ("⌥ drag", "from the centre"), ("Space while dragging", "move it"),
+                      ("Arrows", "nudge (⇧ 10 pt)"), ("⌥ Arrows", "resize")]),
+        ("Then", [("Return", "copy and save"), ("E", "edit"), ("P", "pin"), ("⌘C · ⌘S", "copy only · save only"),
+                  ("Esc", "start over, then cancel")]),
+    ]
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 28) {
+            ForEach(groups, id: \.0) { group in
+                VStack(alignment: .leading, spacing: 7) {
+                    Text(group.0).font(.system(size: 12, weight: .bold)).foregroundStyle(.white.opacity(0.6))
+                    ForEach(group.1, id: \.0) { row in
+                        HStack(spacing: 10) {
+                            Text(row.0).font(.system(size: 12, weight: .semibold, design: .rounded))
+                                .frame(minWidth: 110, alignment: .leading)
+                            Text(row.1).font(.system(size: 12)).foregroundStyle(.white.opacity(0.8))
+                        }
+                        .foregroundStyle(.white)
+                    }
                 }
             }
-            .padding(6)
-            .glassEffect(.regular, in: .rect(cornerRadius: 16))
-            Text(mode.hint)
-                .font(.system(size: 11))
-                .foregroundStyle(.white.opacity(0.75))
-                .shadow(color: .black.opacity(0.6), radius: 3)
         }
+        .padding(22)
+        .glassEffect(.regular.tint(Brand.indigoDeep.opacity(0.6)), in: .rect(cornerRadius: 22))
         .environment(\.colorScheme, .dark)
         .fixedSize()
     }

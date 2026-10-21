@@ -17,7 +17,7 @@ struct DisplaySnapshot {
         // Pixels run from the top down.
         let pixels = CGRect(x: local.minX * scale, y: (frame.height - local.maxY) * scale,
                             width: local.width * scale, height: local.height * scale).integral
-        return image.cropping(to: pixels)
+        return image.cropping(to: pixels).map(CaptureStore.ownBitmap)
     }
 }
 

@@ -10,6 +10,8 @@ extension KeyboardShortcuts.Name {
     static let captureArea = Self("captureArea", default: .init(.four, modifiers: [.control, .option, .command]))
     static let captureScreen = Self("captureScreen", default: .init(.three, modifiers: [.control, .option, .command]))
     static let captureSameArea = Self("captureSameArea")
+    /// Reopens the last capture in the editor, its marks still editable.
+    static let editLastCapture = Self("editLastCapture", default: .init(.e, modifiers: [.control, .option, .command]))
     /// ⌘⇧4 and ⌘⇧3, set only while you've handed them over from macOS.
     static let captureAreaApple = Self("captureAreaApple")
     static let captureScreenApple = Self("captureScreenApple")

@@ -118,3 +118,78 @@ struct CaptureSetupTests {
         #expect(OtherCaptureApps.installed(in: [folder]) == ["CleanShot X", "Snagit"])
     }
 }
+
+struct CaptureFlowTests {
+    @Test func handlesResizeFromTheOppositeEdge() {
+        let rect = CGRect(x: 100, y: 100, width: 200, height: 100)
+        #expect(SelectionView.resize(rect, handle: .right, to: CGPoint(x: 350, y: 0)) == CGRect(x: 100, y: 100, width: 250, height: 100))
+        #expect(SelectionView.resize(rect, handle: .topLeft, to: CGPoint(x: 50, y: 260)) == CGRect(x: 50, y: 100, width: 250, height: 160))
+        // Dragging past the opposite edge flips instead of going negative.
+        #expect(SelectionView.resize(rect, handle: .left, to: CGPoint(x: 400, y: 0)) == CGRect(x: 300, y: 100, width: 100, height: 100))
+        #expect(SelectionView.handlePoints(of: rect).count == 8)
+    }
+
+    @Test func savingAgainKeepsTheFilesFormat() {
+        #expect(CaptureStore.format(of: URL(fileURLWithPath: "/tmp/a.jpg")) == .jpeg)
+        #expect(CaptureStore.format(of: URL(fileURLWithPath: "/tmp/a.HEIC")) == .heic)
+        #expect(CaptureStore.format(of: URL(fileURLWithPath: "/tmp/a.png")) == .png)
+    }
+
+    @Test func jpegHasNoTransparency() throws {
+        let image = try #require(CaptureStoreTests.image(width: 10, height: 10))
+        let flat = try #require(CaptureStore.flattened(image))
+        #expect(flat.alphaInfo == .noneSkipLast)
+    }
+
+    @Test func coversSecretsWithBars() throws {
+        let image = try #require(CaptureStoreTests.image(width: 100, height: 40))
+        let covered = try #require(Redactor.cover(image, rects: [CGRect(x: 10, y: 10, width: 30, height: 10)]))
+        #expect(covered.width == 100 && covered.height == 40)
+    }
+}
+
+struct CaptureLibraryTests {
+    private func root() throws -> URL {
+        let url = FileManager.default.temporaryDirectory.appending(path: "capture-library-\(UUID())")
+        try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
+        return url
+    }
+
+    @Test func keepsCapturesEditable() throws {
+        let root = try root()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let image = try #require(CaptureStoreTests.image(width: 20, height: 10))
+        let entry = CaptureLibrary.Entry(id: UUID(), date: Date(), scale: 2, kind: "selection", appName: "Notes",
+                                         fileURL: nil, edited: false)
+        try CaptureLibrary.store(image, entry: entry, in: root)
+        #expect(CaptureLibrary.entry(entry.id, in: root) == entry)
+        #expect(CaptureLibrary.original(entry.id, in: root)?.width == 20)
+        try CaptureLibrary.storeDocument(Data("{}".utf8), for: entry.id, in: root)
+        #expect(CaptureLibrary.document(entry.id, in: root) == Data("{}".utf8))
+        #expect(CaptureLibrary.entry(entry.id, in: root)?.edited == true)
+        #expect(CaptureLibrary.latest(in: root)?.id == entry.id)
+    }
+
+    @Test func findsTheCaptureBehindAFile() throws {
+        let root = try root()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let file = root.appending(path: "shot.png")
+        try Data([1]).write(to: file)
+        let id = UUID()
+        CaptureLibrary.tag(file, id: id)
+        #expect(CaptureLibrary.id(of: file) == id)
+    }
+
+    @Test func letsGoOfOldCaptures() throws {
+        let root = try root()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let image = try #require(CaptureStoreTests.image(width: 4, height: 4))
+        let old = CaptureLibrary.Entry(id: UUID(), date: Date().addingTimeInterval(-40 * 86_400), scale: 1, kind: "display",
+                                       appName: nil, fileURL: nil, edited: false)
+        let new = CaptureLibrary.Entry(id: UUID(), date: Date(), scale: 1, kind: "display", appName: nil, fileURL: nil, edited: false)
+        try CaptureLibrary.store(image, entry: old, in: root)
+        try CaptureLibrary.store(image, entry: new, in: root)
+        CaptureLibrary.prune(in: root)
+        #expect(CaptureLibrary.entries(in: root).map(\.id) == [new.id])
+    }
+}

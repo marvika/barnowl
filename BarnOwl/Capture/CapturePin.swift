@@ -46,7 +46,7 @@ final class CapturePin {
 
     func edit() { onEdit?() }
 
-    func copy() { CaptureStore.copy(image, scale: scale) }
+    func copy() { Task { await CaptureStore.copy(image, scale: scale) } }
 
     func setOpacity(_ value: CGFloat) { panel.alphaValue = value }
 
@@ -83,8 +83,10 @@ private final class PinPanel: NSPanel {
 private final class PinView: NSView {
     weak var pin: CapturePin?
     private let closeButton: NSButton
+    private let image: CGImage
 
     init(image: CGImage) {
+        self.image = image
         closeButton = NSButton(image: NSImage(systemSymbolName: "xmark.circle.fill", accessibilityDescription: "Close")!,
                                target: nil, action: nil)
         super.init(frame: .zero)
@@ -114,6 +116,10 @@ private final class PinView: NSView {
         super.layout()
         closeButton.frame = CGRect(x: 6, y: bounds.height - 26, width: 20, height: 20)
     }
+
+    // The picture is the layer's content; a redraw must put it back, not wipe it.
+    override var wantsUpdateLayer: Bool { true }
+    override func updateLayer() { layer?.contents = image }
 
     override var acceptsFirstResponder: Bool { true }
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }

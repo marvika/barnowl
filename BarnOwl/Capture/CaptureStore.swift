@@ -28,6 +28,19 @@ enum CardCorner: String, CaseIterable, Identifiable {
     var title: String { self == .bottomLeft ? "Bottom left" : "Bottom right" }
 }
 
+/// What follows a capture.
+enum CaptureThen: String, CaseIterable, Identifiable {
+    case card, editor, nothing
+    var id: String { rawValue }
+    var title: String {
+        switch self {
+        case .card: "Show the card"
+        case .editor: "Open the editor"
+        case .nothing: "Nothing"
+        }
+    }
+}
+
 /// One screenshot, as it was caught.
 struct Capture: Identifiable {
     enum Kind: String {
@@ -35,7 +48,7 @@ struct Capture: Identifiable {
         case area = "selection", window, screen = "display"
     }
 
-    let id = UUID()
+    var id = UUID()
     var image: CGImage
     /// Pixels per point: 2 on a Retina display.
     let scale: CGFloat
@@ -94,16 +107,29 @@ enum CaptureStore {
     /// Writes the capture into the capture folder, or over its own file if it has one.
     @discardableResult
     static func save(_ capture: Capture, image: CGImage? = nil) throws -> URL {
-        let format = Preferences.captureFormat
-        let url = capture.fileURL ?? freeURL(
-            in: folder,
-            baseName: baseName(prefix: Preferences.captureNamePrefix, date: capture.date,
-                               appName: Preferences.captureNameIncludesApp ? capture.appName : nil),
-            fileExtension: format.fileExtension)
-        let data = try encode(image ?? capture.image, scale: capture.scale, as: format, atOneX: Preferences.captureAtOneX)
+        let url = capture.fileURL ?? reserveURL(for: capture)
+        let data = try encode(image ?? capture.image, scale: capture.scale, as: format(of: url), atOneX: Preferences.captureAtOneX)
         try data.write(to: url, options: .atomic)
         markAsScreenshot(url, kind: capture.kind)
         return url
+    }
+
+    /// Where a new capture will be saved: a free name in the capture folder.
+    static func reserveURL(for capture: Capture) -> URL {
+        freeURL(
+            in: folder,
+            baseName: baseName(prefix: Preferences.captureNamePrefix, date: capture.date,
+                               appName: Preferences.captureNameIncludesApp ? capture.appName : nil),
+            fileExtension: Preferences.captureFormat.fileExtension)
+    }
+
+    /// A file keeps its own format when saved again, whatever the setting is now.
+    static func format(of url: URL) -> CaptureFormat {
+        switch url.pathExtension.lowercased() {
+        case "jpg", "jpeg": .jpeg
+        case "heic": .heic
+        default: .png
+        }
     }
 
     /// A copy in a temporary folder, for dragging out a capture that isn't saved.
@@ -120,7 +146,9 @@ enum CaptureStore {
     /// Image data at the right size and resolution, so a Retina capture opens
     /// at the size it looked on screen.
     static func encode(_ image: CGImage, scale: CGFloat, as format: CaptureFormat, atOneX: Bool) throws -> Data {
-        let output = atOneX && scale > 1 ? (resized(image, by: 1 / scale) ?? image) : image
+        var output = atOneX && scale > 1 ? (resized(image, by: 1 / scale) ?? image) : image
+        // JPEG has no transparency: a window's shadow would turn black.
+        if format == .jpeg, let flat = flattened(output) { output = flat }
         let dpi = atOneX ? 72 : 72 * scale
         let data = NSMutableData()
         guard let destination = CGImageDestinationCreateWithData(data, format.type.identifier as CFString, 1, nil) else {
@@ -131,6 +159,34 @@ enum CaptureStore {
         CGImageDestinationAddImage(destination, output, properties as CFDictionary)
         guard CGImageDestinationFinalize(destination) else { throw CocoaError(.fileWriteUnknown) }
         return data as Data
+    }
+
+    /// The image on white, without transparency.
+    static func flattened(_ image: CGImage) -> CGImage? {
+        let space = CGColorSpace(name: CGColorSpace.sRGB)!
+        guard let context = CGContext(data: nil, width: image.width, height: image.height, bitsPerComponent: 8, bytesPerRow: 0,
+                                      space: space, bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue) else { return nil }
+        let rect = CGRect(x: 0, y: 0, width: image.width, height: image.height)
+        context.setFillColor(CGColor(gray: 1, alpha: 1))
+        context.fill(rect)
+        context.draw(image, in: rect)
+        return context.makeImage()
+    }
+
+    /// A copy with its own pixels. A cropped image otherwise keeps the whole
+    /// display's picture alive (80 MB on a 6K display).
+    static func ownBitmap(_ image: CGImage) -> CGImage {
+        let space = image.colorSpace ?? CGColorSpace(name: CGColorSpace.sRGB)!
+        guard let context = CGContext(data: nil, width: image.width, height: image.height, bitsPerComponent: 8, bytesPerRow: 0,
+                                      space: space, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return image }
+        context.draw(image, in: CGRect(x: 0, y: 0, width: image.width, height: image.height))
+        return context.makeImage() ?? image
+    }
+
+    /// A small copy for the card, about `width` pixels across.
+    static func thumbnail(_ image: CGImage, width: CGFloat) -> CGImage {
+        let factor = min(1, width / CGFloat(max(image.width, 1)))
+        return factor < 1 ? (resized(image, by: factor) ?? image) : image
     }
 
     static func resized(_ image: CGImage, by factor: CGFloat) -> CGImage? {
@@ -145,15 +201,24 @@ enum CaptureStore {
         return context.makeImage()
     }
 
-    /// Puts the image on the clipboard, at its on-screen size.
+    /// Puts the image on the clipboard, at its on-screen size. Encodes off
+    /// the main thread; TIFF is made only if an app asks for it.
     @MainActor
-    static func copy(_ image: CGImage, scale: CGFloat) {
+    static func copy(_ image: CGImage, scale: CGFloat) async {
+        guard let png = try? await Task.detached(priority: .userInitiated, operation: {
+            try encode(image, scale: scale, as: .png, atOneX: false)
+        }).value else { return }
+        copy(png: png)
+    }
+
+    @MainActor
+    static func copy(png: Data) {
         let pasteboard = NSPasteboard.general
         pasteboard.clearContents()
         let item = NSPasteboardItem()
-        if let png = try? encode(image, scale: scale, as: .png, atOneX: false) { item.setData(png, forType: .png) }
-        let size = NSSize(width: CGFloat(image.width) / scale, height: CGFloat(image.height) / scale)
-        if let tiff = NSImage(cgImage: image, size: size).tiffRepresentation { item.setData(tiff, forType: .tiff) }
+        item.setData(png, forType: .png)
+        item.setDataProvider(TIFFProvider.shared, forTypes: [.tiff])
+        TIFFProvider.shared.png = png
         pasteboard.writeObjects([item])
     }
 
@@ -211,4 +276,16 @@ enum SystemScreenshotShortcuts {
 
     /// System Settings › Keyboard, where Keyboard Shortcuts… › Screenshots lives.
     static let settingsURL = URL(string: "x-apple.systempreferences:com.apple.Keyboard-Settings.extension")!
+}
+
+
+/// Makes TIFF from the copied PNG only when an app asks for it.
+private final class TIFFProvider: NSObject, NSPasteboardItemDataProvider, @unchecked Sendable {
+    static let shared = TIFFProvider()
+    var png: Data?
+
+    func pasteboard(_ pasteboard: NSPasteboard?, item: NSPasteboardItem, provideDataForType type: NSPasteboard.PasteboardType) {
+        guard type == .tiff, let png, let rep = NSBitmapImageRep(data: png) else { return }
+        if let tiff = rep.tiffRepresentation { item.setData(tiff, forType: .tiff) }
+    }
 }

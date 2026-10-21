@@ -59,8 +59,10 @@ enum PrefKey {
     static let captureAppleKeys = "captureAppleKeys"
     static let captureCopies = "captureCopies"
     static let captureSaves = "captureSaves"
-    static let captureShowsCard = "captureShowsCard"
-    static let captureOpensEditor = "captureOpensEditor"
+    static let captureThen = "captureThen"
+    static let captureAdjusts = "captureAdjusts"
+    static let capturePrivateInfo = "capturePrivateInfo"
+    static let captureHintCount = "captureHintCount"
     static let captureFolder = "captureFolder"
     static let captureNamePrefix = "captureNamePrefix"
     static let captureNameIncludesApp = "captureNameIncludesApp"
@@ -134,8 +136,10 @@ enum Preferences {
             PrefKey.captureAppleKeys: false,
             PrefKey.captureCopies: true,
             PrefKey.captureSaves: true,
-            PrefKey.captureShowsCard: true,
-            PrefKey.captureOpensEditor: false,
+            PrefKey.captureThen: CaptureThen.card.rawValue,
+            PrefKey.captureAdjusts: true,
+            PrefKey.capturePrivateInfo: true,
+            PrefKey.captureHintCount: 0,
             PrefKey.captureFolder: "",
             PrefKey.captureNamePrefix: "Screenshot",
             PrefKey.captureNameIncludesApp: false,
@@ -146,7 +150,7 @@ enum Preferences {
             PrefKey.captureWindowShadow: true,
             PrefKey.captureShowsPointer: false,
             PrefKey.captureSound: true,
-            PrefKey.captureCardCorner: CardCorner.bottomLeft.rawValue,
+            PrefKey.captureCardCorner: CardCorner.bottomRight.rawValue,
             PrefKey.captureCardSeconds: 8,
         ])
     }
@@ -257,8 +261,19 @@ enum Preferences {
     static var captureAppleKeys: Bool { defaults.bool(forKey: PrefKey.captureAppleKeys) }
     static var captureCopies: Bool { defaults.bool(forKey: PrefKey.captureCopies) }
     static var captureSaves: Bool { defaults.bool(forKey: PrefKey.captureSaves) }
-    static var captureShowsCard: Bool { defaults.bool(forKey: PrefKey.captureShowsCard) }
-    static var captureOpensEditor: Bool { defaults.bool(forKey: PrefKey.captureOpensEditor) }
+    /// What follows a capture: the card, the editor, or nothing.
+    static var captureThen: CaptureThen {
+        CaptureThen(rawValue: defaults.string(forKey: PrefKey.captureThen) ?? "") ?? .card
+    }
+    /// Keep the selection adjustable after you let go, rather than capturing at once.
+    static var captureAdjusts: Bool { defaults.bool(forKey: PrefKey.captureAdjusts) }
+    /// Read each capture's text in the background, to offer hiding what looks private.
+    static var capturePrivateInfo: Bool { defaults.bool(forKey: PrefKey.capturePrivateInfo) }
+    /// How many captures have shown the hints; they stop after ten.
+    static var captureHintCount: Int {
+        get { defaults.integer(forKey: PrefKey.captureHintCount) }
+        set { defaults.set(newValue, forKey: PrefKey.captureHintCount) }
+    }
     /// Empty means wherever macOS saves its own screenshots.
     static var captureFolder: String { defaults.string(forKey: PrefKey.captureFolder) ?? "" }
     static var captureNamePrefix: String {
@@ -277,7 +292,7 @@ enum Preferences {
     static var captureShowsPointer: Bool { defaults.bool(forKey: PrefKey.captureShowsPointer) }
     static var captureSound: Bool { defaults.bool(forKey: PrefKey.captureSound) }
     static var captureCardCorner: CardCorner {
-        CardCorner(rawValue: defaults.string(forKey: PrefKey.captureCardCorner) ?? "") ?? .bottomLeft
+        CardCorner(rawValue: defaults.string(forKey: PrefKey.captureCardCorner) ?? "") ?? .bottomRight
     }
     /// 0 keeps cards until you close them.
     static var captureCardSeconds: Int { max(0, defaults.integer(forKey: PrefKey.captureCardSeconds)) }

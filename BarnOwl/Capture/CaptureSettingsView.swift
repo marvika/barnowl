@@ -8,8 +8,9 @@ struct CapturePane: View {
     @AppStorage(PrefKey.captureAppleKeys) private var appleKeys = false
     @AppStorage(PrefKey.captureCopies) private var copies = true
     @AppStorage(PrefKey.captureSaves) private var saves = true
-    @AppStorage(PrefKey.captureShowsCard) private var showsCard = true
-    @AppStorage(PrefKey.captureOpensEditor) private var opensEditor = false
+    @AppStorage(PrefKey.captureThen) private var then = CaptureThen.card
+    @AppStorage(PrefKey.captureAdjusts) private var adjusts = true
+    @AppStorage(PrefKey.capturePrivateInfo) private var privateInfo = true
     @AppStorage(PrefKey.captureFolder) private var folder = ""
     @AppStorage(PrefKey.captureNamePrefix) private var namePrefix = "Screenshot"
     @AppStorage(PrefKey.captureNameIncludesApp) private var nameIncludesApp = false
@@ -20,7 +21,7 @@ struct CapturePane: View {
     @AppStorage(PrefKey.captureWindowShadow) private var windowShadow = true
     @AppStorage(PrefKey.captureShowsPointer) private var showsPointer = false
     @AppStorage(PrefKey.captureSound) private var sound = true
-    @AppStorage(PrefKey.captureCardCorner) private var cardCorner = CardCorner.bottomLeft
+    @AppStorage(PrefKey.captureCardCorner) private var cardCorner = CardCorner.bottomRight
     @AppStorage(PrefKey.captureCardSeconds) private var cardSeconds = 8
     @State private var others: [String] = []
     @State private var systemKeysOn = false
@@ -74,6 +75,7 @@ struct CapturePane: View {
             LabeledContent("Capture an area or a window") { KeyboardShortcuts.Recorder(for: .captureArea) }
             LabeledContent("Capture the whole screen") { KeyboardShortcuts.Recorder(for: .captureScreen) }
             LabeledContent("Capture the same area again") { KeyboardShortcuts.Recorder(for: .captureSameArea) }
+            LabeledContent("Edit the last capture") { KeyboardShortcuts.Recorder(for: .editLastCapture) }
             Toggle(isOn: $appleKeys) {
                 BadgeLabel(title: "Also answer ⌘⇧4 and ⌘⇧3",
                            subtitle: systemKeysOn
@@ -91,14 +93,28 @@ struct CapturePane: View {
 
     private var afterCapturing: some View {
         Section {
-            Toggle("Copy it", isOn: $copies)
-            Toggle("Save it to the folder", isOn: $saves)
-            Toggle("Show a card in the corner", isOn: $showsCard)
-            Toggle("Open the editor", isOn: $opensEditor)
+            Picker("When you let go", selection: $adjusts) {
+                Text("Let me adjust it").tag(true)
+                Text("Capture right away").tag(false)
+            }
+            Toggle("Copy to the clipboard", isOn: $copies)
+            Toggle("Save to \(folderTitle)", isOn: $saves)
+            Picker("Then", selection: $then) {
+                ForEach(CaptureThen.allCases) { Text($0.title).tag($0) }
+            }
+            Toggle(isOn: $privateInfo) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Look for private info in captures")
+                    Text("Reads the text on your Mac and offers to hide keys, passwords, emails and card numbers. Nothing is hidden without asking.")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+            }
         } header: {
             Text("After capturing")
         } footer: {
-            Text("On the card: ⌘C copies, ⌘S saves, Return opens the editor, P pins it above your windows, Esc closes it. Drag the card into any app.")
+            Text(adjusts
+                 ? "Return captures. E opens the editor, P pins it, Esc starts over. Click the card to mark it up, drag it into any app; the file stays saved."
+                 : "Captures as soon as you let go. Click the card to mark it up, or drag it into any app.")
         }
     }
 
@@ -210,6 +226,7 @@ struct CaptureStep: View {
             }
             if enabled {
                 Card {
+                    PermissionRow(permission: .screenRecording, model: model)
                     CardRow(title: "Also answer ⌘⇧4 and ⌘⇧3",
                             subtitle: systemKeysOn ? "First switch off macOS's own, under Keyboard Shortcuts › Screenshots."
                                                    : "macOS's own are off, so Barn Owl can take them.",
@@ -223,7 +240,7 @@ struct CaptureStep: View {
                         }
                     }
                 }
-                Label("Try it now: press \(areaKeys), drag over something, then press Return on the card to mark it up.",
+                Label("Try it now: press \(areaKeys), drag over something, then press E to mark it up.",
                       systemImage: "hand.point.up.left.fill")
                     .font(.callout).foregroundStyle(.secondary)
             }
