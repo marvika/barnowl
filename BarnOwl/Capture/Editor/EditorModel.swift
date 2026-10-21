@@ -235,9 +235,14 @@ final class EditorModel {
             rememberStyle(style, for: kind)
             return
         }
+        let scale = scale
         changeSelection(name) { mark in
             let wasCurved = mark.control != nil
             change(&mark.style)
+            if mark.kind == .text, mark.style.textStyle == .callout, MarkGeometry.distance(mark.start, mark.end) < 1 {
+                // A callout needs somewhere to point.
+                mark.end = MarkGeometry.defaultCalloutEnd(mark, scale: scale)
+            }
             guard mark.kind == .arrow, mark.style.curved != wasCurved else { return }
             mark.control = mark.style.curved ? MarkGeometry.defaultBend(start: mark.start, end: mark.end) : nil
         }

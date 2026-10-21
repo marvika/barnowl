@@ -469,7 +469,7 @@ extension EditorCanvas {
         let insetX: CGFloat = probe.textRect.minX - probe.boxRect.minX
         let insetY: CGFloat = probe.textRect.minY - probe.boxRect.minY
         mark.start = CGPoint(x: point.x - insetX, y: point.y - insetY - probe.lineHeight / 2)
-        mark.end = mark.start
+        mark.end = mark.style.textStyle == .callout ? MarkGeometry.defaultCalloutEnd(mark, scale: scale) : mark.start
         let before = model.document
         var document = before
         document.marks.append(mark)

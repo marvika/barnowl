@@ -185,6 +185,8 @@ enum TextStyle: String, Codable, CaseIterable, Sendable {
     case soft
     /// White text outlined in the colour.
     case outline
+    /// A box with a pointer reaching out to `end`.
+    case callout
 
     var title: String {
         switch self {
@@ -192,6 +194,7 @@ enum TextStyle: String, Codable, CaseIterable, Sendable {
         case .box: "Box"
         case .soft: "Soft"
         case .outline: "Outline"
+        case .callout: "Callout"
         }
     }
 }

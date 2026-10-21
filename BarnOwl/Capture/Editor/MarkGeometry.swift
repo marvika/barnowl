@@ -330,6 +330,39 @@ enum MarkGeometry {
                           align: mark.style.align)
     }
 
+    /// A callout's pointer: a wedge from inside the box out to `end`, when `end` is outside it.
+    static func calloutTail(_ mark: Mark, layout: TextLayout) -> CGPath? {
+        let box = layout.boxRect
+        guard !box.insetBy(dx: -4, dy: -4).contains(mark.end) else { return nil }
+        let centre = CGPoint(x: box.midX, y: box.midY)
+        let dx: CGFloat = mark.end.x - centre.x
+        let dy: CGFloat = mark.end.y - centre.y
+        let length: CGFloat = hypot(dx, dy)
+        guard length > 1 else { return nil }
+        // Where the line to `end` leaves the box: the pointer is widest there.
+        let reachX: CGFloat = dx == 0 ? .infinity : ((dx > 0 ? box.maxX : box.minX) - centre.x) / dx
+        let reachY: CGFloat = dy == 0 ? .infinity : ((dy > 0 ? box.maxY : box.minY) - centre.y) / dy
+        let t: CGFloat = min(reachX, reachY, 1)
+        let direction = CGPoint(x: dx / length, y: dy / length)
+        let normal = CGPoint(x: -direction.y, y: direction.x)
+        let half: CGFloat = min(box.height * 0.32, box.width * 0.25)
+        // Start a little inside, so the pointer grows out of the box's rounded edge.
+        let edge = CGPoint(x: centre.x + dx * t, y: centre.y + dy * t)
+        let base = CGPoint(x: edge.x - direction.x * half, y: edge.y - direction.y * half)
+        let path = CGMutablePath()
+        path.move(to: CGPoint(x: base.x + normal.x * half, y: base.y + normal.y * half))
+        path.addLine(to: mark.end)
+        path.addLine(to: CGPoint(x: base.x - normal.x * half, y: base.y - normal.y * half))
+        path.closeSubpath()
+        return path
+    }
+
+    /// Where a new callout points: down and to the left of its box.
+    static func defaultCalloutEnd(_ mark: Mark, scale: CGFloat) -> CGPoint {
+        let box = textLayout(mark, scale: scale).boxRect
+        return CGPoint(x: box.minX + 14 * scale, y: box.maxY + 34 * scale)
+    }
+
     // MARK: Counters
 
     static func counterCircle(_ mark: Mark, scale: CGFloat) -> CGRect {
@@ -420,7 +453,9 @@ enum MarkGeometry {
         case .pen:
             return penBounds(mark.points)
         case .text:
-            return textLayout(mark, scale: scale).boxRect
+            let layout = textLayout(mark, scale: scale)
+            guard mark.style.textStyle == .callout, calloutTail(mark, layout: layout) != nil else { return layout.boxRect }
+            return layout.boxRect.union(CGRect(origin: mark.end, size: .zero))
         case .counter:
             var rect = counterCircle(mark, scale: scale)
             if counterTail(mark, scale: scale) != nil { rect = rect.union(CGRect(origin: mark.end, size: .zero)) }
@@ -465,7 +500,10 @@ enum MarkGeometry {
         case .spotlight:
             return spotlightPath(mark, scale: scale).contains(point)
         case .text:
-            return textLayout(mark, scale: scale).boxRect.insetBy(dx: -tolerance / 4, dy: -tolerance / 4).contains(point)
+            let layout = textLayout(mark, scale: scale)
+            if layout.boxRect.insetBy(dx: -tolerance / 4, dy: -tolerance / 4).contains(point) { return true }
+            guard mark.style.textStyle == .callout else { return false }
+            return calloutTail(mark, layout: layout)?.contains(point) ?? false
         case .counter:
             let radius = counterRadius(mark, scale: scale) + tolerance / 4
             if distance(point, mark.start) <= radius { return true }
@@ -487,7 +525,8 @@ enum MarkGeometry {
         case .counter:
             return counterTail(mark, scale: scale) == nil ? [] : [(.end, mark.end)]
         case .text:
-            return []
+            // A callout's pointer can be dragged; text otherwise moves as a whole.
+            return mark.style.textStyle == .callout ? [(.end, mark.end)] : []
         case .pen:
             return boxHandles(penBounds(mark.points), edges: false)
         case .image:

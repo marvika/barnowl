@@ -238,6 +238,28 @@ struct CaptureEditorTests {
         #expect(moved.text == "Open Settings")
     }
 
+    @Test func aCalloutPointsWhereItsHandleIs() {
+        let model = Self.model()
+        var text = Self.mark(.text, CGPoint(x: 100, y: 100), CGPoint(x: 100, y: 100))
+        text.text = "Look here"
+        model.add(text)
+        model.selection = [text.id]
+        #expect(MarkGeometry.handles(for: model.document[text.id]!, scale: 1).isEmpty)
+        // Switching to Callout gives it somewhere to point, below the box.
+        model.updateStyle { $0.textStyle = .callout }
+        let callout = model.document[text.id]!
+        let box = MarkGeometry.textLayout(callout, scale: 1).boxRect
+        #expect(callout.end.y > box.maxY)
+        #expect(MarkGeometry.handles(for: callout, scale: 1).map(\.handle) == [.end])
+        #expect(MarkGeometry.bounds(callout, scale: 1).maxY == callout.end.y)
+        // On the pointer, a third of the way back from its tip.
+        let onTail = CGPoint(x: callout.end.x + (box.midX - callout.end.x) * 0.3, y: callout.end.y + (box.midY - callout.end.y) * 0.3)
+        #expect(MarkGeometry.hitTest(callout, at: onTail, tolerance: 8, scale: 1))
+        let moved = MarkGeometry.adjusted(callout, handle: .end, to: CGPoint(x: 300, y: 40), constrained: false)
+        #expect(moved.end == CGPoint(x: 300, y: 40))
+        #expect(moved.start == callout.start)
+    }
+
     // MARK: Style memory
 
     @Test func onePenColourIsSharedAndHighlighterAndRedactionKeepTheirOwn() {

@@ -278,8 +278,13 @@ final class AnnotationRenderer: Sendable {
         context.addPath(path)
         context.clip()
         if !imageUnderneath {
-            // Blend with the image's own pixels, so the canvas looks like the export.
-            drawImage(image, in: CGRect(x: 0, y: 0, width: image.width, height: image.height), context)
+            // Blend with the image's own pixels, so the canvas looks like the export. Only the
+            // part under the highlight is drawn (a crop shares the image's pixels, no copy).
+            let bounds = CGRect(x: 0, y: 0, width: image.width, height: image.height)
+            let area = mark.rect.integral.intersection(bounds)
+            if !area.isNull, let part = image.cropping(to: area) {
+                drawImage(part, in: area, context)
+            }
         }
         context.setBlendMode(screens ? .screen : .multiply)
         context.setFillColor(mark.colour.cgColor(alpha: screens ? 0.45 : 0.6))
@@ -307,9 +312,19 @@ final class AnnotationRenderer: Sendable {
     // MARK: Shapes
 
     /// What sits under a stroke so it reads on any background: ink at 55% under light colours
-    /// (yellow, white), white under the rest.
-    private func haloColour(for colour: MarkColour) -> CGColor {
-        colour.isLight ? MarkColour.ink.cgColor(alpha: 0.55) : CGColor(gray: 1, alpha: 1)
+    /// (yellow, white); white under the rest, except on dark areas, where a white rim would look
+    /// like a sticker and a soft ink one keeps the mark crisp instead.
+    func haloIsInk(_ mark: Mark) -> Bool {
+        if mark.colour.isLight { return true }
+        let area = MarkGeometry.bounds(mark, scale: scale)
+        guard !area.isNull, let luminance else { return false }
+        // The map is gamma-encoded grey: 0.3 is a dark area, well below mid grey.
+        return luminance.mean(in: area) < 0.3
+    }
+
+    private func haloColour(_ mark: Mark) -> CGColor {
+        guard haloIsInk(mark) else { return CGColor(gray: 1, alpha: 1) }
+        return MarkColour.ink.cgColor(alpha: mark.colour.isLight ? 0.55 : 0.6)
     }
 
     private func setSoftShadow(_ context: CGContext) {
@@ -334,7 +349,7 @@ final class AnnotationRenderer: Sendable {
         setSoftShadow(context)
         context.addPath(path)
         context.setLineWidth(width + 2 * halo)
-        context.setStrokeColor(haloColour(for: mark.colour))
+        context.setStrokeColor(haloColour(mark))
         context.strokePath()
         context.restoreGState()
         context.addPath(path)
@@ -345,15 +360,17 @@ final class AnnotationRenderer: Sendable {
     }
 
     /// Fills `path` over a halo ring; `soften` rounds the shape's corners a little.
-    private func fillWithHalo(_ path: CGPath, colour: MarkColour, halo: CGFloat, soften: CGFloat, in context: CGContext) {
+    private func fillWithHalo(_ path: CGPath, mark: Mark, halo: CGFloat, soften: CGFloat, in context: CGContext) {
+        let colour = mark.colour
+        let ring = haloColour(mark)
         context.saveGState()
         context.setLineJoin(.round)
         context.saveGState()
         setSoftShadow(context)
         context.addPath(path)
         context.setLineWidth(soften + 2 * halo)
-        context.setFillColor(haloColour(for: colour))
-        context.setStrokeColor(haloColour(for: colour))
+        context.setFillColor(ring)
+        context.setStrokeColor(ring)
         context.drawPath(using: .fillStroke)
         context.restoreGState()
         context.addPath(path)
@@ -371,7 +388,7 @@ final class AnnotationRenderer: Sendable {
             return
         }
         let width = MarkGeometry.arrowWidth(mark, scale: scale)
-        fillWithHalo(MarkGeometry.arrowOutline(mark, scale: scale), colour: mark.colour,
+        fillWithHalo(MarkGeometry.arrowOutline(mark, scale: scale), mark: mark,
                      halo: MarkGeometry.haloWidth(mark, scale: scale), soften: max(1, width * 0.16), in: context)
     }
 
@@ -381,7 +398,7 @@ final class AnnotationRenderer: Sendable {
             : MarkGeometry.roundedRect(mark.rect, radius: MarkGeometry.rectangleRadius(mark, scale: scale))
         switch mark.style.fill {
         case .solid:
-            fillWithHalo(path, colour: mark.colour, halo: MarkGeometry.haloWidth(mark, scale: scale), soften: 0, in: context)
+            fillWithHalo(path, mark: mark, halo: MarkGeometry.haloWidth(mark, scale: scale), soften: 0, in: context)
         case .tinted:
             context.saveGState()
             context.addPath(path)
@@ -487,7 +504,7 @@ final class AnnotationRenderer: Sendable {
         switch mark.style.textStyle {
         case .plain:
             return TextColours(box: nil, text: colour)
-        case .box:
+        case .box, .callout:
             return TextColours(box: colour.boxFill, text: colour.boxFill.textOnFill)
         case .soft:
             let box = colour.mixed(with: .white, 0.84)
@@ -509,11 +526,18 @@ final class AnnotationRenderer: Sendable {
         let colours = Self.textColours(mark)
         let colour = mark.colour
         if let box = colours.box {
+            // The box and a callout's pointer share one shadow.
             context.saveGState()
             setShadow(context, offset: em * 0.05, blur: em * 0.22, colour: CGColor(gray: 0, alpha: 0.28))
-            context.addPath(MarkGeometry.roundedRect(layout.boxRect, radius: layout.cornerRadius))
+            context.beginTransparencyLayer(auxiliaryInfo: nil)
             context.setFillColor(box.cgColor())
+            if mark.style.textStyle == .callout, let tail = MarkGeometry.calloutTail(mark, layout: layout) {
+                context.addPath(tail)
+                context.fillPath()
+            }
+            context.addPath(MarkGeometry.roundedRect(layout.boxRect, radius: layout.cornerRadius))
             context.fillPath()
+            context.endTransparencyLayer()
             context.restoreGState()
         }
         guard !mark.text.isEmpty else { return }
@@ -523,10 +547,11 @@ final class AnnotationRenderer: Sendable {
             let halo: CGFloat = (large ? 2 : 1.5) * scale
             context.saveGState()
             // A soft glow beyond the crisp edge; lighter under ink halos so light text stays clean.
-            let glow: CGColor = colour.isLight ? MarkColour.ink.cgColor(alpha: 0.25) : CGColor(gray: 1, alpha: 0.9)
+            let ink = haloIsInk(mark)
+            let glow: CGColor = ink ? MarkColour.ink.cgColor(alpha: 0.25) : CGColor(gray: 1, alpha: 0.9)
             setShadow(context, offset: 0, blur: em * 0.12, colour: glow)
             context.beginTransparencyLayer(auxiliaryInfo: nil)
-            drawLines(layout, stroke: haloColour(for: colour), strokeWidth: halo * 2, in: context)
+            drawLines(layout, stroke: haloColour(mark), strokeWidth: halo * 2, in: context)
             context.endTransparencyLayer()
             context.restoreGState()
         case .outline:
@@ -536,7 +561,7 @@ final class AnnotationRenderer: Sendable {
             drawLines(layout, stroke: colour.cgColor(), strokeWidth: em * 0.24, in: context)
             context.endTransparencyLayer()
             context.restoreGState()
-        case .box, .soft:
+        case .box, .soft, .callout:
             break
         }
         drawLines(layout, fill: colours.text.cgColor(), in: context)

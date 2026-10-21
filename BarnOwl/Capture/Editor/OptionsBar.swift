@@ -461,18 +461,22 @@ private struct TextStyleSection: View {
         let scale = model.scale
         SampleChoice(title: "Style", options: TextStyle.allCases, selection: shown.textStyle, label: \.title,
                      picture: { option in
+                         let callout = option == .callout
                          var mark = StyleSamples.mark(.text, colour: colour, scale: scale, from: .zero, to: .zero) { s in
                              s.textStyle = option
-                             s.fontSize = 11
+                             s.fontSize = callout ? 9 : 11
                              s.font = shown.font
                              s.fontWeight = .bold
                          }
                          mark.text = "Aa"
                          let layout = MarkGeometry.textLayout(mark, scale: scale)
-                         let x: CGFloat = (StyleSamples.size.width * scale - layout.boxRect.width) / 2
-                         let y: CGFloat = (StyleSamples.size.height * scale - layout.boxRect.height) / 2
+                         let width: CGFloat = StyleSamples.size.width * scale
+                         let height: CGFloat = StyleSamples.size.height * scale
+                         let x: CGFloat = (width - layout.boxRect.width) / 2
+                         // A callout sits high, its pointer reaching to the bottom left.
+                         let y: CGFloat = callout ? 0 : (height - layout.boxRect.height) / 2
                          mark.start = CGPoint(x: x.rounded(), y: y.rounded())
-                         mark.end = mark.start
+                         mark.end = callout ? CGPoint(x: x + 2 * scale, y: height - scale) : mark.start
                          return StyleSamples.image(mark, renderer: model.renderer)
                      }, choose: { option in
                          model.updateStyle { $0.textStyle = option }
