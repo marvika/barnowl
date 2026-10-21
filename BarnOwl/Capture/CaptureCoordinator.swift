@@ -452,6 +452,9 @@ final class CaptureCoordinator {
             ?? CaptureStore.baseName(prefix: Preferences.captureNamePrefix, date: capture.date, appName: nil)
         let editor = CaptureEditor(image: capture.image, scale: capture.scale, title: title, host: self)
         editors[ObjectIdentifier(editor)] = (editor, id)
+        // A real app while you edit: in the Dock and ⌘Tab, with its menus, so
+        // the editor never gets lost behind other windows.
+        if NSApp.activationPolicy() != .regular { NSApp.setActivationPolicy(.regular) }
         editor.show()
     }
 }
@@ -494,7 +497,9 @@ extension CaptureCoordinator: CaptureEditorHost {
         // Once the window has really gone, or Barn Owl still counts it as open.
         Task {
             try? await Task.sleep(for: .milliseconds(150))
-            if editors.isEmpty { giveFocusBack() }
+            guard editors.isEmpty else { return }
+            NSApp.setActivationPolicy(.accessory)
+            giveFocusBack()
         }
     }
 }
