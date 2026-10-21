@@ -32,11 +32,12 @@ enum CaptureLibrary {
     // MARK: Writing
 
     /// Stores a new capture's original and its entry. Runs off the main thread.
-    static func store(_ image: CGImage, entry: Entry, in root: URL = folder) throws {
+    /// `png` is the original already encoded at full size, if there is one.
+    static func store(_ image: CGImage, png: Data? = nil, entry: Entry, in root: URL = folder) throws {
         guard root != folder || isOn else { return }
         let dir = folder(for: entry.id, in: root)
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        let png = try CaptureStore.encode(image, scale: entry.scale, as: .png, atOneX: false)
+        let png = try png ?? CaptureStore.encode(image, scale: entry.scale, as: .png, atOneX: false)
         try png.write(to: dir.appending(path: "original.png"), options: .atomic)
         try write(entry, in: root)
     }
@@ -48,9 +49,9 @@ enum CaptureLibrary {
 
     /// The markup, as the editor's document encodes it.
     static func storeDocument(_ data: Data, for id: UUID, in root: URL = folder) throws {
-        guard root != folder || isOn else { return }
+        // Only for a capture that's kept: never a folder of marks without its picture.
         let dir = folder(for: id, in: root)
-        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        guard FileManager.default.fileExists(atPath: dir.appending(path: "entry.json").path) else { return }
         try data.write(to: dir.appending(path: "document.json"), options: .atomic)
         if var entry = entry(id, in: root), !entry.edited {
             entry.edited = true

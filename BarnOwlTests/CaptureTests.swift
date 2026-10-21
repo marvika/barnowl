@@ -179,6 +179,14 @@ struct CaptureLibraryTests {
         #expect(CaptureLibrary.latest(in: root)?.id == entry.id)
     }
 
+    @Test func neverKeepsMarksWithoutTheirPicture() throws {
+        let root = try root()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let id = UUID()
+        try CaptureLibrary.storeDocument(Data("{}".utf8), for: id, in: root)
+        #expect(!FileManager.default.fileExists(atPath: CaptureLibrary.folder(for: id, in: root).path))
+    }
+
     @Test func findsTheCaptureBehindAFile() throws {
         let root = try root()
         defer { try? FileManager.default.removeItem(at: root) }

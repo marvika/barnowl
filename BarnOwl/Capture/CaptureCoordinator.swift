@@ -29,6 +29,10 @@ final class CaptureCoordinator {
     @ObservationIgnored private var lastOtherApp: NSRunningApplication?
     /// Each capture's file, clipboard and library writes, one after another.
     @ObservationIgnored private var writes: [UUID: Task<Void, Never>] = [:]
+    /// The capture Barn Owl last put on the clipboard, and the clipboard's count right after.
+    @ObservationIgnored private var onClipboard: (id: UUID, changeCount: Int)?
+    /// What each editor's Save last wrote, so closing right after doesn't count as unsaved.
+    @ObservationIgnored private var savedDocuments: [UUID: EditorDocument] = [:]
     @ObservationIgnored private var lastKeepDays: Int?
     @ObservationIgnored private var targets: [WindowTarget] = []
     @ObservationIgnored private var lastAppleKeys: Bool?
@@ -51,7 +55,10 @@ final class CaptureCoordinator {
                                                           object: nil, queue: .main) { [weak self] note in
             let app = note.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication
             MainActor.assumeIsolated {
-                if let app, app != .current { self?.lastOtherApp = app }
+                // Only apps with windows: Spotlight or Raycast have nowhere to type.
+                guard let app, app.processIdentifier != ProcessInfo.processInfo.processIdentifier,
+                      app.activationPolicy == .regular else { return }
+                self?.lastOtherApp = app
             }
         }
         applySettings()
@@ -271,10 +278,15 @@ final class CaptureCoordinator {
             let png: Data? = try? await Task.detached(priority: .userInitiated) {
                 try CaptureStore.encode(image, scale: scale, as: .png, atOneX: false)
             }.value
-            if copies, let png { CaptureStore.copy(png: png) }
+            if copies, let png {
+                CaptureStore.copy(png: png)
+                onClipboard = (id, NSPasteboard.general.changeCount)
+            }
+            // The file first, since the card already offers it; then the library.
             let saved: Bool = await Task.detached(priority: .userInitiated) {
-                try? CaptureLibrary.store(image, entry: entry)
+                defer { try? CaptureLibrary.store(image, png: png, entry: entry) }
                 guard let fileURL else { return false }
+                defer { CaptureStore.release(fileURL) }
                 do {
                     let format = CaptureStore.format(of: fileURL)
                     let data: Data
@@ -294,9 +306,35 @@ final class CaptureCoordinator {
             if fileURL != nil, !saved {
                 Log.app.error("Saving a capture failed")
                 captures[id]?.fileURL = nil
-                cards.update(id, status: "Couldn't save · drag or copy it", kept: copies)
+                couldNotSave(id, kept: copies)
             }
         }
+    }
+
+    /// Says so on the card, or with a card if there's none any more.
+    private func couldNotSave(_ id: UUID, kept: Bool) {
+        if cards.has(id) {
+            cards.update(id, status: "Couldn't save · drag or copy it", kept: kept)
+        } else if let capture = capture(id) {
+            cards.add(capture, status: "Couldn't save · drag or copy it", kept: kept)
+        } else {
+            NSSound.beep()
+        }
+    }
+
+    /// Puts a capture on the clipboard once its earlier writes are done.
+    @discardableResult
+    private func copyInOrder(_ id: UUID, image: CGImage, scale: CGFloat) -> Task<Void, Never> {
+        copied.insert(id)
+        return inOrder(id) { [self] in
+            await CaptureStore.copy(image, scale: scale)
+            onClipboard = (id, NSPasteboard.general.changeCount)
+        }
+    }
+
+    /// Whether the clipboard still holds this capture, not something copied since.
+    private func clipboardHolds(_ id: UUID) -> Bool {
+        onClipboard?.id == id && onClipboard?.changeCount == NSPasteboard.general.changeCount
     }
 
     /// Runs a capture's writes in the order they were asked for, so a quick
@@ -321,6 +359,7 @@ final class CaptureCoordinator {
             let url = capture.fileURL ?? CaptureStore.reserveURL(for: capture)
             let scale = capture.scale, kind = capture.kind, atOneX = Preferences.captureAtOneX
             let saved = await Task.detached(priority: .userInitiated) {
+                defer { CaptureStore.release(url) }
                 do {
                     let data = try CaptureStore.encode(picture, scale: scale, as: CaptureStore.format(of: url), atOneX: atOneX)
                     try data.write(to: url, options: .atomic)
@@ -336,7 +375,8 @@ final class CaptureCoordinator {
             }
             capture = self.capture(id) ?? capture
             capture.fileURL = url
-            capture.unsavedEdits = false
+            // Unless the picture changed again while this one was being written.
+            if capture.image === picture { capture.unsavedEdits = false }
             captures[id] = capture
             CaptureLibrary.setFile(url, for: id)
             return url
@@ -442,9 +482,9 @@ final class CaptureCoordinator {
 
     func copy(_ id: UUID) {
         guard let capture = capture(id) else { return }
+        let copying = copyInOrder(id, image: capture.image, scale: capture.scale)
         Task {
-            await CaptureStore.copy(capture.image, scale: capture.scale)
-            copied.insert(id)
+            await copying.value
             cards.update(id, status: status(copied: true, saved: isSaved(id)), kept: true)
         }
     }
@@ -452,7 +492,7 @@ final class CaptureCoordinator {
     /// Saves it, or shows it in Finder if it's saved already.
     func save(_ id: UUID) {
         guard let capture = capture(id) else { return }
-        if let url = capture.fileURL, !capture.unsavedEdits {
+        if isSaved(id), let url = capture.fileURL {
             NSWorkspace.shared.activateFileViewerSelecting([url])
             return
         }
@@ -460,22 +500,27 @@ final class CaptureCoordinator {
         Task {
             let saved = await saving.value != nil
             let copies = copied.contains(id)
-            cards.update(id, status: saved ? status(copied: copies, saved: true) : "Couldn't save · drag or copy it",
-                         kept: saved || copies)
+            if saved {
+                cards.update(id, status: status(copied: copies, saved: true), kept: true)
+            } else {
+                couldNotSave(id, kept: copies)
+            }
         }
     }
 
     /// A file to drag: the saved one, or a temporary copy of what the card shows.
     func fileForDragging(_ id: UUID) -> URL? {
         guard let capture = capture(id) else { return nil }
-        if let url = capture.fileURL, !capture.unsavedEdits { return url }
+        if isSaved(id), let url = capture.fileURL { return url }
         return CaptureStore.temporaryFile(for: capture)
     }
 
-    /// Saved, and the file is what the card shows. Never decodes a picture.
+    /// Saved, and the file on disk is what the card shows: not still being
+    /// written, moved away, or behind later edits. Never decodes a picture.
     func isSaved(_ id: UUID) -> Bool {
-        if let capture = captures[id] { return capture.fileURL != nil && !capture.unsavedEdits }
-        return CaptureLibrary.entry(id)?.fileURL != nil
+        let url = captures[id].map { $0.unsavedEdits ? nil : $0.fileURL } ?? CaptureLibrary.entry(id)?.fileURL
+        guard let url else { return false }
+        return FileManager.default.fileExists(atPath: url.path)
     }
 
     func pin(_ id: UUID) {
@@ -514,22 +559,34 @@ final class CaptureCoordinator {
         }
         let renderer = AnnotationRenderer(image: original, scale: capture.scale)
         let covering = document
+        // Nothing secret to paste while the covered copy is being made.
+        if clipboardHolds(id) { NSPasteboard.general.clearContents() }
+        cards.update(id, status: "Hiding…", kept: false)
         Task {
             guard let covered = await Task.detached(priority: .userInitiated, operation: { renderer.render(covering) }).value,
-                  var capture = self.capture(id) else { return NSSound.beep() }
+                  var capture = self.capture(id), capture.image === original else { return NSSound.beep() }
             store(covering, for: id)
             capture.image = covered
+            capture.unsavedEdits = capture.fileURL != nil
             captures[id] = capture
-            rewrite(capture)
+            cards.update(id, image: covered, status: "Hiding…", undo: nil)
+            // "Hidden" only once the file and the clipboard are covered too.
+            await rewrite(capture).value
+            let kept = isSaved(id) || clipboardHolds(id)
+            cards.update(id, status: "Hidden", kept: kept)
             cards.update(id, image: covered, status: "Hidden", undo: { [weak self] in
-                guard let self, var restored = self.capture(id) else { return }
+                guard let self, var restored = self.capture(id), restored.image === covered else { return }
                 restored.image = original
+                restored.unsavedEdits = restored.fileURL != nil
                 self.captures[id] = restored
                 let data = before ?? Data()
                 self.inOrder(id) { try? CaptureLibrary.storeDocument(data, for: id) }
-                self.rewrite(restored)
-                let status = self.status(copied: self.copied.contains(id), saved: restored.fileURL != nil)
-                self.cards.update(id, image: original, status: status, undo: nil)
+                let restoring = self.rewrite(restored)
+                Task {
+                    await restoring.value
+                    let status = self.status(copied: self.clipboardHolds(id), saved: self.isSaved(id))
+                    self.cards.update(id, image: original, status: status, undo: nil)
+                }
             })
         }
     }
@@ -557,11 +614,19 @@ final class CaptureCoordinator {
         inOrder(id) { try? CaptureLibrary.storeDocument(data, for: id) }
     }
 
-    /// Puts a changed capture back on the clipboard, if it went there, and over its file.
-    private func rewrite(_ capture: Capture) {
+    /// Puts a changed capture back on the clipboard, if it's still there, and over its file.
+    /// The task finishes once both are done.
+    @discardableResult
+    private func rewrite(_ capture: Capture) -> Task<Void, Never> {
         let id = capture.id, image = capture.image, scale = capture.scale
-        if copied.contains(id) { inOrder(id) { await CaptureStore.copy(image, scale: scale) } }
+        // Decided when its turn comes, after the first copy has landed.
+        inOrder(id) { [self] in
+            guard clipboardHolds(id) else { return }
+            await CaptureStore.copy(image, scale: scale)
+            onClipboard = (id, NSPasteboard.general.changeCount)
+        }
         if capture.fileURL != nil { saveFile(id, image: image) }
+        return inOrder(id) {}
     }
 
     /// Quitting: every open editor's marks are kept straight away.
@@ -611,12 +676,15 @@ extension CaptureCoordinator: CaptureEditorHost {
 
     func editor(_ editor: CaptureEditor, copy image: CGImage) {
         guard let id = captureID(for: editor), let capture = capture(id) else { return }
-        Task { await CaptureStore.copy(image, scale: capture.scale) }
+        copyInOrder(id, image: image, scale: capture.scale)
     }
 
     func editor(_ editor: CaptureEditor, save image: CGImage) async -> URL? {
         guard let id = captureID(for: editor) else { return nil }
-        return await saveFile(id, image: image).value
+        let document = editor.model.document
+        let url = await saveFile(id, image: image).value
+        if url != nil { savedDocuments[id] = document }
+        return url
     }
 
     func editor(_ editor: CaptureEditor, pin image: CGImage) {
@@ -627,13 +695,12 @@ extension CaptureCoordinator: CaptureEditorHost {
     func editor(_ editor: CaptureEditor, finish image: CGImage) {
         guard let id = captureID(for: editor), var capture = capture(id) else { return }
         finished.insert(id)
-        Task { await CaptureStore.copy(image, scale: capture.scale) }
-        copied.insert(id)
+        copyInOrder(id, image: image, scale: capture.scale)
         // The card comes back with what you made; saved over its file if it
         // has one, saved anew only if saving is on.
         let saves = capture.fileURL != nil || Preferences.captureSaves
         capture.image = image
-        capture.unsavedEdits = false
+        capture.unsavedEdits = capture.fileURL != nil
         captures[id] = capture
         let showsCard = Preferences.captureThen != .nothing
         if showsCard { cards.add(capture, status: saves ? "Edited · copied, saving…" : "Edited · copied") }
@@ -643,6 +710,8 @@ extension CaptureCoordinator: CaptureEditorHost {
             let saved = await saving.value != nil
             if showsCard {
                 cards.update(id, status: saved ? "Edited · copied and saved" : "Edited · copied · couldn't save", kept: true)
+            } else if !saved {
+                NSSound.beep()
             }
         }
     }
@@ -656,23 +725,30 @@ extension CaptureCoordinator: CaptureEditorHost {
         let id = captureID(for: editor)
         // Closed without Done: the edits are kept, and the card offers the rest.
         if let id, edited, !finished.contains(id) {
+            // Saved from the editor just now, with nothing changed since.
+            let savedAsIs = savedDocuments[id] == editor.model.document
             Task {
                 guard let image = await editor.render(), var capture = self.capture(id) else { return }
                 capture.image = image
                 // Its file and the clipboard still have the old picture; dragging,
                 // copying or saving uses the new one.
-                capture.unsavedEdits = capture.fileURL != nil
+                capture.unsavedEdits = capture.fileURL != nil && !savedAsIs
                 self.captures[id] = capture
                 self.copied.remove(id)
-                self.cards.add(capture, status: "Edited · not copied yet", kept: false)
+                self.cards.add(capture, status: savedAsIs ? "Edited · saved, not copied yet" : "Edited · not copied yet",
+                               kept: savedAsIs)
             }
         }
         // Opened with E and closed untouched: unless it was copied or saved, the
         // card is the only place it lives.
-        if let id, !edited, !finished.contains(id), let capture = capture(id), capture.fileURL == nil, !copied.contains(id) {
-            cards.add(capture, status: status(copied: false, saved: false), kept: false)
+        if let id, !edited, !finished.contains(id), !isSaved(id), !copied.contains(id), let capture = capture(id) {
+            cards.add(capture, status: capture.unsavedEdits ? "Edited · not copied yet" : status(copied: false, saved: false),
+                      kept: false)
         }
-        if let id { finished.remove(id) }
+        if let id {
+            finished.remove(id)
+            savedDocuments[id] = nil
+        }
         editors[ObjectIdentifier(editor)] = nil
         guard editors.isEmpty else { return }
         // Once the window has really gone, or Barn Owl still counts it as open.

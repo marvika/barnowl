@@ -244,7 +244,7 @@ final class SelectionView: NSView {
 
     private var gesture: Gesture?
     /// The selection before a move or resize, for Esc.
-    private var beforeGesture: CGRect?
+    private var beforeGesture: (selection: CGRect, window: WindowTarget?, screen: Bool)?
     private var spaceHeld = false
     private var lastPoint: CGPoint = .zero
     /// The selection, in this view's coordinates.
@@ -382,13 +382,13 @@ final class SelectionView: NSView {
         window?.makeFirstResponder(self)
         if let selection {
             if let handle = handle(at: point, in: selection) {
-                beforeGesture = selection
+                beforeGesture = (selection, selectedWindow, selectedScreen)
                 gesture = .resizing(handle: handle, from: selection)
                 return
             }
             if selection.contains(point) {
                 if event.clickCount == 2 { return act(.primary) }
-                beforeGesture = selection
+                beforeGesture = (selection, selectedWindow, selectedScreen)
                 gesture = .moving(offset: CGSize(width: point.x - selection.minX, height: point.y - selection.minY))
                 NSCursor.closedHand.set()
                 return
@@ -542,7 +542,12 @@ final class SelectionView: NSView {
         case 53: // Esc steps back: the gesture, then the selection, then the overlay.
             if gesture != nil {
                 // A move or resize goes back to where it started; a new selection goes.
-                if case .drawing = gesture { selection = nil } else { selection = beforeGesture }
+                if case .drawing = gesture {
+                    selection = nil
+                } else if let beforeGesture {
+                    // A window stays a window, with its shadow.
+                    (selection, selectedWindow, selectedScreen) = beforeGesture
+                }
                 gesture = nil
                 update()
             } else if keysSheet != nil {

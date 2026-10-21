@@ -113,14 +113,9 @@ enum CaptureStore {
         }
     }
 
-    /// Writes the capture into the capture folder, or over its own file if it has one.
-    @discardableResult
-    static func save(_ capture: Capture, image: CGImage? = nil) throws -> URL {
-        let url = capture.fileURL ?? reserveURL(for: capture)
-        let data = try encode(image ?? capture.image, scale: capture.scale, as: format(of: url), atOneX: Preferences.captureAtOneX)
-        try data.write(to: url, options: .atomic)
-        markAsScreenshot(url, kind: capture.kind)
-        return url
+    /// Lets a reserved name go once its file is written, or couldn't be.
+    static func release(_ url: URL) {
+        reserved.withLock { _ = $0.remove(url.path) }
     }
 
     /// Where a new capture will be saved: a free name in the capture folder.
