@@ -148,8 +148,9 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSTool
         return container
     }
 
+    /// A SwiftUI overlay sized to its content, so it takes clicks only where it draws.
     private func overlay(_ view: some View, in container: NSView) -> NSView {
-        let host = PassThroughHostingView(rootView: AnyView(view))
+        let host = NSHostingView(rootView: AnyView(view))
         host.sizingOptions = [.intrinsicContentSize]
         host.translatesAutoresizingMaskIntoConstraints = false
         container.addSubview(host)
@@ -256,7 +257,9 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSTool
             for (item, tool) in zip(group.subitems, tools) {
                 item.toolTip = EditorCommand.tooltip(tool)
             }
+            if let index = tools.firstIndex(of: model.tool) { group.selectedIndex = index }
             toolGroup = group
+            syncBadge()
             return group
         case Item.modes:
             let group = NSToolbarItemGroup(itemIdentifier: identifier,
@@ -267,6 +270,8 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSTool
             group.controlRepresentation = .expanded
             group.subitems[0].toolTip = EditorCommand.tooltip(.crop)
             group.subitems[1].toolTip = "Frame: background, padding and corners (⌥⌘I)"
+            group.setSelected(model.tool == .crop, at: 0)
+            group.setSelected(model.showsFrame, at: 1)
             modeGroup = group
             return group
         case Item.pin:
@@ -482,7 +487,8 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSTool
     /// Plain-key commands wait while you type; the rest depend on what's there to act on.
     func canPerform(_ id: EditorCommand.ID) -> Bool {
         if let command = EditorCommand.command(id), command.isBareKey {
-            guard window?.firstResponder === canvas, canvas.labelArmed == nil else { return false }
+            // Typing (a mark's text, the size field) keeps its letters; so does a counter's new label.
+            guard !(window?.firstResponder is NSText), canvas.labelArmed == nil else { return false }
         }
         switch id {
         case .duplicate, .bringToFront, .sendToBack, .bringForward, .sendBackward, .delete, .cut:
@@ -625,14 +631,6 @@ final class CanvasContainerView: NSView {
     override func layout() {
         super.layout()
         onLayout?()
-    }
-}
-
-/// A SwiftUI overlay that lets clicks through wherever it draws nothing.
-final class PassThroughHostingView: NSHostingView<AnyView> {
-    override func hitTest(_ point: NSPoint) -> NSView? {
-        let hit = super.hitTest(point)
-        return hit === self ? nil : hit
     }
 }
 

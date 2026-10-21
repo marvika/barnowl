@@ -100,6 +100,7 @@ extension EditorCanvas {
         let point = imagePoint(event)
         gestureStart = model.document
         lastPoint = point
+        downPoint = point
         dragged = false
         guides = []
         if spaceHeld, let clip = enclosingScrollView?.contentView {
@@ -184,7 +185,7 @@ extension EditorCanvas {
         }
         autoscroll(with: event)
         let point = imagePoint(event)
-        if let start = lastPoint, !dragged, MarkGeometry.distance(start, point) > 2 * screenPoint { dragged = true }
+        if let start = downPoint, !dragged, MarkGeometry.distance(start, point) > 2 * screenPoint { dragged = true }
         lastPoint = point
         let flags = event.modifierFlags
         update(gesture, to: point, constrained: flags.contains(.shift), snaps: !flags.contains(.command))
@@ -576,7 +577,11 @@ extension EditorCanvas {
             }
         }
         let frame = viewRect(fromImage: rect)
-        textView.frame = NSRect(x: frame.minX, y: frame.minY, width: frame.width + 2, height: frame.height)
+        let width: CGFloat = frame.width + 2
+        textView.frame = NSRect(x: frame.minX, y: frame.minY, width: width, height: frame.height)
+        // Centred and right-aligned lines line up within the text's own width, as the renderer's do.
+        let containerWidth: CGFloat = alignment == .left ? 1_000_000 : width
+        textView.textContainer?.size = NSSize(width: containerWidth, height: 1_000_000)
         textView.insertionPointColor = NSColor(cgColor: caret.cgColor()) ?? .labelColor
     }
 
@@ -797,6 +802,8 @@ final class MarkTextView: NSTextView {
         container.widthTracksTextView = false
         container.heightTracksTextView = false
         container.lineFragmentPadding = 0
+        // Lines never wrap: a mark's width follows its longest line.
+        container.lineBreakMode = .byClipping
         layoutManager.addTextContainer(container)
         let view = MarkTextView(frame: .zero, textContainer: container)
         view.isRichText = false

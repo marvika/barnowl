@@ -48,6 +48,8 @@ final class EditorCanvas: NSView, NSTextViewDelegate, NSMenuItemValidation {
     var gesture: Gesture?
     var gestureStart: EditorDocument?
     var lastPoint: CGPoint?
+    /// Where the mouse went down: a drag starts once it's moved a little from here.
+    var downPoint: CGPoint?
     var dragged = false
     var spaceHeld = false
     var textView: MarkTextView?
@@ -95,6 +97,7 @@ final class EditorCanvas: NSView, NSTextViewDelegate, NSMenuItemValidation {
         relayout()
         setAccessibilityRole(.layoutArea)
         setAccessibilityLabel("Capture")
+        updateAccessibility()
     }
 
     @available(*, unavailable)
@@ -155,6 +158,7 @@ final class EditorCanvas: NSView, NSTextViewDelegate, NSMenuItemValidation {
     func chromeChanged() {
         if (model.cropDraft != nil) != showsWholeImage { relayout() }
         chrome.needsDisplay = true
+        updateAccessibility()
     }
 
     func toolChanged() {
