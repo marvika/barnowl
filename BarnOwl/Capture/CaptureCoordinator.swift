@@ -14,6 +14,8 @@ final class CaptureCoordinator {
     @ObservationIgnored private lazy var cards = CaptureCards(coordinator: self)
     @ObservationIgnored private var editors: [ObjectIdentifier: (editor: CaptureEditor, captureID: UUID)] = [:]
     @ObservationIgnored private var pins: [CapturePin] = []
+    /// Editors closed with Done, so their close isn't mistaken for leaving.
+    @ObservationIgnored private var finished: Set<UUID> = []
     /// The last few captures, in memory; older ones come back from the library.
     @ObservationIgnored private var captures: [UUID: Capture] = [:]
     @ObservationIgnored private var order: [UUID] = []
@@ -277,6 +279,7 @@ final class CaptureCoordinator {
             guard !Task.isCancelled else { return }
             insights[id] = insight
             scans[id] = nil
+            editors.values.first { $0.captureID == id }?.editor.update(insight: insight)
             let secrets = insight.text.findings.filter { $0.kind.tier == .secret }
             if let first = secrets.first { cards.offerToHide(id, count: secrets.count, title: first.kind.title) }
         }
@@ -403,12 +406,26 @@ final class CaptureCoordinator {
     }
 
     /// Covers what looks secret with solid bars, in the clipboard and the file.
-    /// The library keeps the original, so Undo can bring it back.
+    /// The bars are ordinary redaction marks, so the editor can take them off
+    /// again; the library keeps the original.
     func hideSecrets(_ id: UUID) {
         guard var capture = capture(id), let insight = insights[id] else { return }
-        let rects = insight.text.findings.filter { $0.kind.tier == .secret }.map(\.rect)
-        guard let covered = Redactor.cover(capture.image, rects: rects) else { return }
+        let findings = insight.text.findings.filter { $0.kind.tier == .secret }
+        let before = CaptureLibrary.document(id)
+        var document = storedDocument(id) ?? EditorDocument(imageSize: CGSize(width: capture.image.width, height: capture.image.height),
+                                                             scale: capture.scale)
         let original = capture.image
+        for finding in findings {
+            var style = MarkStyle()
+            style.redact = .solid
+            var mark = Mark(kind: .redact, colour: ImageSampler.redactionColour(in: original, rect: finding.rect), style: style,
+                            start: finding.rect.origin, end: CGPoint(x: finding.rect.maxX, y: finding.rect.maxY))
+            mark.origin = MarkOrigin(source: .privateInfo, category: finding.kind.rawValue)
+            document.marks.append(mark)
+        }
+        let renderer = AnnotationRenderer(image: original, scale: capture.scale)
+        guard let covered = renderer.render(document) else { return }
+        store(document, for: id)
         capture.image = covered
         captures[id] = capture
         rewrite(capture)
@@ -416,10 +433,21 @@ final class CaptureCoordinator {
             guard let self, var restored = self.capture(id) else { return }
             restored.image = original
             self.captures[id] = restored
+            try? CaptureLibrary.storeDocument(before ?? Data(), for: id)
             self.rewrite(restored)
             let status = self.status(copied: Preferences.captureCopies, saved: restored.fileURL != nil)
             self.cards.update(id, image: original, status: status, undo: nil)
         })
+    }
+
+    private func storedDocument(_ id: UUID) -> EditorDocument? {
+        guard let data = CaptureLibrary.document(id), !data.isEmpty else { return nil }
+        return try? JSONDecoder().decode(EditorDocument.self, from: data)
+    }
+
+    private func store(_ document: EditorDocument, for id: UUID) {
+        guard let data = try? JSONEncoder().encode(document) else { return }
+        try? CaptureLibrary.storeDocument(data, for: id)
     }
 
     /// Puts a changed capture back on the clipboard and over its file.
@@ -450,7 +478,11 @@ final class CaptureCoordinator {
         }
         let title = capture.fileURL?.deletingPathExtension().lastPathComponent
             ?? CaptureStore.baseName(prefix: Preferences.captureNamePrefix, date: capture.date, appName: nil)
-        let editor = CaptureEditor(image: capture.image, scale: capture.scale, title: title, host: self)
+        // The marks stay editable: the original pixels plus the stored document.
+        let document = storedDocument(id)
+        let image = document != nil ? (CaptureLibrary.original(id) ?? capture.image) : capture.image
+        let editor = CaptureEditor(image: image, scale: capture.scale, title: title, document: document,
+                                   insight: insights[id], host: self)
         editors[ObjectIdentifier(editor)] = (editor, id)
         // A real app while you edit: in the Dock and ⌘Tab, with its menus, so
         // the editor never gets lost behind other windows.
@@ -485,13 +517,38 @@ extension CaptureCoordinator: CaptureEditorHost {
     }
 
     func editor(_ editor: CaptureEditor, finish image: CGImage) {
-        guard let id = captureID(for: editor), let capture = capture(id) else { return }
+        guard let id = captureID(for: editor), var capture = capture(id) else { return }
+        finished.insert(id)
         Task { await CaptureStore.copy(image, scale: capture.scale) }
         // Saved over its file if it has one; saved anew only if saving is on.
-        if capture.fileURL != nil || Preferences.captureSaves { self.editor(editor, save: image) }
+        let saves = capture.fileURL != nil || Preferences.captureSaves
+        if saves { self.editor(editor, save: image) }
+        // The card comes back with what you made.
+        capture = self.capture(id) ?? capture
+        capture.image = image
+        captures[id] = capture
+        if Preferences.captureThen != .nothing {
+            cards.add(capture, status: saves ? "Edited · copied and saved" : "Edited · copied")
+        }
     }
 
-    func editorDidClose(_ editor: CaptureEditor) {
+    func editor(_ editor: CaptureEditor, didChange document: EditorDocument) {
+        guard let id = captureID(for: editor) else { return }
+        store(document, for: id)
+    }
+
+    func editorDidClose(_ editor: CaptureEditor, edited: Bool) {
+        let id = captureID(for: editor)
+        // Closed without Done: the edits are kept, and the card offers the rest.
+        if let id, edited, !finished.contains(id) {
+            Task {
+                guard let image = await editor.render(), var capture = self.capture(id) else { return }
+                capture.image = image
+                self.captures[id] = capture
+                self.cards.add(capture, status: "Edits kept · not copied yet")
+            }
+        }
+        if let id { finished.remove(id) }
         editors[ObjectIdentifier(editor)] = nil
         guard editors.isEmpty else { return }
         // Once the window has really gone, or Barn Owl still counts it as open.
@@ -501,45 +558,5 @@ extension CaptureCoordinator: CaptureEditorHost {
             NSApp.setActivationPolicy(.accessory)
             giveFocusBack()
         }
-    }
-}
-
-/// Solid bars over parts of an image, the colour of the text they cover.
-enum Redactor {
-    static func cover(_ image: CGImage, rects: [CGRect]) -> CGImage? {
-        let space = image.colorSpace ?? CGColorSpace(name: CGColorSpace.sRGB)!
-        guard let context = CGContext(data: nil, width: image.width, height: image.height, bitsPerComponent: 8, bytesPerRow: 0,
-                                      space: space, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return nil }
-        let height = CGFloat(image.height)
-        context.draw(image, in: CGRect(x: 0, y: 0, width: image.width, height: image.height))
-        for rect in rects {
-            // Rects are from the top left; the context draws from the bottom.
-            let flipped = CGRect(x: rect.minX, y: height - rect.maxY, width: rect.width, height: rect.height)
-            let corner = min(4, rect.height / 4)
-            context.setFillColor(barColour(in: image, rect: rect))
-            context.addPath(CGPath(roundedRect: flipped, cornerWidth: corner, cornerHeight: corner, transform: nil))
-            context.fillPath()
-        }
-        return context.makeImage()
-    }
-
-    /// Dark bars on light backgrounds, light bars on dark ones, so they read as covered.
-    static func barColour(in image: CGImage, rect: CGRect) -> CGColor {
-        let light = averageLuminance(in: image, rect: rect) > 0.5
-        return light ? CGColor(red: 0.086, green: 0.082, blue: 0.122, alpha: 1) : CGColor(gray: 0.94, alpha: 1)
-    }
-
-    static func averageLuminance(in image: CGImage, rect: CGRect) -> CGFloat {
-        guard let crop = image.cropping(to: rect.integral),
-              let space = CGColorSpace(name: CGColorSpace.sRGB),
-              let context = CGContext(data: nil, width: 1, height: 1, bitsPerComponent: 8, bytesPerRow: 4, space: space,
-                                      bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return 1 }
-        context.interpolationQuality = .medium
-        context.draw(crop, in: CGRect(x: 0, y: 0, width: 1, height: 1))
-        guard let data = context.data?.assumingMemoryBound(to: UInt8.self) else { return 1 }
-        let red = CGFloat(data[0]) * 0.2126
-        let green = CGFloat(data[1]) * 0.7152
-        let blue = CGFloat(data[2]) * 0.0722
-        return (red + green + blue) / 255
     }
 }

@@ -140,12 +140,6 @@ struct CaptureFlowTests {
         let flat = try #require(CaptureStore.flattened(image))
         #expect(flat.alphaInfo == .noneSkipLast)
     }
-
-    @Test func coversSecretsWithBars() throws {
-        let image = try #require(CaptureStoreTests.image(width: 100, height: 40))
-        let covered = try #require(Redactor.cover(image, rects: [CGRect(x: 10, y: 10, width: 30, height: 10)]))
-        #expect(covered.width == 100 && covered.height == 40)
-    }
 }
 
 struct CaptureLibraryTests {
