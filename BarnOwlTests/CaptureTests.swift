@@ -183,7 +183,7 @@ struct CaptureLibraryTests {
         let new = CaptureLibrary.Entry(id: UUID(), date: Date(), scale: 1, kind: "display", appName: nil, fileURL: nil, edited: false)
         try CaptureLibrary.store(image, entry: old, in: root)
         try CaptureLibrary.store(image, entry: new, in: root)
-        CaptureLibrary.prune(in: root)
+        CaptureLibrary.prune(days: 30, in: root)
         #expect(CaptureLibrary.entries(in: root).map(\.id) == [new.id])
     }
 }
