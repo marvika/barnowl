@@ -189,6 +189,15 @@ struct CaptureEditorPrivacyTests {
         #expect(!picked.model.styleBook.redactColourChosen)
     }
 
+    @Test func aRedactionColourPickedBeforeIsStillYours() throws {
+        let red = try JSONDecoder().decode(StyleBook.self, from: Data(#"{"redactColour":{"red":1,"green":0,"blue":0}}"#.utf8))
+        #expect(red.redactColourChosen)
+        let ink = try JSONDecoder().decode(StyleBook.self, from: Data("{}".utf8))
+        #expect(!ink.redactColourChosen)
+        let saved = try JSONDecoder().decode(StyleBook.self, from: JSONEncoder().encode(red))
+        #expect(saved.redactColourChosen)
+    }
+
     @Test func barsOverLightTextTakeItsColour() {
         let made = Self.textImage(lines: ["Token: 4f9a2c"], secrets: ["4f9a2c"], dark: true)
         let glyphs = made.glyphs["4f9a2c"]!

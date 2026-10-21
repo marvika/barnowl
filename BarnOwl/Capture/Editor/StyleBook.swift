@@ -149,7 +149,8 @@ struct StyleBook: Codable, Equatable, Sendable {
         penColour = try c.decodeIfPresent(MarkColour.self, forKey: .penColour) ?? .red
         highlighterColour = try c.decodeIfPresent(MarkColour.self, forKey: .highlighterColour) ?? .yellow
         redactColour = try c.decodeIfPresent(MarkColour.self, forKey: .redactColour) ?? .ink
-        redactColourChosen = try c.decodeIfPresent(Bool.self, forKey: .redactColourChosen) ?? false
+        // From before this was kept: anything but ink was chosen.
+        redactColourChosen = try c.decodeIfPresent(Bool.self, forKey: .redactColourChosen) ?? (redactColour != .ink)
         styles = try c.decodeIfPresent([String: MarkStyle].self, forKey: .styles) ?? [:]
         recents = try c.decodeIfPresent([MarkColour].self, forKey: .recents) ?? []
     }
