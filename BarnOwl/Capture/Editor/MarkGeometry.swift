@@ -11,23 +11,35 @@ enum MarkHandle: Hashable, Sendable {
 enum MarkGeometry {
     // MARK: Sizes
 
-    static func lineWidth(_ mark: Mark, scale: CGFloat) -> CGFloat { mark.size.lineWidth * scale }
-    static func arrowWidth(_ mark: Mark, scale: CGFloat) -> CGFloat { mark.size.arrowWidth * scale }
-    static func counterRadius(_ mark: Mark, scale: CGFloat) -> CGFloat { mark.size.counterRadius * scale }
-    static func fontSize(_ mark: Mark, scale: CGFloat) -> CGFloat { mark.size.fontSize * scale }
+    static func lineWidth(_ mark: Mark, scale: CGFloat) -> CGFloat { CGFloat(mark.style.weight) * scale }
+    static func arrowWidth(_ mark: Mark, scale: CGFloat) -> CGFloat { CGFloat(mark.style.weight) * scale }
+    /// A line (an arrow without heads) is a plain stroke, a little finer than an arrow's shaft.
+    static func plainLineWidth(_ mark: Mark, scale: CGFloat) -> CGFloat { arrowWidth(mark, scale: scale) * 0.73 }
+    static func counterRadius(_ mark: Mark, scale: CGFloat) -> CGFloat { CGFloat(mark.style.weight) * scale / 2 }
+    static func fontSize(_ mark: Mark, scale: CGFloat) -> CGFloat { CGFloat(mark.style.fontSize) * scale }
 
-    /// The halo each side of a stroke, so it reads on any background.
-    static func haloWidth(forStroke width: CGFloat, scale: CGFloat) -> CGFloat {
-        max(1.5 * scale, width * 0.36)
+    /// The halo each side of a stroke, so it reads on any background: a fixed 1.5 pt, or 2 pt
+    /// for large and extra large marks.
+    static func haloWidth(_ mark: Mark, scale: CGFloat) -> CGFloat {
+        let large = SizeLadder.isLarge(mark.style.weight, kind: mark.kind)
+        return (large ? 2 : 1.5) * scale
     }
 
-    /// Rectangles round their corners in proportion to the line, but never past half a side.
+    /// Rectangles round their corners with the line, up to 8 pt.
     static func rectangleRadius(_ mark: Mark, scale: CGFloat) -> CGFloat {
-        lineWidth(mark, scale: scale) * 3
+        min(lineWidth(mark, scale: scale) * 2, 8 * scale)
     }
 
-    static func filledBoxRadius(scale: CGFloat) -> CGFloat { 4 * scale }
     static func spotlightRadius(scale: CGFloat) -> CGFloat { 8 * scale }
+
+    /// The dash pattern for a stroke of `width`, or nil for a solid line.
+    static func dashPattern(_ dash: LineDash, width: CGFloat) -> [CGFloat]? {
+        switch dash {
+        case .solid: nil
+        case .dashed: [width * 2.6, width * 2]
+        case .dotted: [0, width * 2]
+        }
+    }
 
     /// A rounded rectangle whose radius is clamped to fit, as Core Graphics requires.
     static func roundedRect(_ rect: CGRect, radius: CGFloat) -> CGPath {
@@ -38,29 +50,9 @@ enum MarkGeometry {
 
     // MARK: Drawing order
 
-    /// Marks draw in layers: redactions, spotlights, highlights, pasted images, shapes, counters,
-    /// then text. Within a layer, later marks are on top.
-    static func layer(_ kind: Mark.Kind) -> Int {
-        switch kind {
-        case .redact: 0
-        case .spotlight: 1
-        case .highlighter: 2
-        case .image: 3
-        case .arrow, .line, .rectangle, .filledBox, .ellipse, .pen: 4
-        case .counter: 5
-        case .text: 6
-        }
-    }
-
-    static func drawingOrder(_ marks: [Mark]) -> [Mark] {
-        marks.enumerated()
-            .sorted { (layer($0.element.kind), $0.offset) < (layer($1.element.kind), $1.offset) }
-            .map(\.element)
-    }
-
     /// The mark drawn on top at `point`, if any.
-    static func topmost(in marks: [Mark], at point: CGPoint, tolerance: CGFloat, scale: CGFloat) -> Mark? {
-        drawingOrder(marks).reversed().first { hitTest($0, at: point, tolerance: tolerance, scale: scale) }
+    static func topmost(in document: EditorDocument, at point: CGPoint, tolerance: CGFloat, scale: CGFloat) -> Mark? {
+        document.drawingOrder.reversed().first { hitTest($0, at: point, tolerance: tolerance, scale: scale) }
     }
 
     // MARK: Arrows
@@ -110,7 +102,19 @@ enum MarkGeometry {
 
     static func arrowOutline(_ mark: Mark, scale: CGFloat) -> CGPath {
         arrowOutline(from: mark.start, to: mark.end, control: mark.control, width: arrowWidth(mark, scale: scale),
-                     doubleHeaded: mark.style.arrow == .double)
+                     doubleHeaded: mark.style.heads == .both)
+    }
+
+    /// A line's centre, straight or bent.
+    static func linePath(_ mark: Mark) -> CGPath {
+        let path = CGMutablePath()
+        if let control = mark.control {
+            path.move(to: mark.start)
+            path.addQuadCurve(to: mark.end, control: control)
+        } else {
+            path.addLines(between: [mark.start, mark.end])
+        }
+        return path
     }
 
     /// A closed outline: a shaft that tapers from a fine tail to `width` at the head, and a
@@ -126,9 +130,10 @@ enum MarkGeometry {
             return path
         }
         let headLimit: CGFloat = total * (doubleHeaded ? 0.4 : 0.55)
-        let headLength: CGFloat = min(width * 3.4, headLimit)
-        let headHalf: CGFloat = headLength * 0.6
-        let fullHalf: CGFloat = min(width / 2, headHalf * 0.5)
+        let headLength: CGFloat = min(width * 3.0, headLimit)
+        // 1.55 times the width each side, in proportion when the arrow is too short for a full head.
+        let headHalf: CGFloat = headLength * (1.55 / 3.0)
+        let fullHalf: CGFloat = min(width / 2, headHalf * 0.45)
         let tailHalf: CGFloat = doubleHeaded ? fullHalf : fullHalf * 0.24
         // The shaft tucks into the head's swept-back base.
         let joinDepth: CGFloat = headLength * 0.76
@@ -229,41 +234,100 @@ enum MarkGeometry {
 
     // MARK: Text
 
-    /// How a text mark lays out: the glyphs' box, and the whole mark around it.
+    /// How a text mark lays out: its lines, the glyphs' box, and the whole mark around it.
+    /// Built with Core Text so it works off the main thread.
     struct TextLayout {
-        let font: NSFont
-        let string: NSAttributedString
+        let font: CTFont
+        let lines: [CTLine]
+        let lineWidths: [CGFloat]
+        let ascent: CGFloat
+        let lineHeight: CGFloat
         let textRect: CGRect
         let boxRect: CGRect
         let cornerRadius: CGFloat
+        let align: TextAlign
+
+        /// Where line `index` starts, on its baseline, in y-down coordinates.
+        func baseline(_ index: Int) -> CGPoint {
+            let width: CGFloat = lineWidths[index]
+            let spare: CGFloat = textRect.width - width
+            let x: CGFloat = switch align {
+            case .left: textRect.minX
+            case .centre: textRect.minX + spare / 2
+            case .right: textRect.minX + spare
+            }
+            let y: CGFloat = textRect.minY + CGFloat(index) * lineHeight + ascent
+            return CGPoint(x: x, y: y)
+        }
     }
 
-    /// SF Pro Rounded, semibold: friendly, and clear at small sizes.
-    static func textFont(size: CGFloat) -> NSFont {
-        let base = NSFont.systemFont(ofSize: size, weight: .semibold)
-        guard let descriptor = base.fontDescriptor.withDesign(.rounded) else { return base }
+    /// The typeface for a text mark, at `size` (in whatever unit the caller draws in).
+    static func font(_ font: TextFont, weight: FontWeight, size: CGFloat) -> NSFont {
+        let nsWeight: NSFont.Weight = switch weight {
+        case .regular: .regular
+        case .semibold: .semibold
+        case .bold: .bold
+        }
+        let system = NSFont.systemFont(ofSize: size, weight: nsWeight)
+        switch font {
+        case .rounded:
+            return designed(system, .rounded, size: size)
+        case .sans:
+            return system
+        case .serif:
+            return designed(system, .serif, size: size)
+        case .mono:
+            return NSFont.monospacedSystemFont(ofSize: size, weight: nsWeight)
+        case .named(let name):
+            guard let named = NSFont(name: name, size: size) else { return system }
+            guard weight == .bold else { return named }
+            let bold = CTFontCreateCopyWithSymbolicTraits(named as CTFont, size, nil, .traitBold, .traitBold)
+            return bold.map { $0 as NSFont } ?? named
+        }
+    }
+
+    private static func designed(_ base: NSFont, _ design: NSFontDescriptor.SystemDesign, size: CGFloat) -> NSFont {
+        guard let descriptor = base.fontDescriptor.withDesign(design) else { return base }
         return NSFont(descriptor: descriptor, size: size) ?? base
     }
 
-    static let textOptions: NSString.DrawingOptions = [.usesLineFragmentOrigin, .usesFontLeading]
+    /// One line of text, coloured by whatever the context is set to.
+    static func line(_ text: String, font: CTFont) -> CTLine {
+        let fromContext = NSAttributedString.Key(kCTForegroundColorFromContextAttributeName as String)
+        let fontKey = NSAttributedString.Key(kCTFontAttributeName as String)
+        let string = NSAttributedString(string: text, attributes: [fontKey: font, fromContext: true])
+        return CTLineCreateWithAttributedString(string)
+    }
+
+    /// The height of one line of `font`, which the text field typing over a mark matches.
+    static func lineHeight(_ font: CTFont) -> CGFloat {
+        let ascent: CGFloat = CTFontGetAscent(font)
+        let descent: CGFloat = CTFontGetDescent(font)
+        let leading: CGFloat = CTFontGetLeading(font)
+        return ceil(ascent + descent + leading)
+    }
 
     static func textLayout(_ mark: Mark, scale: CGFloat) -> TextLayout {
-        let font = textFont(size: fontSize(mark, scale: scale))
-        let string = NSAttributedString(string: mark.text, attributes: [.font: font])
-        let unbounded = CGSize(width: 1_000_000, height: 1_000_000)
-        let measured = string.boundingRect(with: unbounded, options: textOptions)
-        let lineHeight: CGFloat = font.ascender - font.descender + font.leading
-        var width: CGFloat = ceil(measured.width)
-        var height: CGFloat = max(ceil(measured.height), ceil(lineHeight))
-        if mark.text.isEmpty { width = ceil(font.pointSize * 0.35) }
-        if mark.text.hasSuffix("\n") { height += ceil(lineHeight) }
-        let em: CGFloat = font.pointSize
-        let boxed = mark.style.text == .box
+        let size = fontSize(mark, scale: scale)
+        let ctFont = font(mark.style.font, weight: mark.style.fontWeight, size: size) as CTFont
+        let rows: [String] = mark.text.components(separatedBy: "\n")
+        let lines: [CTLine] = rows.map { line($0, font: ctFont) }
+        let widths: [CGFloat] = lines.map { CGFloat(CTLineGetTypographicBounds($0, nil, nil, nil)) }
+        let height = lineHeight(ctFont)
+        var width: CGFloat = ceil(widths.max() ?? 0)
+        if mark.text.isEmpty { width = ceil(size * 0.35) }
+        let totalHeight: CGFloat = height * CGFloat(max(rows.count, 1))
+        let em: CGFloat = size
+        let boxed = mark.style.textStyle != .plain
         let padX: CGFloat = (boxed ? em * 0.45 : em * 0.14).rounded()
         let padY: CGFloat = (boxed ? em * 0.2 : em * 0.06).rounded()
-        let boxRect = CGRect(x: mark.start.x, y: mark.start.y, width: width + 2 * padX, height: height + 2 * padY)
-        let textRect = CGRect(x: mark.start.x + padX, y: mark.start.y + padY, width: width, height: height)
-        return TextLayout(font: font, string: string, textRect: textRect, boxRect: boxRect, cornerRadius: em * 0.32)
+        let boxWidth: CGFloat = width + 2 * padX
+        let boxHeight: CGFloat = totalHeight + 2 * padY
+        let boxRect = CGRect(x: mark.start.x, y: mark.start.y, width: boxWidth, height: boxHeight)
+        let textRect = CGRect(x: mark.start.x + padX, y: mark.start.y + padY, width: width, height: totalHeight)
+        return TextLayout(font: ctFont, lines: lines, lineWidths: widths, ascent: CTFontGetAscent(ctFont),
+                          lineHeight: height, textRect: textRect, boxRect: boxRect, cornerRadius: em * 0.32,
+                          align: mark.style.align)
     }
 
     // MARK: Counters
@@ -271,6 +335,42 @@ enum MarkGeometry {
     static func counterCircle(_ mark: Mark, scale: CGFloat) -> CGRect {
         let radius = counterRadius(mark, scale: scale)
         return CGRect(x: mark.start.x - radius, y: mark.start.y - radius, width: radius * 2, height: radius * 2)
+    }
+
+    /// SF Pro Rounded Heavy, for the numbers.
+    static func counterFont(size: CGFloat) -> NSFont {
+        designed(NSFont.systemFont(ofSize: size, weight: .heavy), .rounded, size: size)
+    }
+
+    /// A counter's label: a tag that runs out to the right of the badge.
+    struct CounterLabel {
+        let font: CTFont
+        let line: CTLine
+        /// The tag, starting under the badge.
+        let pill: CGRect
+        /// Where the text starts, on its baseline.
+        let baseline: CGPoint
+        /// Where typing goes: the text's own box.
+        let textRect: CGRect
+    }
+
+    static func counterLabel(_ mark: Mark, scale: CGFloat) -> CounterLabel {
+        let radius = counterRadius(mark, scale: scale)
+        let size: CGFloat = max(radius * 1.04, 12 * scale)
+        let ctFont = font(.rounded, weight: .semibold, size: size) as CTFont
+        let line = line(mark.text, font: ctFont)
+        let measured: CGFloat = CGFloat(CTLineGetTypographicBounds(line, nil, nil, nil))
+        let width: CGFloat = mark.text.isEmpty ? size * 0.35 : measured
+        let height: CGFloat = max(radius * 1.64, lineHeight(ctFont) + 4 * scale)
+        let textX: CGFloat = mark.start.x + radius + size * 0.32
+        let pillMaxX: CGFloat = textX + width + size * 0.5
+        let pill = CGRect(x: mark.start.x, y: mark.start.y - height / 2, width: pillMaxX - mark.start.x, height: height)
+        let ascent: CGFloat = CTFontGetAscent(ctFont)
+        let descent: CGFloat = CTFontGetDescent(ctFont)
+        let baselineY: CGFloat = mark.start.y + (ascent - descent) / 2
+        let textRect = CGRect(x: textX, y: baselineY - ascent, width: width, height: lineHeight(ctFont))
+        return CounterLabel(font: ctFont, line: line, pill: pill, baseline: CGPoint(x: textX, y: baselineY),
+                            textRect: textRect)
     }
 
     /// A counter's pointer, a wedge from the badge to `end`, when it was dragged out far enough.
@@ -309,25 +409,35 @@ enum MarkGeometry {
         return rect
     }
 
-    /// Everything a mark covers, for selection outlines and redrawing.
+    /// Everything a mark covers, for selection outlines.
     static func bounds(_ mark: Mark, scale: CGFloat) -> CGRect {
         switch mark.kind {
         case .arrow:
+            if mark.style.heads == .none {
+                return linePath(mark).boundingBoxOfPath
+            }
             return arrowOutline(mark, scale: scale).boundingBoxOfPath
-        case .line:
-            return CGRect(x: min(mark.start.x, mark.end.x), y: min(mark.start.y, mark.end.y),
-                          width: abs(mark.end.x - mark.start.x), height: abs(mark.end.y - mark.start.y))
         case .pen:
             return penBounds(mark.points)
         case .text:
             return textLayout(mark, scale: scale).boxRect
         case .counter:
-            let circle = counterCircle(mark, scale: scale)
-            guard counterTail(mark, scale: scale) != nil else { return circle }
-            return circle.union(CGRect(origin: mark.end, size: .zero))
-        case .rectangle, .filledBox, .ellipse, .highlighter, .redact, .spotlight, .image:
+            var rect = counterCircle(mark, scale: scale)
+            if counterTail(mark, scale: scale) != nil { rect = rect.union(CGRect(origin: mark.end, size: .zero)) }
+            if !mark.text.isEmpty { rect = rect.union(counterLabel(mark, scale: scale).pill) }
+            return rect
+        case .rectangle, .ellipse, .highlighter, .redact, .spotlight, .image:
             return mark.rect
         }
+    }
+
+    /// Everything a mark paints, halo and shadow included, for redrawing.
+    static func paintedBounds(_ mark: Mark, scale: CGFloat) -> CGRect {
+        let base = bounds(mark, scale: scale)
+        guard !base.isNull else { return base }
+        let stroke: CGFloat = CGFloat(mark.style.weight) * scale
+        let margin: CGFloat = stroke + 12 * scale
+        return base.insetBy(dx: -margin, dy: -margin)
     }
 
     // MARK: Hit testing
@@ -338,21 +448,19 @@ enum MarkGeometry {
         let stroke = max(lineWidth(mark, scale: scale), tolerance)
         switch mark.kind {
         case .arrow:
-            if arrowOutline(mark, scale: scale).contains(point) { return true }
-            let line = CGMutablePath()
-            line.addLines(between: spine(from: mark.start, to: mark.end, control: mark.control))
-            return strokedContains(line, width: max(arrowWidth(mark, scale: scale), tolerance), point)
-        case .line:
-            let line = CGMutablePath()
-            line.addLines(between: [mark.start, mark.end])
-            return strokedContains(line, width: stroke, point)
+            if mark.style.heads != .none, arrowOutline(mark, scale: scale).contains(point) { return true }
+            return strokedContains(linePath(mark), width: max(arrowWidth(mark, scale: scale), tolerance), point)
         case .pen:
             return strokedContains(smoothPath(mark.points), width: stroke, point)
         case .rectangle:
-            return strokedContains(roundedRect(mark.rect, radius: rectangleRadius(mark, scale: scale)), width: stroke, point)
+            let path = roundedRect(mark.rect, radius: rectangleRadius(mark, scale: scale))
+            if mark.style.fill != .none, path.contains(point) { return true }
+            return strokedContains(path, width: stroke, point)
         case .ellipse:
-            return strokedContains(CGPath(ellipseIn: mark.rect, transform: nil), width: stroke, point)
-        case .filledBox, .highlighter, .redact, .image:
+            let path = CGPath(ellipseIn: mark.rect, transform: nil)
+            if mark.style.fill != .none, path.contains(point) { return true }
+            return strokedContains(path, width: stroke, point)
+        case .highlighter, .redact, .image:
             return mark.rect.insetBy(dx: -tolerance / 4, dy: -tolerance / 4).contains(point)
         case .spotlight:
             return spotlightPath(mark, scale: scale).contains(point)
@@ -361,6 +469,7 @@ enum MarkGeometry {
         case .counter:
             let radius = counterRadius(mark, scale: scale) + tolerance / 4
             if distance(point, mark.start) <= radius { return true }
+            if !mark.text.isEmpty, counterLabel(mark, scale: scale).pill.contains(point) { return true }
             return counterTail(mark, scale: scale)?.contains(point) ?? false
         }
     }
@@ -375,8 +484,6 @@ enum MarkGeometry {
         switch mark.kind {
         case .arrow:
             return [(.start, mark.start), (.end, mark.end), (.bend, arrowMidpoint(mark))]
-        case .line:
-            return [(.start, mark.start), (.end, mark.end)]
         case .counter:
             return counterTail(mark, scale: scale) == nil ? [] : [(.end, mark.end)]
         case .text:
@@ -385,7 +492,7 @@ enum MarkGeometry {
             return boxHandles(penBounds(mark.points), edges: false)
         case .image:
             return boxHandles(mark.rect, edges: false)
-        case .rectangle, .filledBox, .ellipse, .highlighter, .redact, .spotlight:
+        case .rectangle, .ellipse, .highlighter, .redact, .spotlight:
             return boxHandles(mark.rect, edges: true)
         }
     }
@@ -517,7 +624,7 @@ enum MarkGeometry {
     /// Where a drag from `start` should end with ⇧ held: lines at 45° steps, boxes square.
     static func constrainedEnd(_ end: CGPoint, from start: CGPoint, kind: Mark.Kind) -> CGPoint {
         switch kind {
-        case .arrow, .line, .counter:
+        case .arrow, .counter:
             return snappedTo45(end, around: start)
         default:
             let dx: CGFloat = end.x - start.x

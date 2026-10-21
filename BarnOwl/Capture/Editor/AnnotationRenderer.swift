@@ -1,25 +1,64 @@
 import AppKit
 import CoreImage
-import CoreImage.CIFilterBuiltins
+import CoreText
 import ImageIO
+import Synchronization
 
 /// Draws a document: the frame, the cropped image and every mark. The canvas draws with it on
-/// screen and `render` exports with it, so what you see is what you get.
-@MainActor
-final class AnnotationRenderer {
+/// screen and `render` exports with it, so what you see is what you get. It holds no UI state,
+/// so exporting runs off the main thread.
+final class AnnotationRenderer: Sendable {
     let image: CGImage
     /// Pixels per point, so marks have sensible pixel sizes.
     let scale: CGFloat
+    let luminance: LuminanceMap?
+    private let desktopPicture = Mutex<Picture?>(nil)
     private let effects: RedactionEffects
-    private var pasted: [UUID: (data: Data, image: CGImage)] = [:]
+    private let pasted = Mutex<[UUID: PastedImage]>([:])
 
-    init(image: CGImage, scale: CGFloat) {
-        self.image = image
-        self.scale = max(scale, 0.5)
-        effects = RedactionEffects(image: image)
+    private struct PastedImage: @unchecked Sendable {
+        let data: Data
+        let image: CGImage
     }
 
-    /// The document flattened at full resolution, in the image's colour space.
+    private struct Picture: @unchecked Sendable {
+        let image: CGImage
+    }
+
+    init(image: CGImage, scale: CGFloat, desktop: CGImage? = nil) {
+        self.image = image
+        self.scale = max(scale, 0.5)
+        luminance = LuminanceMap(image: image)
+        effects = RedactionEffects(image: image)
+        if let desktop { desktopPicture.withLock { $0 = Picture(image: desktop) } }
+    }
+
+    /// The desktop picture, softened, for the Desktop background; it loads after the editor opens.
+    var desktop: CGImage? {
+        desktopPicture.withLock { $0?.image }
+    }
+
+    func setDesktop(_ picture: CGImage?) {
+        desktopPicture.withLock { $0 = picture.map { Picture(image: $0) } }
+    }
+
+    /// The current desktop picture, small and softly blurred, or nil if it isn't a picture.
+    static func loadDesktopPicture(from url: URL) -> CGImage? {
+        let options: [CFString: Any] = [kCGImageSourceCreateThumbnailFromImageAlways: true,
+                                        kCGImageSourceThumbnailMaxPixelSize: 1200,
+                                        kCGImageSourceCreateThumbnailWithTransform: true]
+        guard let source = CGImageSourceCreateWithURL(url as CFURL, nil),
+              let thumbnail = CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary) else { return nil }
+        let input = CIImage(cgImage: thumbnail)
+        let output = input.clampedToExtent().applyingGaussianBlur(sigma: 18).cropped(to: input.extent)
+        let context = CIContext(options: [.cacheIntermediates: false])
+        let space = CGColorSpace(name: CGColorSpace.sRGB) ?? CGColorSpaceCreateDeviceRGB()
+        return context.createCGImage(output, from: input.extent, format: .RGBA8, colorSpace: space)
+    }
+
+    // MARK: Export
+
+    /// The document flattened at full resolution, in sRGB.
     func render(_ document: EditorDocument) -> CGImage? {
         let layout = FrameLayout(document: document)
         let width = Int(layout.canvasSize.width.rounded())
@@ -28,35 +67,29 @@ final class AnnotationRenderer {
         let info = CGImageAlphaInfo.premultipliedLast.rawValue
         let srgb = CGColorSpace(name: CGColorSpace.sRGB) ?? CGColorSpaceCreateDeviceRGB()
         guard let context = CGContext(data: nil, width: width, height: height, bitsPerComponent: 8, bytesPerRow: 0,
-                                      space: outputColourSpace, bitmapInfo: info)
-            ?? CGContext(data: nil, width: width, height: height, bitsPerComponent: 8, bytesPerRow: 0,
-                         space: srgb, bitmapInfo: info) else { return nil }
+                                      space: srgb, bitmapInfo: info) else { return nil }
         context.interpolationQuality = .high
         context.translateBy(x: 0, y: CGFloat(height))
         context.scaleBy(x: 1, y: -1)
-        draw(document, in: context)
+        drawBackdrop(document, in: context, includingImage: true)
+        drawMarks(document, in: context, imageUnderneath: true)
         return context.makeImage()
     }
 
-    private var outputColourSpace: CGColorSpace {
-        if let space = image.colorSpace, space.model == .rgb, space.supportsOutput { return space }
-        return CGColorSpace(name: CGColorSpace.sRGB) ?? CGColorSpaceCreateDeviceRGB()
-    }
+    // MARK: Frame and image
 
-    /// Draws `document` into `context`, whose user space is canvas pixels with y pointing down.
-    /// `editingText` is the text mark being typed, which keeps room for the caret while empty.
-    func draw(_ document: EditorDocument, in context: CGContext, editingText: UUID? = nil) {
+    /// The frame's background and the image with its shadow. `includingImage` false draws the
+    /// image only to cast the shadow, for the canvas, which shows the image itself in a layer.
+    func drawBackdrop(_ document: EditorDocument, in context: CGContext, includingImage: Bool) {
         let layout = FrameLayout(document: document)
         let frame = document.frame
+        if frame.isOn { drawBackground(frame, size: layout.canvasSize, in: context) }
+        let shadowed = frame.isOn && frame.shadow
+        guard includingImage || shadowed else { return }
         let radius: CGFloat = frame.isOn ? frame.cornerRadius : 0
         let clip = MarkGeometry.roundedRect(layout.imageRect, radius: radius)
         let full = CGRect(x: layout.offset.x, y: layout.offset.y, width: CGFloat(image.width), height: CGFloat(image.height))
-
-        if frame.isOn { drawBackground(frame, size: layout.canvasSize, in: context) }
-
-        // The image, with the frame's shadow following its rounded corners (and any transparency).
         context.saveGState()
-        let shadowed = frame.isOn && frame.shadow
         if shadowed {
             let blur: CGFloat = min(28 * scale, max(4 * scale, frame.padding * 0.45))
             setShadow(context, offset: blur * 0.3, blur: blur, colour: CGColor(gray: 0, alpha: 0.4))
@@ -69,60 +102,64 @@ final class AnnotationRenderer {
         context.restoreGState()
         if shadowed { context.endTransparencyLayer() }
         context.restoreGState()
-
-        // Marks live in image coordinates and stay within the image.
-        context.saveGState()
-        context.addPath(clip)
-        context.clip()
-        context.translateBy(x: layout.offset.x, y: layout.offset.y)
-        drawMarks(document, in: context, editingText: editingText)
-        context.restoreGState()
     }
 
-    private func drawMarks(_ document: EditorDocument, in context: CGContext, editingText: UUID?) {
+    /// Every mark, clipped to the image. `imageUnderneath` false (on the canvas, where the image
+    /// is a separate layer) makes highlights carry the pixels they blend with.
+    func drawMarks(_ document: EditorDocument, in context: CGContext, imageUnderneath: Bool, editingText: UUID? = nil) {
+        let layout = FrameLayout(document: document)
+        let frame = document.frame
+        let radius: CGFloat = frame.isOn ? frame.cornerRadius : 0
+        context.saveGState()
+        context.addPath(MarkGeometry.roundedRect(layout.imageRect, radius: radius))
+        context.clip()
+        context.translateBy(x: layout.offset.x, y: layout.offset.y)
         let numbers = document.counterNumbers
-        let ordered = MarkGeometry.drawingOrder(document.marks)
+        let ordered = document.drawingOrder
+        let spotlights = ordered.filter { $0.kind == .spotlight }
         var spotlightsDrawn = false
-        effects.beginPass()
         for mark in ordered {
             switch mark.kind {
+            case .highlighter:
+                drawHighlight(mark, imageUnderneath: imageUnderneath, in: context)
             case .redact:
                 drawRedaction(mark, in: context)
             case .spotlight:
                 guard !spotlightsDrawn else { continue }
                 spotlightsDrawn = true
-                drawSpotlights(ordered.filter { $0.kind == .spotlight }, area: document.crop, in: context)
-            case .highlighter:
-                drawHighlight(mark, in: context)
-            case .image:
-                drawPasted(mark, in: context)
-            case .arrow:
-                drawArrow(mark, in: context)
-            case .line:
-                let path = CGMutablePath()
-                path.addLines(between: [mark.start, mark.end])
-                strokeWithHalo(path, colour: mark.colour, width: MarkGeometry.lineWidth(mark, scale: scale), in: context)
-            case .rectangle:
-                let path = MarkGeometry.roundedRect(mark.rect, radius: MarkGeometry.rectangleRadius(mark, scale: scale))
-                strokeWithHalo(path, colour: mark.colour, width: MarkGeometry.lineWidth(mark, scale: scale), in: context)
-            case .ellipse:
-                let path = CGPath(ellipseIn: mark.rect, transform: nil)
-                strokeWithHalo(path, colour: mark.colour, width: MarkGeometry.lineWidth(mark, scale: scale), in: context)
-            case .pen:
-                let path = MarkGeometry.smoothPath(mark.points)
-                strokeWithHalo(path, colour: mark.colour, width: MarkGeometry.lineWidth(mark, scale: scale), in: context)
-            case .filledBox:
-                drawFilledBox(mark, in: context)
-            case .counter:
-                drawCounter(mark, number: numbers[mark.id] ?? 1, in: context)
-            case .text:
-                drawText(mark, in: context)
+                drawSpotlights(spotlights, area: document.crop, in: context)
+            default:
+                withOpacity(mark.style.opacity, context) {
+                    drawObject(mark, number: numbers[mark.id] ?? 1, editing: mark.id == editingText, in: context)
+                }
             }
         }
-        effects.endPass()
+        context.restoreGState()
     }
 
-    // MARK: Frame and image
+    private func drawObject(_ mark: Mark, number: Int, editing: Bool, in context: CGContext) {
+        switch mark.kind {
+        case .arrow: drawArrow(mark, in: context)
+        case .rectangle, .ellipse: drawShape(mark, in: context)
+        case .pen:
+            let path = MarkGeometry.smoothPath(mark.points)
+            strokeWithHalo(path, mark: mark, width: MarkGeometry.lineWidth(mark, scale: scale), in: context)
+        case .counter: drawCounter(mark, label: mark.style.counterFormat.label(number), editing: editing, in: context)
+        case .text: drawText(mark, in: context)
+        case .image: drawPasted(mark, in: context)
+        case .highlighter, .redact, .spotlight: break
+        }
+    }
+
+    private func withOpacity(_ opacity: Double, _ context: CGContext, _ body: () -> Void) {
+        guard opacity < 0.999 else { return body() }
+        context.saveGState()
+        context.setAlpha(CGFloat(max(0.05, opacity)))
+        context.beginTransparencyLayer(auxiliaryInfo: nil)
+        body()
+        context.endTransparencyLayer()
+        context.restoreGState()
+    }
 
     private func drawBackground(_ frame: FrameSettings, size: CGSize, in context: CGContext) {
         let canvas = CGRect(origin: .zero, size: size)
@@ -132,59 +169,92 @@ final class AnnotationRenderer {
         case .solid(let colour):
             context.setFillColor(colour.cgColor())
             context.fill(canvas)
-        case .gradient(let gradient):
-            let space = CGColorSpace(name: CGColorSpace.sRGB) ?? CGColorSpaceCreateDeviceRGB()
-            let (from, to) = gradient.colours
-            let colours: [CGColor] = [from.cgColor(), to.cgColor()]
-            let glowColours: [CGColor] = [CGColor(gray: 1, alpha: 0.2), CGColor(gray: 1, alpha: 0)]
-            guard let fill = CGGradient(colorsSpace: space, colors: colours as CFArray, locations: [0, 1]),
-                  let glow = CGGradient(colorsSpace: space, colors: glowColours as CFArray, locations: [0, 1]) else { return }
+        case .desktop:
+            guard let desktop else {
+                drawGradient(.mist, in: canvas, context)
+                return
+            }
+            // Fills the canvas, like the desktop fills the screen.
+            let across: CGFloat = canvas.width / CGFloat(desktop.width)
+            let down: CGFloat = canvas.height / CGFloat(desktop.height)
+            let factor: CGFloat = max(across, down)
+            let width: CGFloat = CGFloat(desktop.width) * factor
+            let height: CGFloat = CGFloat(desktop.height) * factor
+            let rect = CGRect(x: (canvas.width - width) / 2, y: (canvas.height - height) / 2, width: width, height: height)
             context.saveGState()
             context.clip(to: canvas)
-            context.drawLinearGradient(fill, start: .zero, end: CGPoint(x: canvas.maxX, y: canvas.maxY),
-                                       options: [.drawsBeforeStartLocation, .drawsAfterEndLocation])
-            // A soft light from the top left, as through a window.
-            let centre = CGPoint(x: canvas.width * 0.18, y: 0)
-            let reach: CGFloat = max(canvas.width, canvas.height) * 0.75
-            context.drawRadialGradient(glow, startCenter: centre, startRadius: 0, endCenter: centre, endRadius: reach, options: [])
+            drawImage(desktop, in: rect, context)
             context.restoreGState()
+        case .gradient(let gradient):
+            drawGradient(gradient, in: canvas, context)
         }
     }
 
+    private func drawGradient(_ gradient: FrameGradient, in canvas: CGRect, _ context: CGContext) {
+        let space = CGColorSpace(name: CGColorSpace.sRGB) ?? CGColorSpaceCreateDeviceRGB()
+        let (from, to) = gradient.colours
+        let colours: [CGColor] = [from.cgColor(), to.cgColor()]
+        let glowColours: [CGColor] = [CGColor(gray: 1, alpha: 0.2), CGColor(gray: 1, alpha: 0)]
+        guard let fill = CGGradient(colorsSpace: space, colors: colours as CFArray, locations: [0, 1]),
+              let glow = CGGradient(colorsSpace: space, colors: glowColours as CFArray, locations: [0, 1]) else { return }
+        context.saveGState()
+        context.clip(to: canvas)
+        context.drawLinearGradient(fill, start: .zero, end: CGPoint(x: canvas.maxX, y: canvas.maxY),
+                                   options: [.drawsBeforeStartLocation, .drawsAfterEndLocation])
+        // A soft light from the top left, as through a window.
+        let centre = CGPoint(x: canvas.width * 0.18, y: 0)
+        let reach: CGFloat = max(canvas.width, canvas.height) * 0.75
+        context.drawRadialGradient(glow, startCenter: centre, startRadius: 0, endCenter: centre, endRadius: reach, options: [])
+        context.restoreGState()
+    }
+
     /// Draws a bitmap upright in a y-down context.
-    private func drawImage(_ image: CGImage, in rect: CGRect, _ context: CGContext) {
+    private func drawImage(_ picture: CGImage, in rect: CGRect, _ context: CGContext) {
         context.saveGState()
         context.translateBy(x: rect.minX, y: rect.maxY)
         context.scaleBy(x: 1, y: -1)
-        context.draw(image, in: CGRect(origin: .zero, size: rect.size))
+        context.draw(picture, in: CGRect(origin: .zero, size: rect.size))
         context.restoreGState()
     }
 
     // MARK: Effects
 
     private func drawRedaction(_ mark: Mark, in context: CGContext) {
-        let rect = mark.rect.intersection(CGRect(x: 0, y: 0, width: image.width, height: image.height)).integral
+        let bounds = CGRect(x: 0, y: 0, width: image.width, height: image.height)
+        let rect = mark.rect.intersection(bounds)
         guard !rect.isNull, rect.width >= 1, rect.height >= 1 else { return }
         let style = mark.style.redact
-        if style != .solid, let effect = effects.image(for: rect, style: style, scale: scale) {
-            context.saveGState()
-            if style == .pixelate { context.interpolationQuality = .none }
-            context.addPath(MarkGeometry.roundedRect(rect, radius: style == .blur ? 3 * scale : 0))
-            context.clip()
-            drawImage(effect, in: rect, context)
-            context.restoreGState()
-        } else {
-            context.addPath(MarkGeometry.roundedRect(mark.rect, radius: 3 * scale))
+        switch style {
+        case .solid:
+            context.addPath(MarkGeometry.roundedRect(mark.rect, radius: 2 * scale))
             context.setFillColor(mark.colour.cgColor())
             context.fillPath()
+        case .pixelate:
+            let block = max(2, Int((mark.style.strength.block * scale).rounded()))
+            guard let small = effects.pixelated(block: block) else { return }
+            context.saveGState()
+            context.interpolationQuality = .none
+            context.clip(to: rect)
+            drawImage(small, in: bounds, context)
+            context.restoreGState()
+        case .blur:
+            let radius = max(2, Int((mark.style.strength.radius * scale).rounded()))
+            guard let small = effects.blurred(radius: radius) else { return }
+            context.saveGState()
+            context.interpolationQuality = .high
+            context.addPath(MarkGeometry.roundedRect(rect, radius: 3 * scale))
+            context.clip()
+            drawImage(small, in: bounds, context)
+            context.restoreGState()
         }
     }
 
     /// Dims everything outside the spotlights, once for all of them so they can overlap.
     private func drawSpotlights(_ marks: [Mark], area: CGRect, in context: CGContext) {
+        let dim: Double = marks.last?.style.dim ?? 0.5
         context.saveGState()
         context.beginTransparencyLayer(auxiliaryInfo: nil)
-        context.setFillColor(CGColor(gray: 0, alpha: 0.55))
+        context.setFillColor(CGColor(gray: 0, alpha: CGFloat(dim)))
         context.fill(area)
         context.setBlendMode(.clear)
         for mark in marks {
@@ -195,12 +265,25 @@ final class AnnotationRenderer {
         context.restoreGState()
     }
 
-    private func drawHighlight(_ mark: Mark, in context: CGContext) {
+    /// Whether a highlight over `rect` screens (lightens) rather than multiplies: on dark areas,
+    /// where multiplying would vanish.
+    func highlightScreens(_ rect: CGRect) -> Bool {
+        (luminance?.mean(in: rect) ?? 1) < 0.35
+    }
+
+    private func drawHighlight(_ mark: Mark, imageUnderneath: Bool, in context: CGContext) {
+        let path = MarkGeometry.roundedRect(mark.rect, radius: 2 * scale)
+        let screens = highlightScreens(mark.rect)
         context.saveGState()
-        context.setBlendMode(.multiply)
-        context.setFillColor(mark.colour.cgColor(alpha: 0.35))
-        context.addPath(MarkGeometry.roundedRect(mark.rect, radius: 2 * scale))
-        context.fillPath()
+        context.addPath(path)
+        context.clip()
+        if !imageUnderneath {
+            // Blend with the image's own pixels, so the canvas looks like the export.
+            drawImage(image, in: CGRect(x: 0, y: 0, width: image.width, height: image.height), context)
+        }
+        context.setBlendMode(screens ? .screen : .multiply)
+        context.setFillColor(mark.colour.cgColor(alpha: screens ? 0.45 : 0.6))
+        context.fill(mark.rect)
         context.restoreGState()
     }
 
@@ -214,18 +297,19 @@ final class AnnotationRenderer {
 
     private func pastedImage(_ mark: Mark) -> CGImage? {
         guard let data = mark.imageData else { return nil }
-        if let cached = pasted[mark.id], cached.data == data { return cached.image }
+        if let cached = pasted.withLock({ $0[mark.id] }), cached.data == data { return cached.image }
         guard let source = CGImageSourceCreateWithData(data as CFData, nil),
               let picture = CGImageSourceCreateImageAtIndex(source, 0, nil) else { return nil }
-        pasted[mark.id] = (data, picture)
+        pasted.withLock { $0[mark.id] = PastedImage(data: data, image: picture) }
         return picture
     }
 
     // MARK: Shapes
 
-    /// What sits under a stroke so it reads on any background: white, or ink under white marks.
+    /// What sits under a stroke so it reads on any background: ink at 55% under light colours
+    /// (yellow, white), white under the rest.
     private func haloColour(for colour: MarkColour) -> CGColor {
-        colour.luminance > 0.8 ? MarkColour.ink.cgColor(alpha: 0.75) : CGColor(gray: 1, alpha: 1)
+        colour.isLight ? MarkColour.ink.cgColor(alpha: 0.55) : CGColor(gray: 1, alpha: 1)
     }
 
     private func setSoftShadow(_ context: CGContext) {
@@ -239,21 +323,23 @@ final class AnnotationRenderer {
         context.setShadow(offset: shift, blur: hypot(spread.width, spread.height), color: colour)
     }
 
-    private func strokeWithHalo(_ path: CGPath, colour: MarkColour, width: CGFloat, in context: CGContext) {
-        let halo = MarkGeometry.haloWidth(forStroke: width, scale: scale)
+    private func strokeWithHalo(_ path: CGPath, mark: Mark, width: CGFloat, in context: CGContext) {
+        let halo = MarkGeometry.haloWidth(mark, scale: scale)
+        let dash = MarkGeometry.dashPattern(mark.style.dash, width: width)
         context.saveGState()
         context.setLineCap(.round)
         context.setLineJoin(.round)
+        if let dash { context.setLineDash(phase: 0, lengths: dash) }
         context.saveGState()
         setSoftShadow(context)
         context.addPath(path)
         context.setLineWidth(width + 2 * halo)
-        context.setStrokeColor(haloColour(for: colour))
+        context.setStrokeColor(haloColour(for: mark.colour))
         context.strokePath()
         context.restoreGState()
         context.addPath(path)
         context.setLineWidth(width)
-        context.setStrokeColor(colour.cgColor())
+        context.setStrokeColor(mark.colour.cgColor())
         context.strokePath()
         context.restoreGState()
     }
@@ -279,28 +365,49 @@ final class AnnotationRenderer {
     }
 
     private func drawArrow(_ mark: Mark, in context: CGContext) {
+        if mark.style.heads == .none {
+            strokeWithHalo(MarkGeometry.linePath(mark), mark: mark, width: MarkGeometry.plainLineWidth(mark, scale: scale),
+                           in: context)
+            return
+        }
         let width = MarkGeometry.arrowWidth(mark, scale: scale)
-        let halo = MarkGeometry.haloWidth(forStroke: width, scale: scale)
-        fillWithHalo(MarkGeometry.arrowOutline(mark, scale: scale), colour: mark.colour, halo: halo,
-                     soften: max(1, width * 0.16), in: context)
+        fillWithHalo(MarkGeometry.arrowOutline(mark, scale: scale), colour: mark.colour,
+                     halo: MarkGeometry.haloWidth(mark, scale: scale), soften: max(1, width * 0.16), in: context)
     }
 
-    private func drawFilledBox(_ mark: Mark, in context: CGContext) {
-        let path = MarkGeometry.roundedRect(mark.rect, radius: MarkGeometry.filledBoxRadius(scale: scale))
-        fillWithHalo(path, colour: mark.colour, halo: 1.5 * scale, soften: 0, in: context)
+    private func drawShape(_ mark: Mark, in context: CGContext) {
+        let path: CGPath = mark.kind == .ellipse
+            ? CGPath(ellipseIn: mark.rect, transform: nil)
+            : MarkGeometry.roundedRect(mark.rect, radius: MarkGeometry.rectangleRadius(mark, scale: scale))
+        switch mark.style.fill {
+        case .solid:
+            fillWithHalo(path, colour: mark.colour, halo: MarkGeometry.haloWidth(mark, scale: scale), soften: 0, in: context)
+        case .tinted:
+            context.saveGState()
+            context.addPath(path)
+            context.setFillColor(mark.colour.cgColor(alpha: 0.2))
+            context.fillPath()
+            context.restoreGState()
+            strokeWithHalo(path, mark: mark, width: MarkGeometry.lineWidth(mark, scale: scale), in: context)
+        case .none:
+            strokeWithHalo(path, mark: mark, width: MarkGeometry.lineWidth(mark, scale: scale), in: context)
+        }
     }
 
     // MARK: Counters
 
-    private func drawCounter(_ mark: Mark, number: Int, in context: CGContext) {
+    private func drawCounter(_ mark: Mark, label: String, editing: Bool, in context: CGContext) {
         let circle = MarkGeometry.counterCircle(mark, scale: scale)
         let radius: CGFloat = circle.width / 2
-        let ring: CGFloat = max(1.5 * scale, radius * 0.15)
+        let large = SizeLadder.isLarge(mark.style.weight, kind: .counter)
+        let ring: CGFloat = (large ? 2.5 : 2) * scale
         let tail = MarkGeometry.counterTail(mark, scale: scale)
-        let ringColour = mark.colour.luminance > 0.8 ? MarkColour.ink.cgColor() : CGColor(gray: 1, alpha: 1)
+        let fill = mark.colour.boxFill
+        let ringColour = mark.colour.isLight ? MarkColour.ink.cgColor(alpha: 0.55) : CGColor(gray: 1, alpha: 1)
+        let tag: MarkGeometry.CounterLabel? = (mark.text.isEmpty && !editing) ? nil : MarkGeometry.counterLabel(mark, scale: scale)
 
-        // The badge and its pointer are drawn one after the other (not as one path, whose
-        // overlap could cancel out), with one shadow for the pair.
+        // The tag, badge and pointer are drawn one after the other (not as one path, whose
+        // overlap could cancel out), with one shadow for them all.
         context.saveGState()
         context.setLineJoin(.round)
         setShadow(context, offset: 1 * scale, blur: 3.5 * scale, colour: CGColor(gray: 0, alpha: 0.32))
@@ -308,13 +415,22 @@ final class AnnotationRenderer {
         context.setLineWidth(ring * 2)
         context.setFillColor(ringColour)
         context.setStrokeColor(ringColour)
+        if let tag {
+            let pill = MarkGeometry.roundedRect(tag.pill, radius: tag.pill.height / 2)
+            context.addPath(pill)
+            context.drawPath(using: .fillStroke)
+            context.addPath(pill)
+            context.setFillColor(fill.cgColor())
+            context.fillPath()
+            context.setFillColor(ringColour)
+        }
         context.addEllipse(in: circle)
         context.drawPath(using: .fillStroke)
         if let tail {
             context.addPath(tail)
             context.drawPath(using: .fillStroke)
         }
-        context.setFillColor(mark.colour.cgColor())
+        context.setFillColor(fill.cgColor())
         context.fillEllipse(in: circle)
         if let tail {
             context.addPath(tail)
@@ -323,167 +439,192 @@ final class AnnotationRenderer {
         context.endTransparencyLayer()
         context.restoreGState()
 
-        let digits = String(number)
-        let factor: CGFloat = digits.count == 1 ? 1.1 : (digits.count == 2 ? 0.92 : 0.74)
-        drawCentred(digits, font: Self.numberFont(size: radius * factor), colour: mark.colour.contrasting,
-                    at: CGPoint(x: circle.midX, y: circle.midY), in: context)
-    }
-
-    static func numberFont(size: CGFloat) -> NSFont {
-        let base = NSFont.systemFont(ofSize: size, weight: .bold)
-        guard let descriptor = base.fontDescriptor.withDesign(.rounded) else { return base }
-        return NSFont(descriptor: descriptor, size: size) ?? base
+        let factor: CGFloat = label.count == 1 ? 1.1 : (label.count == 2 ? 0.88 : 0.68)
+        let font = MarkGeometry.counterFont(size: radius * factor) as CTFont
+        drawCentred(label, font: font, colour: fill.textOnFill, at: CGPoint(x: circle.midX, y: circle.midY), in: context)
+        if let tag, !mark.text.isEmpty {
+            drawLine(tag.line, at: tag.baseline, fill: fill.textOnFill.cgColor(), in: context)
+        }
     }
 
     /// Draws a short label with its glyphs (not its line box) centred on `centre`.
-    private func drawCentred(_ text: String, font: NSFont, colour: MarkColour, at centre: CGPoint, in context: CGContext) {
-        let colourKey = NSAttributedString.Key(kCTForegroundColorAttributeName as String)
-        let string = NSAttributedString(string: text, attributes: [.font: font, colourKey: colour.cgColor()])
-        let line = CTLineCreateWithAttributedString(string)
+    private func drawCentred(_ text: String, font: CTFont, colour: MarkColour, at centre: CGPoint, in context: CGContext) {
+        let line = MarkGeometry.line(text, font: font)
         let bounds = CTLineGetBoundsWithOptions(line, .useGlyphPathBounds)
+        let origin = CGPoint(x: centre.x - bounds.midX, y: centre.y + bounds.midY)
+        drawLine(line, at: origin, fill: colour.cgColor(), in: context)
+    }
+
+    /// Draws one line upright in a y-down context, with its baseline at `origin`.
+    private func drawLine(_ line: CTLine, at origin: CGPoint, fill: CGColor? = nil, stroke: CGColor? = nil,
+                          strokeWidth: CGFloat = 0, in context: CGContext) {
         context.saveGState()
         context.textMatrix = CGAffineTransform(scaleX: 1, y: -1)
-        context.textPosition = CGPoint(x: centre.x - bounds.midX, y: centre.y + bounds.midY)
+        context.textPosition = origin
+        if let stroke {
+            context.setTextDrawingMode(.stroke)
+            context.setLineJoin(.round)
+            context.setLineWidth(strokeWidth)
+            context.setStrokeColor(stroke)
+        } else {
+            context.setTextDrawingMode(.fill)
+            context.setFillColor(fill ?? CGColor(gray: 0, alpha: 1))
+        }
         CTLineDraw(line, context)
         context.restoreGState()
     }
 
     // MARK: Text
 
-    private func drawText(_ mark: Mark, in context: CGContext) {
-        let layout = MarkGeometry.textLayout(mark, scale: scale)
-        let em: CGFloat = layout.font.pointSize
+    /// The colours a text mark uses: the box behind it (if any) and the glyphs.
+    struct TextColours {
+        let box: MarkColour?
+        let text: MarkColour
+    }
+
+    static func textColours(_ mark: Mark) -> TextColours {
         let colour = mark.colour
-        let darkOnWhite = colour.luminance > 0.8
-        withAppKit(context) {
-            switch mark.style.text {
-            case .box:
-                context.saveGState()
-                setShadow(context, offset: em * 0.05, blur: em * 0.22, colour: CGColor(gray: 0, alpha: 0.3))
-                context.addPath(MarkGeometry.roundedRect(layout.boxRect, radius: layout.cornerRadius))
-                context.setFillColor(colour.cgColor())
-                context.fillPath()
-                context.restoreGState()
-                drawString(mark.text, layout: layout, fill: colour.contrasting)
-            case .halo:
-                let halo: MarkColour = darkOnWhite ? .ink : .white
-                context.saveGState()
-                context.setLineJoin(.round)
-                // A fine edge with a soft glow beyond it: lighter than the outline style.
-                setShadow(context, offset: 0, blur: em * 0.2, colour: halo.cgColor(alpha: darkOnWhite ? 0.7 : 1))
-                drawString(mark.text, layout: layout, stroke: halo, strokeWidth: 11)
-                context.restoreGState()
-                drawString(mark.text, layout: layout, fill: colour)
-            case .outline:
-                let fill: MarkColour = darkOnWhite ? .ink : .white
-                context.saveGState()
-                context.setLineJoin(.round)
-                setShadow(context, offset: em * 0.03, blur: em * 0.1, colour: CGColor(gray: 0, alpha: 0.3))
-                drawString(mark.text, layout: layout, stroke: colour, strokeWidth: 26)
-                context.restoreGState()
-                drawString(mark.text, layout: layout, fill: fill)
+        switch mark.style.textStyle {
+        case .plain:
+            return TextColours(box: nil, text: colour)
+        case .box:
+            return TextColours(box: colour.boxFill, text: colour.boxFill.textOnFill)
+        case .soft:
+            let box = colour.mixed(with: .white, 0.84)
+            var text = colour.mixed(with: .ink, 0.3)
+            var step = 0
+            while text.contrast(with: box) < 4.5, step < 6 {
+                text = text.mixed(with: .ink, 0.3)
+                step += 1
             }
+            return TextColours(box: box, text: text)
+        case .outline:
+            return TextColours(box: nil, text: colour.isLight ? .ink : .white)
         }
     }
 
-    private func drawString(_ text: String, layout: MarkGeometry.TextLayout, fill: MarkColour) {
-        guard !text.isEmpty else { return }
-        let colour = NSColor(cgColor: fill.cgColor()) ?? .white
-        let string = NSAttributedString(string: text, attributes: [.font: layout.font, .foregroundColor: colour])
-        string.draw(with: layout.textRect, options: MarkGeometry.textOptions, context: nil)
+    private func drawText(_ mark: Mark, in context: CGContext) {
+        let layout = MarkGeometry.textLayout(mark, scale: scale)
+        let em: CGFloat = CGFloat(mark.style.fontSize) * scale
+        let colours = Self.textColours(mark)
+        let colour = mark.colour
+        if let box = colours.box {
+            context.saveGState()
+            setShadow(context, offset: em * 0.05, blur: em * 0.22, colour: CGColor(gray: 0, alpha: 0.28))
+            context.addPath(MarkGeometry.roundedRect(layout.boxRect, radius: layout.cornerRadius))
+            context.setFillColor(box.cgColor())
+            context.fillPath()
+            context.restoreGState()
+        }
+        guard !mark.text.isEmpty else { return }
+        switch mark.style.textStyle {
+        case .plain:
+            let large: Bool = mark.style.fontSize >= 32
+            let halo: CGFloat = (large ? 2 : 1.5) * scale
+            context.saveGState()
+            // A soft glow beyond the crisp edge; lighter under ink halos so light text stays clean.
+            let glow: CGColor = colour.isLight ? MarkColour.ink.cgColor(alpha: 0.25) : CGColor(gray: 1, alpha: 0.9)
+            setShadow(context, offset: 0, blur: em * 0.12, colour: glow)
+            context.beginTransparencyLayer(auxiliaryInfo: nil)
+            drawLines(layout, stroke: haloColour(for: colour), strokeWidth: halo * 2, in: context)
+            context.endTransparencyLayer()
+            context.restoreGState()
+        case .outline:
+            context.saveGState()
+            setShadow(context, offset: em * 0.03, blur: em * 0.1, colour: CGColor(gray: 0, alpha: 0.3))
+            context.beginTransparencyLayer(auxiliaryInfo: nil)
+            drawLines(layout, stroke: colour.cgColor(), strokeWidth: em * 0.24, in: context)
+            context.endTransparencyLayer()
+            context.restoreGState()
+        case .box, .soft:
+            break
+        }
+        drawLines(layout, fill: colours.text.cgColor(), in: context)
     }
 
-    /// Strokes the glyph outlines only; `strokeWidth` is a percentage of the font size.
-    private func drawString(_ text: String, layout: MarkGeometry.TextLayout, stroke: MarkColour, strokeWidth: CGFloat) {
-        guard !text.isEmpty else { return }
-        let colour = NSColor(cgColor: stroke.cgColor()) ?? .white
-        let string = NSAttributedString(string: text, attributes: [
-            .font: layout.font, .foregroundColor: colour, .strokeColor: colour, .strokeWidth: strokeWidth,
-        ])
-        string.draw(with: layout.textRect, options: MarkGeometry.textOptions, context: nil)
+    private func drawLines(_ layout: MarkGeometry.TextLayout, fill: CGColor? = nil, stroke: CGColor? = nil,
+                           strokeWidth: CGFloat = 0, in context: CGContext) {
+        for index in layout.lines.indices {
+            drawLine(layout.lines[index], at: layout.baseline(index), fill: fill, stroke: stroke, strokeWidth: strokeWidth,
+                     in: context)
+        }
     }
 
-    /// Runs `body` with AppKit drawing into `context`, upright in its y-down space.
-    private func withAppKit(_ context: CGContext, _ body: () -> Void) {
-        NSGraphicsContext.saveGraphicsState()
-        NSGraphicsContext.current = NSGraphicsContext(cgContext: context, flipped: true)
-        body()
-        NSGraphicsContext.restoreGraphicsState()
+    // MARK: Pictures for the options bar
+
+    /// A small picture of `mark` on a clear background, for style and size choices.
+    func sample(_ mark: Mark, size: CGSize, pixelsPerPoint: CGFloat) -> CGImage? {
+        let width = Int((size.width * pixelsPerPoint).rounded())
+        let height = Int((size.height * pixelsPerPoint).rounded())
+        let srgb = CGColorSpace(name: CGColorSpace.sRGB) ?? CGColorSpaceCreateDeviceRGB()
+        guard width > 0, height > 0,
+              let context = CGContext(data: nil, width: width, height: height, bitsPerComponent: 8, bytesPerRow: 0,
+                                      space: srgb, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return nil }
+        context.translateBy(x: 0, y: CGFloat(height))
+        context.scaleBy(x: pixelsPerPoint / scale, y: -pixelsPerPoint / scale)
+        withOpacity(mark.style.opacity, context) {
+            drawObject(mark, number: 1, editing: false, in: context)
+        }
+        return context.makeImage()
     }
 }
 
-/// Pixelate and blur, made with Core Image from the original pixels under a redaction, and
-/// kept until the redaction moves or goes.
-@MainActor
-final class RedactionEffects {
-    private static let context = CIContext(options: [.cacheIntermediates: false])
-    private let source: CIImage
-    private let height: CGFloat
-    private let colourSpace: CGColorSpace
-    private var cache: [Key: CGImage] = [:]
-    private var used: Set<Key> = []
+/// Pixelate and blur, made once per strength from the whole image at low resolution, and drawn
+/// clipped to each redaction. Moving a redaction never recomputes anything, and the blocks stay
+/// on the image's own grid.
+final class RedactionEffects: Sendable {
+    private let source: CGImage
+    private let cache = Mutex<[Key: Entry]>([:])
 
     private struct Key: Hashable {
-        let x, y, width, height: Int
-        let style: RedactStyle
+        let blur: Bool
+        let size: Int
+    }
+
+    private struct Entry: @unchecked Sendable {
+        let image: CGImage
     }
 
     init(image: CGImage) {
-        source = CIImage(cgImage: image)
-        height = CGFloat(image.height)
-        if let space = image.colorSpace, space.model == .rgb {
-            colourSpace = space
-        } else {
-            colourSpace = CGColorSpace(name: CGColorSpace.sRGB) ?? CGColorSpaceCreateDeviceRGB()
-        }
+        source = image
     }
 
-    func beginPass() {
-        used.removeAll()
-    }
-
-    /// Lets go of effects no redaction used in this pass.
-    func endPass() {
-        cache = cache.filter { used.contains($0.key) }
-    }
-
-    /// The effect for `rect` (integral, in image pixels, y down).
-    func image(for rect: CGRect, style: RedactStyle, scale: CGFloat) -> CGImage? {
-        let key = Key(x: Int(rect.minX), y: Int(rect.minY), width: Int(rect.width), height: Int(rect.height), style: style)
-        used.insert(key)
-        if let cached = cache[key] { return cached }
-        guard let made = make(rect, style: style, scale: scale) else { return nil }
-        cache[key] = made
+    /// The image averaged into blocks of about `block` pixels: one pixel per block.
+    func pixelated(block: Int) -> CGImage? {
+        let key = Key(blur: false, size: block)
+        if let cached = cache.withLock({ $0[key] }) { return cached.image }
+        let width = max(1, Int((Double(source.width) / Double(block)).rounded(.up)))
+        let height = max(1, Int((Double(source.height) / Double(block)).rounded(.up)))
+        guard let made = downsampled(width: width, height: height) else { return nil }
+        cache.withLock { $0[key] = Entry(image: made) }
         return made
     }
 
-    private func make(_ rect: CGRect, style: RedactStyle, scale: CGFloat) -> CGImage? {
-        // Core Image puts the origin at the bottom left.
-        let area = CGRect(x: rect.minX, y: height - rect.maxY, width: rect.width, height: rect.height)
-        let shortSide: CGFloat = min(rect.width, rect.height)
-        let input = source.cropped(to: area).clampedToExtent()
-        let output: CIImage?
-        switch style {
-        case .pixelate:
-            // Averaging first, so each block hides what's in it rather than sampling one pixel.
-            let block: CGFloat = max(8 * scale, shortSide / 6).rounded()
-            let soften = CIFilter.gaussianBlur()
-            soften.inputImage = input
-            soften.radius = Float(block * 0.3)
-            let pixellate = CIFilter.pixellate()
-            pixellate.inputImage = soften.outputImage
-            pixellate.scale = Float(block)
-            pixellate.center = CGPoint(x: area.minX, y: area.minY)
-            output = pixellate.outputImage
-        case .blur:
-            let blur = CIFilter.gaussianBlur()
-            blur.inputImage = input
-            blur.radius = Float(max(6 * scale, shortSide / 5))
-            output = blur.outputImage
-        case .solid:
-            output = nil
-        }
-        guard let output else { return nil }
-        return Self.context.createCGImage(output.cropped(to: area), from: area, format: .RGBA8, colorSpace: colourSpace)
+    /// The image blurred by `radius` pixels, at a quarter of its size.
+    func blurred(radius: Int) -> CGImage? {
+        let key = Key(blur: true, size: radius)
+        if let cached = cache.withLock({ $0[key] }) { return cached.image }
+        let width = max(1, source.width / 4)
+        let height = max(1, source.height / 4)
+        guard let small = downsampled(width: width, height: height) else { return nil }
+        let input = CIImage(cgImage: small)
+        let sigma: Double = max(1, Double(radius) / 4)
+        let output = input.clampedToExtent().applyingGaussianBlur(sigma: sigma).cropped(to: input.extent)
+        let context = CIContext(options: [.cacheIntermediates: false])
+        let space = CGColorSpace(name: CGColorSpace.sRGB) ?? CGColorSpaceCreateDeviceRGB()
+        guard let made = context.createCGImage(output, from: input.extent, format: .RGBA8, colorSpace: space) else { return nil }
+        cache.withLock { $0[key] = Entry(image: made) }
+        return made
+    }
+
+    /// The whole source averaged down into `width` × `height`: every small pixel is opaque,
+    /// so nothing under a redaction shows through at the edges.
+    private func downsampled(width: Int, height: Int) -> CGImage? {
+        let space = CGColorSpace(name: CGColorSpace.sRGB) ?? CGColorSpaceCreateDeviceRGB()
+        guard let context = CGContext(data: nil, width: width, height: height, bitsPerComponent: 8, bytesPerRow: 0,
+                                      space: space, bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue) else { return nil }
+        context.interpolationQuality = .high
+        context.draw(source, in: CGRect(x: 0, y: 0, width: width, height: height))
+        return context.makeImage()
     }
 }
