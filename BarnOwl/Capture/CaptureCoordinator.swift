@@ -398,7 +398,8 @@ final class CaptureCoordinator {
             scans[id] = nil
             editors.values.first { $0.captureID == id }?.editor.update(insight: insight)
             // Only secrets interrupt; once offered, Hide covers everything private.
-            let findings = insight.text.findings.filter(\.kind.isDefault)
+            // Secrets named first, as the editor's banner does.
+            let findings = insight.text.findings.filter(\.kind.isDefault).sorted { $0.kind.tier > $1.kind.tier }
             if findings.contains(where: { $0.kind.tier == .secret }) {
                 cards.offerToHide(id, count: findings.count, title: Self.describe(findings))
             }
