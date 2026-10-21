@@ -31,6 +31,7 @@ final class CaptureEditor {
     private var reported: EditorDocument
     private var lastReport = Date.distantPast
     private var askedAboutSecrets = false
+    private var loadingDesktop = false
 
     /// `image` is the captured bitmap; `scale` is pixels per point (2 on Retina); `title` names
     /// the window; `document` reopens earlier marks; `insight` is the capture's text and windows,
@@ -67,7 +68,8 @@ final class CaptureEditor {
                 MainActor.assumeIsolated { self?.becameActive() }
             }
         }
-        loadDesktopPicture(for: window.screen)
+        // Only for the Desktop background: reading the picture can ask for folder access.
+        if model.document.frame.background == .desktop { loadDesktopPicture() }
     }
 
     private func becameActive() {
@@ -105,17 +107,22 @@ final class CaptureEditor {
     private func makeController() -> EditorWindowController {
         let controller = EditorWindowController(model: model, title: title)
         controller.onClose = { [weak self] in self?.didClose() }
+        controller.onNeedsDesktop = { [weak self] in self?.loadDesktopPicture() }
         self.controller = controller
         model.noteOpened()
         return controller
     }
 
-    private func loadDesktopPicture(for screen: NSScreen?) {
-        guard model.renderer.desktop == nil, let screen = screen ?? NSScreen.main,
+    /// The desktop picture behind the window, once the Desktop background is chosen.
+    private func loadDesktopPicture() {
+        guard !loadingDesktop, model.renderer.desktop == nil,
+              let screen = controller?.window?.screen ?? NSScreen.main,
               let url = NSWorkspace.shared.desktopImageURL(for: screen) else { return }
+        loadingDesktop = true
         let renderer = model.renderer
         Task { [weak self] in
             let picture = await Task.detached(priority: .utility) { AnnotationRenderer.loadDesktopPicture(from: url) }.value
+            self?.loadingDesktop = false
             guard let picture else { return }
             renderer.setDesktop(picture)
             guard let self, self.model.document.frame.background == .desktop else { return }
@@ -186,7 +193,9 @@ final class CaptureEditor {
             controller?.confirmCopy()
         case .save:
             let url = await host?.editor(self, save: image)
-            controller?.announce(url.map { "Saved · \($0.lastPathComponent)" } ?? "Couldn't save")
+            let note = url.map { "Saved · \($0.lastPathComponent)" } ?? "Couldn't save"
+            model.showHint(note)
+            controller?.announce(note)
         case .pin:
             host?.editor(self, pin: image)
         case .done:

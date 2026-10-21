@@ -20,6 +20,8 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSTool
     let viewState = CanvasViewState()
     /// Called once the window has closed.
     var onClose: (() -> Void)?
+    /// The Desktop background was chosen: its picture is wanted.
+    var onNeedsDesktop: (() -> Void)?
 
     private let scrollView = NSScrollView()
     private let optionsLayout = OptionsBarLayout()
@@ -213,6 +215,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSTool
             self.canvas.documentChanged(from: old, to: new)
             self.updateOutputSize()
             self.syncBadge()
+            if new.frame.background == .desktop, old.frame.background != .desktop { self.onNeedsDesktop?() }
         }
         model.onChromeChange = { [weak self] in
             self?.canvas.chromeChanged()
@@ -625,8 +628,24 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSTool
     func windowWillClose(_ notification: Notification) {
         canvas.endTextEditing()
         if let shortcutsSheet { window?.endSheet(shortcutsSheet) }
-        if NSColorPanel.sharedColorPanelExists, NSColorPanel.shared.isVisible { NSColorPanel.shared.close() }
+        releaseSharedPanels()
         onClose?()
+    }
+
+    /// The colour and font panels are shared by the whole app: once this window goes, they
+    /// mustn't send their changes here, or keep it alive.
+    private func releaseSharedPanels() {
+        if NSColorPanel.sharedColorPanelExists {
+            let panel = NSColorPanel.shared
+            if panel.isVisible { panel.close() }
+            panel.setTarget(nil)
+            panel.setAction(nil)
+        }
+        let fonts = NSFontManager.shared
+        if fonts.target === self {
+            fonts.target = nil
+            if NSFontPanel.sharedFontPanelExists, NSFontPanel.shared.isVisible { NSFontPanel.shared.close() }
+        }
     }
 
     func windowDidBecomeKey(_ notification: Notification) {
