@@ -559,8 +559,9 @@ final class SelectionView: NSView {
         case ("w", false): onMode?(.window)
         case ("f", false): onMode?(.screen)
         case ("l", false): restoreLastArea()
-        case ("?", _), ("/", _): toggleKeys()
-        default: super.keyDown(with: event)
+        default:
+            // "?" is a different key on every layout: go by what it types.
+            if event.characters == "?" || key == "?" { toggleKeys() } else { super.keyDown(with: event) }
         }
     }
 
@@ -572,7 +573,7 @@ final class SelectionView: NSView {
     /// carries no characters (some automation tools send those).
     static func letter(for event: NSEvent) -> String {
         if let characters = event.charactersIgnoringModifiers?.lowercased(), !characters.isEmpty { return characters }
-        let byKey: [UInt16: String] = [0: "a", 1: "s", 3: "f", 8: "c", 13: "w", 14: "e", 35: "p", 37: "l", 44: "/"]
+        let byKey: [UInt16: String] = [0: "a", 1: "s", 3: "f", 8: "c", 13: "w", 14: "e", 35: "p", 37: "l"]
         return byKey[event.keyCode] ?? ""
     }
 
