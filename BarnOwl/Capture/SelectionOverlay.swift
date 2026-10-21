@@ -103,6 +103,10 @@ final class SelectionOverlay {
             workspace.addObserver(forName: NSWorkspace.willSleepNotification, object: nil, queue: .main) { [weak self] _ in
                 MainActor.assumeIsolated { self?.finish(.cancelled) }
             },
+            // Switching to another app (⌘Tab) ends the capture; it never leaves a frozen screen behind.
+            center.addObserver(forName: NSApplication.didResignActiveNotification, object: nil, queue: .main) { [weak self] _ in
+                MainActor.assumeIsolated { self?.finish(.cancelled) }
+            },
         ]
         // Which display has the bars and the keys follows the pointer.
         pointerMonitor = NSEvent.addLocalMonitorForEvents(matching: [.mouseMoved, .leftMouseDragged]) { [weak self] event in
@@ -127,9 +131,10 @@ final class SelectionOverlay {
             window.selection.isActiveDisplay = window === active
             window.selection.pointerMoved(to: pointer)
         }
-        if let active, !active.isKeyWindow {
-            active.makeKey()
-            active.makeFirstResponder(active.selection)
+        // Keys go to the display under the pointer, always to its selection view.
+        if let active {
+            if !active.isKeyWindow { active.makeKey() }
+            if active.firstResponder !== active.selection { active.makeFirstResponder(active.selection) }
         }
     }
 
@@ -293,6 +298,7 @@ final class SelectionView: NSView {
 
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
+        window?.makeFirstResponder(self)
         addTrackingArea(NSTrackingArea(rect: .zero, options: [.mouseMoved, .activeAlways, .inVisibleRect, .cursorUpdate],
                                        owner: self))
     }
@@ -314,7 +320,8 @@ final class SelectionView: NSView {
 
     private var modeBarView: CaptureModeBar {
         CaptureModeBar(mode: mode, showsHints: showsHints, select: { [weak self] in self?.onMode?($0) },
-                       options: { [weak self] in self?.onOptions?() })
+                       options: { [weak self] in self?.onOptions?() },
+                       cancel: { [weak self] in self?.onResult?(.cancelled) })
     }
 
     // MARK: Pointer
@@ -360,6 +367,8 @@ final class SelectionView: NSView {
     override func mouseDown(with event: NSEvent) {
         let point = convert(event.locationInWindow, from: nil)
         lastPoint = point
+        if window?.isKeyWindow == false { window?.makeKey() }
+        window?.makeFirstResponder(self)
         if let selection {
             if let handle = handle(at: point, in: selection) {
                 gesture = .resizing(handle: handle, from: selection)
@@ -492,7 +501,7 @@ final class SelectionView: NSView {
 
     override func keyDown(with event: NSEvent) {
         let command = event.modifierFlags.contains(.command)
-        let key = event.charactersIgnoringModifiers?.lowercased() ?? ""
+        let key = Self.letter(for: event)
         switch event.keyCode {
         case 53: // Esc steps back: the gesture, then the selection, then the overlay.
             if gesture != nil {
@@ -549,6 +558,14 @@ final class SelectionView: NSView {
 
     override func keyUp(with event: NSEvent) {
         if event.keyCode == 49 { spaceHeld = false }
+    }
+
+    /// The letter typed, from the layout; from the key's place when an event
+    /// carries no characters (some automation tools send those).
+    static func letter(for event: NSEvent) -> String {
+        if let characters = event.charactersIgnoringModifiers?.lowercased(), !characters.isEmpty { return characters }
+        let byKey: [UInt16: String] = [0: "a", 1: "s", 3: "f", 8: "c", 13: "w", 14: "e", 35: "p", 37: "l", 44: "/"]
+        return byKey[event.keyCode] ?? ""
     }
 
     /// Brings back the area you captured last, if it's on this display.
@@ -834,6 +851,7 @@ struct CaptureModeBar: View {
     let showsHints: Bool
     let select: (CaptureMode) -> Void
     let options: () -> Void
+    let cancel: () -> Void
     @AppStorage(PrefKey.captureCleanMenuBar) private var cleanMenuBar = true
     @AppStorage(PrefKey.captureHidesDesktopIcons) private var hidesDesktopIcons = true
     @AppStorage(PrefKey.captureShowsPointer) private var showsPointer = false
@@ -873,6 +891,15 @@ struct CaptureModeBar: View {
                 .menuIndicator(.hidden)
                 .fixedSize()
                 .help("What to leave out of the picture")
+                Button(action: cancel) {
+                    Image(systemName: "xmark").font(.system(size: 11, weight: .bold))
+                        .foregroundStyle(.white.opacity(0.8))
+                        .frame(width: 28, height: 28)
+                        .contentShape(.circle)
+                }
+                .buttonStyle(.plain)
+                .help("Cancel (Esc)")
+                .accessibilityLabel("Cancel")
             }
             if showsHints {
                 Text(mode.hint)

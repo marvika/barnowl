@@ -434,6 +434,8 @@ final class CaptureCoordinator {
 
     func editLastCapture() {
         guard Preferences.captureEnabled else { return }
+        // Never under a frozen screen.
+        overlay?.finish(.cancelled)
         rememberFrontApp()
         guard let id = lastCaptureID ?? CaptureLibrary.latest()?.id else { return }
         openEditor(id)
@@ -488,7 +490,12 @@ extension CaptureCoordinator: CaptureEditorHost {
 
     func editorDidClose(_ editor: CaptureEditor) {
         editors[ObjectIdentifier(editor)] = nil
-        if editors.isEmpty { giveFocusBack() }
+        guard editors.isEmpty else { return }
+        // Once the window has really gone, or Barn Owl still counts it as open.
+        Task {
+            try? await Task.sleep(for: .milliseconds(150))
+            if editors.isEmpty { giveFocusBack() }
+        }
     }
 }
 
