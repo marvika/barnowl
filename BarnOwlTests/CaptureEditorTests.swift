@@ -252,10 +252,9 @@ struct CaptureEditorTests {
         #expect(callout.end.y > box.maxY)
         #expect(MarkGeometry.handles(for: callout, scale: 1).map(\.handle) == [.end])
         #expect(MarkGeometry.bounds(callout, scale: 1).maxY == callout.end.y)
-        // On the pointer, a third of the way back from its tip.
-        let tailX: CGFloat = callout.end.x + (box.midX - callout.end.x) * 0.3
-        let tailY: CGFloat = callout.end.y + (box.midY - callout.end.y) * 0.3
-        let onTail = CGPoint(x: tailX, y: tailY)
+        // On the pointer, a third of the way back from its tip to the box.
+        let tailY: CGFloat = callout.end.y - (callout.end.y - box.maxY) * 0.3
+        let onTail = CGPoint(x: callout.end.x, y: tailY)
         #expect(MarkGeometry.hitTest(callout, at: onTail, tolerance: 8, scale: 1))
         let moved = MarkGeometry.adjusted(callout, handle: .end, to: CGPoint(x: 300, y: 40), constrained: false)
         #expect(moved.end == CGPoint(x: 300, y: 40))

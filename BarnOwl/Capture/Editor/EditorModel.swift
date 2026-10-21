@@ -472,6 +472,21 @@ final class EditorModel {
         apply("Change Numbering") { $0.counterStart = max(0, start) }
     }
 
+    /// The capture as it was taken: no marks, crop or frame.
+    var original: EditorDocument { EditorDocument(imageSize: document.imageSize, scale: scale) }
+
+    var canRevert: Bool { document != original }
+
+    /// Takes off every mark, the crop and the frame, as one undoable step.
+    func revertToOriginal() {
+        endTextEditing?()
+        review = nil
+        if tool == .crop { cancelCrop() }
+        selection = []
+        let original = self.original
+        apply("Revert to Original") { $0 = original }
+    }
+
     // MARK: Arrange
 
     /// Moves the selection to the top (or bottom) of its layer.

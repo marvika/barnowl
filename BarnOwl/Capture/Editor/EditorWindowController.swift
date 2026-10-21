@@ -244,7 +244,11 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSTool
             pickColour: { [weak self] in self?.canvas.startPickingColour() },
             moreColours: { [weak self] in self?.showColourPanel() },
             showFonts: { [weak self] in self?.showFontPanel() },
-            cropAspect: { [weak self] aspect in self?.canvas.applyCropAspect(aspect) }
+            cropAspect: { [weak self] aspect in self?.canvas.applyCropAspect(aspect) },
+            focusCanvas: { [weak self] in
+                guard let self else { return }
+                self.window?.makeFirstResponder(self.canvas)
+            }
         )
     }
 
@@ -297,7 +301,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSTool
             item.toolTip = "Share"
             return item
         case Item.copy:
-            let item = button(identifier, symbol: "doc.on.doc", label: "Copy", tooltip: "Copy (⌘C)", action: #selector(copyPressed))
+            let item = button(identifier, symbol: "doc.on.doc", label: "Copy", tooltip: "Copy Image (⇧⌘C)", action: #selector(copyPressed))
             copyItem = item
             return item
         case Item.done:
@@ -437,11 +441,13 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSTool
     func perform(_ id: EditorCommand.ID) {
         guard canPerform(id) else { return }
         switch id {
-        case .copy, .copyMarks: model.perform(.copy)
+        case .copy: model.perform(.copy)
+        case .copyMarks: canvas.copy(nil)
         case .save: model.perform(.save)
         case .pin: model.perform(.pin)
         case .done: model.perform(.done)
         case .close: window?.performClose(nil)
+        case .revert: model.revertToOriginal()
         case .undo: model.undo()
         case .redo: model.redo()
         case .cut: canvas.cut(nil)
@@ -512,6 +518,8 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSTool
             return model.isTextContext
         case .review:
             return model.insight != nil
+        case .revert:
+            return model.canRevert
         default:
             return true
         }

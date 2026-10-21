@@ -533,7 +533,7 @@ final class AnnotationRenderer: Sendable {
             setShadow(context, offset: em * 0.05, blur: em * 0.22, colour: CGColor(gray: 0, alpha: 0.28))
             context.beginTransparencyLayer(auxiliaryInfo: nil)
             context.setFillColor(box.cgColor())
-            if mark.style.textStyle == .callout, let tail = MarkGeometry.calloutTail(mark, layout: layout) {
+            if mark.style.textStyle == .callout, let tail = MarkGeometry.calloutTail(mark, layout: layout, scale: scale) {
                 context.addPath(tail)
                 context.fillPath()
             }

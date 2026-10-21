@@ -14,6 +14,8 @@ struct OptionsBarActions {
     var moreColours: () -> Void = {}
     var showFonts: () -> Void = {}
     var cropAspect: (CropAspect) -> Void = { _ in }
+    /// Back to the canvas, so the keys work again after typing in a field.
+    var focusCanvas: () -> Void = {}
 }
 
 /// Where the options bar starts, so it lines up with the tools above it.
@@ -507,6 +509,14 @@ private struct FontSection: View {
     var body: some View {
         let style = model.shownStyle
         HStack(spacing: 6) {
+            Toggle(isOn: Binding(get: { style.fontWeight == .bold }, set: { _ in model.toggleBold() })) {
+                Image(systemName: "bold")
+                    .font(.system(size: 12, weight: .semibold))
+                    .frame(width: 16)
+            }
+            .toggleStyle(.button)
+            .help("Bold (⌘B)")
+            .accessibilityLabel("Bold")
             Menu {
                 Picker("Font", selection: Binding(get: { style.font }, set: { font in
                     model.updateStyle("Change Font") { $0.font = font }
@@ -532,8 +542,8 @@ private struct FontSection: View {
             }
             .menuStyle(.button)
             .fixedSize()
-            .help("Font (⌘B toggles bold)")
-            TextSizeField(model: model, size: style.fontSize)
+            .help("Font")
+            TextSizeField(model: model, size: style.fontSize, done: actions.focusCanvas)
         }
     }
 
@@ -547,6 +557,8 @@ private struct FontSection: View {
 private struct TextSizeField: View {
     let model: EditorModel
     let size: Double
+    /// Return in the field hands the keys back to the canvas.
+    let done: () -> Void
 
     var body: some View {
         HStack(spacing: 2) {
@@ -557,12 +569,13 @@ private struct TextSizeField: View {
             .frame(width: 34)
             .multilineTextAlignment(.trailing)
             .textFieldStyle(.roundedBorder)
+            .onSubmit(done)
             .accessibilityLabel("Text size")
             Stepper("Text size", onIncrement: { model.stepSize(up: true) }, onDecrement: { model.stepSize(up: false) })
                 .labelsHidden()
             Text("pt").font(.system(size: 11)).foregroundStyle(.secondary)
         }
-        .help("Text size ([ and ])")
+        .help("Text size ([ ] or − +)")
     }
 }
 

@@ -68,6 +68,8 @@ final class EditorCanvas: NSView, NSTextViewDelegate, NSMenuItemValidation {
     var guides: [SnapGuide] = []
     var marquee: CGRect?
     var trackingArea: NSTrackingArea?
+    /// The pasteboard's marks, and how many times in a row they've been pasted.
+    var pasteRun = (change: 0, count: 0)
 
     enum Gesture {
         case draw(UUID, origin: CGPoint)

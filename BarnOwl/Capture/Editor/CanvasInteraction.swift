@@ -35,7 +35,10 @@ extension EditorCanvas {
     }
 
     func topmost(at point: CGPoint) -> Mark? {
-        MarkGeometry.topmost(in: model.document, at: point, tolerance: 8 * screenPoint, scale: scale)
+        // With a drawing tool out, only a click right on a mark picks it up, so text, counters
+        // and new arrows can go right beside one.
+        let reach: CGFloat = model.tool == .select ? 8 : 3
+        return MarkGeometry.topmost(in: model.document, at: point, tolerance: reach * screenPoint, scale: scale)
     }
 
     private func hover(at point: CGPoint) {
@@ -746,26 +749,47 @@ extension EditorCanvas {
 
     @objc func undo(_ sender: Any?) { model.undo() }
     @objc func redo(_ sender: Any?) { model.redo() }
-    @objc func copy(_ sender: Any?) { model.perform(.copy) }
     @objc func delete(_ sender: Any?) { model.deleteSelection() }
     override func selectAll(_ sender: Any?) { model.selectAll() }
 
+    /// ⌘C: the marks you've selected with the Select tool, to paste here or into another capture;
+    /// otherwise (and with a drawing tool out, whose new mark stays selected) the whole image.
+    @objc func copy(_ sender: Any?) {
+        guard copiesMarks, putSelectedMarksOnPasteboard() else { return model.perform(.copy) }
+        let count = model.selection.count
+        model.showHint("Copied \(count == 1 ? "1 mark" : "\(count) marks") · ⇧⌘C copies the image")
+    }
+
+    /// Whether ⌘C copies marks rather than the image.
+    var copiesMarks: Bool { model.tool == .select && !model.selection.isEmpty }
+
     @objc func cut(_ sender: Any?) {
+        guard putSelectedMarksOnPasteboard() else { return }
+        model.deleteSelection()
+    }
+
+    private func putSelectedMarksOnPasteboard() -> Bool {
         let marks = model.selectedMarks
-        guard !marks.isEmpty, let data = try? JSONEncoder().encode(marks) else { return }
+        guard !marks.isEmpty, let data = try? JSONEncoder().encode(marks) else { return false }
         let pasteboard = NSPasteboard.general
         pasteboard.clearContents()
         pasteboard.setData(data, forType: .barnOwlMarks)
         if let text = marks.compactMap({ $0.kind == .text ? $0.text : nil }).first {
             pasteboard.setString(text, forType: .string)
         }
-        model.deleteSelection()
+        return true
     }
 
+    /// ⌘V: marks come back offset a step further each time they're pasted; an image comes in as a mark.
     @objc func paste(_ sender: Any?) {
         let pasteboard = NSPasteboard.general
         if let data = pasteboard.data(forType: .barnOwlMarks), let marks = try? JSONDecoder().decode([Mark].self, from: data) {
-            let offset: CGFloat = 12 * scale
+            if pasteRun.change == pasteboard.changeCount {
+                pasteRun.count += 1
+            } else {
+                pasteRun = (pasteboard.changeCount, 1)
+            }
+            let offset: CGFloat = 12 * scale * CGFloat(pasteRun.count)
             let copies: [Mark] = marks.map { mark in
                 var copy = MarkGeometry.moved(mark, by: offset, offset)
                 copy.id = UUID()

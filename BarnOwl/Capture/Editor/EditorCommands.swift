@@ -4,7 +4,7 @@ import AppKit
 /// bar, the toolbar's tooltips and the keyboard shortcuts sheet.
 struct EditorCommand {
     enum ID: String, CaseIterable {
-        case copy, save, pin, done, close
+        case copy, save, pin, done, close, revert
         case undo, redo, cut, copyMarks, paste, delete, selectAll, duplicate
         case actualSize, zoomToFit, zoomIn, zoomOut, showFrame, shortcuts
         case bringToFront, sendToBack, bringForward, sendBackward
@@ -103,11 +103,12 @@ struct EditorCommand {
 
     @MainActor static let all: [EditorCommand] = {
         var commands: [EditorCommand] = [
-            EditorCommand(.copy, "Copy", key: "c", .command, menu: .file, action: #selector(NSText.copy(_:)), group: .finish),
+            EditorCommand(.copy, "Copy Image", key: "c", [.command, .shift], menu: .file, group: .finish),
             EditorCommand(.save, "Save", key: "s", .command, menu: .file, group: .finish),
             EditorCommand(.pin, "Pin to Screen", key: "p", [.command, .option], menu: .file, group: .finish),
             EditorCommand(.done, "Done", key: "\r", .command, menu: .file, group: .finish),
             EditorCommand(.close, "Close", key: "w", .command, menu: .file, action: #selector(NSWindow.performClose(_:))),
+            EditorCommand(.revert, "Revert to Original", menu: .file),
 
             EditorCommand(.undo, "Undo", key: "z", .command, menu: .edit, action: #selector(EditorCanvas.undo(_:))),
             EditorCommand(.redo, "Redo", key: "z", [.command, .shift], menu: .edit, action: #selector(EditorCanvas.redo(_:))),
@@ -229,6 +230,8 @@ enum EditorMenus {
         menu.addItem(withTitle: "About Barn Owl", action: #selector(NSApplication.orderFrontStandardAboutPanel(_:)),
                      keyEquivalent: "")
         menu.addItem(.separator())
+        menu.addItem(ClosureMenuItem("Settings…", key: ",", modifiers: .command) { openSettings() })
+        menu.addItem(.separator())
         menu.addItem(withTitle: "Hide Barn Owl", action: #selector(NSApplication.hide(_:)), keyEquivalent: "h")
         let others = menu.addItem(withTitle: "Hide Others", action: #selector(NSApplication.hideOtherApplications(_:)),
                                   keyEquivalent: "h")
@@ -237,6 +240,12 @@ enum EditorMenus {
         menu.addItem(.separator())
         menu.addItem(withTitle: "Quit Barn Owl", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         return menu
+    }
+
+    /// Barn Owl's Settings window, the way barnowl://settings opens it.
+    static func openSettings() {
+        guard let url = URL(string: "barnowl://settings") else { return }
+        NSApp.delegate?.application?(NSApp, open: [url])
     }
 
     private static func windowMenu() -> NSMenu {
@@ -249,7 +258,7 @@ enum EditorMenus {
     }
 
     /// Separators go between these, within each menu.
-    private static let breaks: Set<EditorCommand.ID> = [.done, .cut, .duplicate, .zoomIn, .showFrame, .bringForward,
+    private static let breaks: Set<EditorCommand.ID> = [.done, .revert, .cut, .duplicate, .zoomIn, .showFrame, .bringForward,
                                                         .alignLeft, .line, .redact, .crop, .colour1, .showFonts]
 
     private static func menu(_ kind: EditorCommand.Menu) -> NSMenu {
