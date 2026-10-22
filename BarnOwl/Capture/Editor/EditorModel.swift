@@ -308,6 +308,13 @@ final class EditorModel {
         saveStyleBook()
     }
 
+    /// Smoothing changes how the next strokes are drawn, never one already made.
+    func updatePenSmoothing(_ level: PenSmoothing) {
+        var style = styleBook.style(for: .pen)
+        style.smoothing = level
+        rememberStyle(style, for: .pen)
+    }
+
     private func rememberStyle(_ style: MarkStyle, for kind: Mark.Kind) {
         styleBook.remember(style: style, for: kind)
         saveStyleBook()

@@ -271,11 +271,13 @@ extension EditorCanvas {
             if let pen = document[id], pen.kind == .pen {
                 let tip = pen.points.last ?? origin
                 let next = Self.steadied(tip: tip, pointer: point, radius: CGFloat(pen.style.smoothing.radius) * screenPoint)
-                penGuide = pen.style.smoothing == .off ? nil : (next, point)
-                if MarkGeometry.distance(tip, next) >= 1.5 * scale {
+                // A point every 1.5 screen points, whatever the zoom.
+                let moves = MarkGeometry.distance(tip, next) >= 1.5 * screenPoint
+                if moves {
                     document.update(id) { $0.points.append(next) }
                     model.setLive(document)
                 }
+                penGuide = pen.style.smoothing == .off ? nil : (moves ? next : tip, point)
                 redrawChrome()
                 return
             }
@@ -722,6 +724,7 @@ extension EditorCanvas {
             gestureStart = nil
             marquee = nil
             guides = []
+            penGuide = nil
             model.setLive(start)
             redrawChrome()
             return

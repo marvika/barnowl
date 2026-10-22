@@ -198,6 +198,41 @@ struct CaptureLibraryTests {
         #expect(try JSONDecoder().decode(CaptureLibrary.Entry.self, from: old).text == nil)
     }
 
+    @Test func onlyAnUntouchedFileIsTheCapturesOwn() throws {
+        let root = try root()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let file = root.appending(path: "Shot.png")
+        try Data("picture".utf8).write(to: file)
+        var entry = CaptureLibrary.Entry(id: UUID(), date: Date(), scale: 2, kind: "selection", appName: nil, fileURL: file,
+                                         edited: false)
+        CaptureLibrary.tag(file, id: entry.id)
+        entry.fileStamp = CaptureLibrary.FileStamp(of: file)
+        #expect(CaptureLibrary.isOwn(file, entry: entry))
+        // A duplicate next to it carries the tag, but isn't the capture's file.
+        let copy = root.appending(path: "Shot copy.png")
+        try FileManager.default.copyItem(at: file, to: copy)
+        #expect(!CaptureLibrary.isOwn(copy, entry: entry))
+        // Edited elsewhere since: not Barn Owl's to write over.
+        try Data("picture, cropped in Preview".utf8).write(to: file)
+        CaptureLibrary.tag(file, id: entry.id)
+        #expect(!CaptureLibrary.isOwn(file, entry: entry))
+    }
+
+    @MainActor @Test func opensPhotosTheRightWayUp() throws {
+        let root = try root()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let image = try #require(CaptureStoreTests.image(width: 400, height: 200))
+        let file = root.appending(path: "Portrait.jpg")
+        let destination = try #require(CGImageDestinationCreateWithURL(file as CFURL, "public.jpeg" as CFString, 1, nil))
+        // Taken with the phone on its side: stored wide, shown tall.
+        CGImageDestinationAddImage(destination, image, [kCGImagePropertyOrientation: 6, kCGImagePropertyDPIWidth: 300] as CFDictionary)
+        #expect(CGImageDestinationFinalize(destination))
+        let opened = try #require(CaptureCoordinator.picture(at: file))
+        #expect(opened.image.width == 200 && opened.image.height == 400)
+        // Print resolutions never become a screen scale above 2.
+        #expect(opened.scale >= 1 && opened.scale <= 2)
+    }
+
     @Test func neverKeepsMarksWithoutTheirPicture() throws {
         let root = try root()
         defer { try? FileManager.default.removeItem(at: root) }

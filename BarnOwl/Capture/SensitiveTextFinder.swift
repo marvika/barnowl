@@ -24,28 +24,74 @@ struct CaptureText: Sendable, Equatable {
 
     static let empty = CaptureText()
 
-    /// The text as you'd read it: top to bottom, and left to right along a row, with lines
-    /// side by side (columns, a label and its value) joined by a tab. `within` keeps only
-    /// lines mostly inside it, in the same pixels as the lines.
-    func plainText(within area: CGRect? = nil) -> String {
-        let kept = lines.filter { line in
-            guard let area else { return true }
-            let inside = line.rect.intersection(area)
-            return !inside.isNull && inside.width * inside.height >= line.rect.width * line.rect.height * 0.5
+    /// The text as you'd read it. `within` keeps only lines mostly inside it; words under
+    /// `covered` (redactions) are left out. Both are in the same pixels as the lines.
+    func plainText(within area: CGRect? = nil, excluding covered: [CGRect] = []) -> String {
+        func hidden(_ rect: CGRect) -> Bool { covered.contains { $0.contains(CGPoint(x: rect.midX, y: rect.midY)) } }
+        var kept: [Line] = []
+        for line in lines {
+            if let area {
+                let inside = line.rect.intersection(area)
+                guard !inside.isNull, inside.width * inside.height >= line.rect.width * line.rect.height * 0.5 else { continue }
+            }
+            if covered.isEmpty { kept.append(line); continue }
+            if line.words.isEmpty {
+                if !hidden(line.rect) { kept.append(line) }
+                continue
+            }
+            let words = line.words.filter { !hidden($0.rect) }
+            if words.count == line.words.count {
+                kept.append(line)
+            } else if !words.isEmpty {
+                kept.append(Line(rect: line.rect, text: words.map(\.text).joined(separator: " "), words: words))
+            }
         }
+        return Self.readingOrder(kept)
+    }
+
+    /// Top to bottom. Short cells side by side on the same rows (labels and values, a table)
+    /// read across, joined by a tab; columns of longer lines (a sidebar beside a page, an
+    /// article in two columns) read one column after the other.
+    static func readingOrder(_ lines: [Line]) -> String {
+        let rows = rows(of: lines)
+        let sideBySide = rows.filter { $0.count > 1 }
+        let span = lines.reduce(CGRect.null) { $0.union($1.rect) }.width
+        let cells = sideBySide.flatMap { $0 }
+        let short = cells.isEmpty || cells.map(\.rect.width).reduce(0, +) / CGFloat(cells.count) < span * 0.4
+        if sideBySide.count * 10 >= rows.count * 6 && short {
+            return text(of: rows)
+        }
+        // Columns: lines that overlap left to right belong together.
+        var columns: [[Line]] = []
+        for line in lines.sorted(by: { $0.rect.minX < $1.rect.minX }) {
+            if let index = columns.firstIndex(where: { column in
+                column.contains { $0.rect.minX < line.rect.maxX && line.rect.minX < $0.rect.maxX }
+            }) {
+                columns[index].append(line)
+            } else {
+                columns.append([line])
+            }
+        }
+        guard columns.count > 1 else { return text(of: rows) }
+        return columns.map { text(of: Self.rows(of: $0)) }.joined(separator: "\n\n")
+    }
+
+    /// Lines grouped into rows: their middles within half a line of each other.
+    private static func rows(of lines: [Line]) -> [[Line]] {
         var rows: [[Line]] = []
-        for line in kept.sorted(by: { $0.rect.midY < $1.rect.midY }) {
-            // Same row when their middles are within half a line of each other.
+        for line in lines.sorted(by: { $0.rect.midY < $1.rect.midY }) {
             if let last = rows.last?.last, abs(last.rect.midY - line.rect.midY) < min(last.rect.height, line.rect.height) / 2 {
                 rows[rows.count - 1].append(line)
             } else {
                 rows.append([line])
             }
         }
-        let texts: [String] = rows.map { row in
-            row.sorted { $0.rect.minX < $1.rect.minX }.map(\.text).joined(separator: "\t")
-        }
-        return texts.joined(separator: "\n")
+        return rows
+    }
+
+    private static func text(of rows: [[Line]]) -> String {
+        rows.map { row in row.sorted { $0.rect.minX < $1.rect.minX }.map(\.text).joined(separator: "\t") }
+            .joined(separator: "\n")
     }
 }
 

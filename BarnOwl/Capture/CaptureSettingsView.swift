@@ -72,7 +72,7 @@ struct CapturePane: View {
                 Text("History")
             } footer: {
                 Text(keepDays > 0
-                     ? "⌃⌥⌘E reopens your last capture with its marks still movable. To do that, Barn Owl keeps each original, as captured and before anything was hidden, in Application Support on your Mac."
+                     ? "⌃⌥⌘E and Capture History reopen captures with their marks still movable. To do that, Barn Owl keeps each original and its text, as captured and before anything was hidden, in Application Support on your Mac."
                      : "Barn Owl keeps nothing, so marks can't be moved again once you're done.")
             }
             .disabled(!enabled)
@@ -134,7 +134,7 @@ struct CapturePane: View {
             Toggle(isOn: $privateInfo) {
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Look for private info in captures")
-                    Text("Reads the text on your Mac and offers to hide keys, passwords, emails and card numbers. Nothing is hidden without asking.")
+                    Text("Offers to hide keys, passwords, emails and card numbers it finds. Nothing is hidden without asking. Barn Owl reads each capture's text on your Mac either way, for Copy Text, search and smart marks.")
                         .font(.caption).foregroundStyle(.secondary)
                 }
             }

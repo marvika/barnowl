@@ -610,11 +610,11 @@ private struct RedactSection: View {
                 .pickerStyle(.segmented)
                 .labelsHidden()
                 .fixedSize()
-                if style.redact == .blur {
+                if style.redact != .solid {
                     Image(systemName: "info.circle")
                         .foregroundStyle(.secondary)
-                        .help("Blur can sometimes be reversed. Use Solid for keys and passwords.")
-                        .accessibilityLabel("Blur can sometimes be reversed. Use Solid for keys and passwords.")
+                        .help("Blur and pixelate can sometimes be reversed. Use Solid for keys and passwords.")
+                        .accessibilityLabel("Blur and pixelate can sometimes be reversed. Use Solid for keys and passwords.")
                 }
             }
             PrivateInfoButton(model: model)
@@ -644,11 +644,11 @@ private struct SmoothingSection: View {
     let model: EditorModel
 
     var body: some View {
-        let style = model.shownStyle
         HStack(spacing: 6) {
             Text("Smoothing").font(.system(size: 12)).foregroundStyle(.secondary)
-            Picker("Smoothing", selection: Binding(get: { style.smoothing }, set: { level in
-                model.updateStyle("Change Smoothing") { $0.smoothing = level }
+            // How new strokes are drawn: drawings already made keep their shape.
+            Picker("Smoothing", selection: Binding(get: { model.styleBook.style(for: .pen).smoothing }, set: { level in
+                model.updatePenSmoothing(level)
             })) {
                 ForEach(PenSmoothing.allCases, id: \.self) { level in
                     Text(level.title).tag(level)
@@ -887,8 +887,11 @@ private struct ReviewOptions: View {
         HStack(spacing: 10) {
             Text("Hide Private Info").font(.system(size: 12, weight: .medium)).foregroundStyle(.secondary)
             if review.items.isEmpty {
-                let read = model.insight?.textWasRead == true
-                Text(read ? "Nothing else here looks private." : "The text couldn't be read, so check it yourself.")
+                let insight = model.insight
+                let read = insight?.textWasRead == true
+                let looked = insight?.lookedForPrivateInfo != false
+                Text(!looked ? "Looking for private info is off in Settings › Capture, so check it yourself."
+                     : read ? "Nothing else here looks private." : "The text couldn't be read, so check it yourself.")
                     .font(.system(size: 12)).foregroundStyle(.secondary)
             }
             ForEach(review.categories, id: \.kind) { category in

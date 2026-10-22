@@ -33,6 +33,8 @@ final class CaptureCoordinator {
     @ObservationIgnored private var onClipboard: (id: UUID, changeCount: Int)?
     /// Copies made ahead of a drag, so pulling a card out never waits on an encode.
     @ObservationIgnored private var dragFiles: [UUID: (image: CGImage, url: URL)] = [:]
+    /// Pictures opened with Barn Owl, so opening one again finds its editor.
+    @ObservationIgnored private var openedFiles: [URL: UUID] = [:]
     /// What each editor's Save last wrote, so closing right after doesn't count as unsaved.
     @ObservationIgnored private var savedDocuments: [UUID: EditorDocument] = [:]
     @ObservationIgnored private var lastKeepDays: Int?
@@ -296,8 +298,9 @@ final class CaptureCoordinator {
             }
             // The file first, since the card already offers it; then the library.
             let saved: Bool = await Task.detached(priority: .userInitiated) {
+                var kept = entry
                 defer {
-                    try? CaptureLibrary.store(image, png: png, entry: entry)
+                    try? CaptureLibrary.store(image, png: png, entry: kept)
                     CaptureLibrary.storeThumbnail(image, for: id)
                 }
                 guard let fileURL else { return false }
@@ -313,6 +316,7 @@ final class CaptureCoordinator {
                     try data.write(to: fileURL, options: .atomic)
                     CaptureStore.markAsScreenshot(fileURL, kind: kind)
                     CaptureLibrary.tag(fileURL, id: id)
+                    kept.fileStamp = CaptureLibrary.FileStamp(of: fileURL)
                     return true
                 } catch {
                     return false
@@ -414,7 +418,10 @@ final class CaptureCoordinator {
             var insight = await Task.detached(priority: .utility) {
                 await CaptureInsight.make(image: image, windowRects: windows)
             }.value
-            if !looksForPrivateInfo { insight.text.findings = [] }
+            if !looksForPrivateInfo {
+                insight.text.findings = []
+                insight.lookedForPrivateInfo = false
+            }
             guard !Task.isCancelled else { return }
             insights[id] = insight
             scans[id] = nil
@@ -440,7 +447,7 @@ final class CaptureCoordinator {
         while order.count > 3, let oldest = order.first(where: { !open.contains($0) && !cards.has($0) && $0 != capture.id }) {
             order.removeAll { $0 == oldest }
             captures[oldest] = nil
-            dragFiles[oldest] = nil
+            if let file = dragFiles.removeValue(forKey: oldest) { try? FileManager.default.removeItem(at: file.url) }
             insights[oldest] = nil
             scans[oldest]?.cancel()
             scans[oldest] = nil
@@ -450,14 +457,29 @@ final class CaptureCoordinator {
     /// A capture by id: from memory, or back from the library.
     func capture(_ id: UUID) -> Capture? {
         if let capture = captures[id] { return capture }
-        guard let entry = CaptureLibrary.entry(id), let original = CaptureLibrary.original(id) else { return nil }
-        // As it looks now: its marks drawn on, so copying, pinning or dragging it from
-        // history gives what the thumbnail shows. The editor starts from the original.
-        let document = entry.edited ? storedDocument(id) : nil
-        let image = document.flatMap { renderer(for: original, scale: entry.scale, document: $0).render($0) } ?? original
-        let capture = Capture(id: id, image: image, scale: entry.scale, kind: Capture.Kind(rawValue: entry.kind) ?? .area,
-                              date: entry.date, appName: entry.appName, fileURL: entry.fileURL)
+        guard let capture = keptCapture(id, rendered: true) else { return nil }
         remember(capture)
+        return capture
+    }
+
+    /// A capture back from the library. `rendered`: as it looks now, its marks drawn on, so
+    /// copying, pinning or dragging it from history gives what the thumbnail shows; without,
+    /// just the original (the editor draws the marks itself).
+    private func keptCapture(_ id: UUID, rendered: Bool) -> Capture? {
+        guard let entry = CaptureLibrary.entry(id), let original = CaptureLibrary.original(id) else { return nil }
+        let document = rendered && entry.edited ? storedDocument(id) : nil
+        let image = document.flatMap { renderer(for: original, scale: entry.scale, document: $0).render($0) } ?? original
+        var capture = Capture(id: id, image: image, scale: entry.scale, kind: Capture.Kind(rawValue: entry.kind) ?? .area,
+                              date: entry.date, appName: entry.appName, fileURL: entry.fileURL)
+        if let file = entry.fileURL, let stamp = entry.fileStamp {
+            if !stamp.matches(CaptureLibrary.FileStamp(of: file)) {
+                // Changed elsewhere, or gone: not this capture's to write over any more.
+                capture.fileURL = nil
+            } else if entry.edited, CaptureLibrary.documentIsNewer(than: stamp, for: id) {
+                // Marks changed after the file was written: dragging or saving uses the new look.
+                capture.unsavedEdits = true
+            }
+        }
         return capture
     }
 
@@ -538,25 +560,46 @@ final class CaptureCoordinator {
             await CaptureInsight.make(image: image, windowRects: windows)
         }.value
         guard insight.textWasRead else { return nil }
-        if !Preferences.capturePrivateInfo { insight.text.findings = [] }
+        if !Preferences.capturePrivateInfo {
+            insight.text.findings = []
+            insight.lookedForPrivateInfo = false
+        }
         insights[id] = insight
         let words = insight.text.plainText()
         if !words.isEmpty { inOrder(id) { CaptureLibrary.update(id) { $0.text = words } } }
         return insight.text
     }
 
+    /// Without a kept copy, the edited picture is all there is, cropped and framed: its
+    /// text is read again when it's next wanted, so places in it line up.
+    private func forgetTextIfNotKept(_ id: UUID) {
+        guard CaptureLibrary.entry(id) == nil else { return }
+        insights[id] = nil
+    }
+
+    /// The words you can see: inside its crop, and not under a redaction.
+    private func visibleText(_ text: CaptureText, of id: UUID) -> String {
+        guard let document = storedDocument(id) else { return text.plainText() }
+        let covered = document.marks.filter { $0.kind == .redact }.map(\.rect)
+        return text.plainText(within: document.crop, excluding: covered)
+    }
+
     /// Whether there's text worth copying, as far as is known yet.
     func hasText(_ id: UUID) -> Bool {
-        if let insight = insights[id], insight.textWasRead { return !insight.text.lines.isEmpty }
+        if let insight = insights[id], insight.textWasRead { return !visibleText(insight.text, of: id).isEmpty }
         return CaptureLibrary.entry(id)?.text?.isEmpty == false
     }
 
     /// Puts the capture's words on the clipboard, in reading order, and says how it went.
     func copyText(_ id: UUID) {
         Task {
-            let words = await text(of: id)?.plainText() ?? ""
+            let read = await text(of: id)
+            let words = read.map { visibleText($0, of: id) } ?? ""
             let status: String
-            if words.isEmpty {
+            if read == nil {
+                status = "Couldn't read the text"
+                NSSound.beep()
+            } else if words.isEmpty {
                 status = "No text found"
                 NSSound.beep()
             } else {
@@ -763,12 +806,14 @@ final class CaptureCoordinator {
         openEditor(id)
     }
 
-    /// Opens a picture in the editor. One Barn Owl saved comes back with its marks still
-    /// movable, from wherever it is now; any other opens as a new capture, and Done saves a
-    /// copy rather than writing over it.
+    /// Opens a picture in the editor. One Barn Owl saved, unchanged since, comes back with
+    /// its marks still movable, from wherever it is now; any other picture (a copy, one
+    /// edited elsewhere, anyone else's) opens as a new capture, and Done saves a copy rather
+    /// than writing over it.
     func open(_ file: URL) {
-        if let id = CaptureLibrary.id(of: file), CaptureLibrary.entry(id) != nil, var capture = capture(id) {
-            if capture.fileURL != file {
+        if let id = CaptureLibrary.id(of: file), let entry = CaptureLibrary.entry(id), CaptureLibrary.isOwn(file, entry: entry),
+           var capture = capture(id) {
+            if capture.fileURL?.standardizedFileURL != file.standardizedFileURL {
                 // Moved or renamed since: Done saves over it where it is now.
                 capture.fileURL = file
                 captures[id] = capture
@@ -777,19 +822,22 @@ final class CaptureCoordinator {
             rememberFrontApp()
             return openEditor(id)
         }
-        guard let source = CGImageSourceCreateWithURL(file as CFURL, nil),
-              let picture = CGImageSourceCreateImageAtIndex(source, 0, nil) else { return NSSound.beep() }
-        // 144 dpi is a Retina screenshot: two pixels to a point.
-        let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any]
-        let dpi = (properties?[kCGImagePropertyDPIWidth] as? Double) ?? 72
-        var capture = Capture(image: CaptureStore.ownBitmap(picture), scale: max(1, (dpi / 72).rounded()), kind: .area,
-                              date: Date(), appName: nil)
-        // A file Barn Owl made whose kept copy is gone: still its own, so Done may save over it.
-        if CaptureLibrary.id(of: file) != nil {
-            capture.fileURL = file
-        } else {
-            capture.openedFrom = file.deletingPathExtension().lastPathComponent
+        // Opened already: the same editor, not a second copy.
+        if let id = openedFiles[file.standardizedFileURL], captures[id] != nil || CaptureLibrary.entry(id) != nil {
+            rememberFrontApp()
+            return openEditor(id)
         }
+        guard let picture = Self.picture(at: file) else {
+            let alert = NSAlert()
+            alert.messageText = "Barn Owl can't open “\(file.lastPathComponent)”"
+            alert.informativeText = "It isn't a picture Barn Owl can read. Barn Owl opens PNG, JPEG and HEIC files."
+            NSApp.activate()
+            alert.runModal()
+            return
+        }
+        var capture = Capture(image: picture.image, scale: picture.scale, kind: .area, date: Date(), appName: nil)
+        capture.openedFrom = file.deletingPathExtension().lastPathComponent
+        openedFiles[file.standardizedFileURL] = capture.id
         remember(capture)
         lastCaptureID = capture.id
         writeInBackground(capture, copies: false, saves: false, windows: [])
@@ -798,8 +846,25 @@ final class CaptureCoordinator {
         openEditor(capture.id)
     }
 
+    /// A picture file's pixels the right way up (a portrait photo turned as it was taken),
+    /// and its scale: 144 dpi is a Retina screenshot, two pixels to a point.
+    static func picture(at file: URL) -> (image: CGImage, scale: CGFloat)? {
+        guard let source = CGImageSourceCreateWithURL(file as CFURL, nil),
+              let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any],
+              let width = properties[kCGImagePropertyPixelWidth] as? Int,
+              let height = properties[kCGImagePropertyPixelHeight] as? Int else { return nil }
+        let options: [CFString: Any] = [kCGImageSourceCreateThumbnailFromImageAlways: true,
+                                        kCGImageSourceCreateThumbnailWithTransform: true,
+                                        kCGImageSourceThumbnailMaxPixelSize: max(width, height)]
+        guard let image = CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary) else { return nil }
+        let dpi = (properties[kCGImagePropertyDPIWidth] as? Double) ?? 72
+        // Print resolutions (300 dpi) aren't screen scales.
+        return (CaptureStore.ownBitmap(image), min(2, max(1, (dpi / 72).rounded())))
+    }
+
     func openEditor(_ id: UUID) {
-        guard let capture = capture(id) else { return }
+        // The editor draws the marks itself: no need to render them here.
+        guard let capture = captures[id] ?? keptCapture(id, rendered: false) else { return }
         if editors.isEmpty { rememberFrontApp() }
         cards.remove(id)
         if let open = editors.values.first(where: { $0.captureID == id }) {
@@ -859,6 +924,7 @@ extension CaptureCoordinator: CaptureEditorHost {
         capture.image = image
         capture.unsavedEdits = capture.fileURL != nil
         captures[id] = capture
+        forgetTextIfNotKept(id)
         storeThumbnail(image, for: id)
         let showsCard = Preferences.captureThen != .nothing
         if showsCard { cards.add(capture, status: saves ? "Edited · copied, saving…" : "Edited · copied") }
@@ -892,6 +958,7 @@ extension CaptureCoordinator: CaptureEditorHost {
                 // copying or saving uses the new one.
                 capture.unsavedEdits = capture.fileURL != nil && !savedAsIs
                 self.captures[id] = capture
+                self.forgetTextIfNotKept(id)
                 self.storeThumbnail(image, for: id)
                 self.copied.remove(id)
                 self.cards.add(capture, status: savedAsIs ? "Edited · saved, not copied yet" : "Edited · not copied yet",
@@ -900,7 +967,8 @@ extension CaptureCoordinator: CaptureEditorHost {
         }
         // Opened with E and closed untouched: unless it was copied or saved, the
         // card is the only place it lives.
-        if let id, !edited, !finished.contains(id), !isSaved(id), !copied.contains(id), let capture = capture(id) {
+        if let id, !edited, !finished.contains(id), !isSaved(id), !copied.contains(id), let capture = capture(id),
+           capture.openedFrom == nil {
             cards.add(capture, status: capture.unsavedEdits ? "Edited · not copied yet" : status(copied: false, saved: false),
                       kept: false)
         }

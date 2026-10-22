@@ -331,9 +331,9 @@ enum PenSmoothing: String, Codable, CaseIterable, Sendable {
     var radius: Double {
         switch self {
         case .off: 0
-        case .low: 5
-        case .medium: 11
-        case .high: 22
+        case .low: 4
+        case .medium: 8
+        case .high: 16
         }
     }
 }

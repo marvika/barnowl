@@ -18,6 +18,39 @@ enum CaptureLibrary {
         var windows: [CGRect]?
         /// The words in it, as read on the Mac: for searching history and Copy Text.
         var text: String?
+        /// The saved file's size and date when Barn Owl last wrote it, so a file changed or
+        /// copied since is never taken for this capture's own.
+        var fileStamp: FileStamp?
+    }
+
+    struct FileStamp: Codable, Equatable, Sendable {
+        let size: Int
+        let modified: Date
+
+        init?(of url: URL) {
+            // Never what an earlier look at this URL cached: the file may have changed since.
+            var url = url
+            url.removeAllCachedResourceValues()
+            guard let values = try? url.resourceValues(forKeys: [.fileSizeKey, .contentModificationDateKey]),
+                  let size = values.fileSize, let modified = values.contentModificationDate else { return nil }
+            self.size = size
+            self.modified = modified
+        }
+
+        /// Dates are compared to the second: some volumes keep no more.
+        func matches(_ other: FileStamp?) -> Bool {
+            guard let other else { return false }
+            return size == other.size && abs(modified.timeIntervalSince(other.modified)) < 1
+        }
+    }
+
+    /// Whether `file` is this capture's own saved file, as Barn Owl last wrote it: tagged with
+    /// its id, unchanged since, and not a copy of it while the original is still where it was.
+    static func isOwn(_ file: URL, entry: Entry) -> Bool {
+        guard id(of: file) == entry.id, let stamp = entry.fileStamp, stamp.matches(FileStamp(of: file)) else { return false }
+        guard let saved = entry.fileURL, saved.standardizedFileURL != file.standardizedFileURL else { return true }
+        // Moved is fine; a duplicate next to the original isn't the capture's file.
+        return !FileManager.default.fileExists(atPath: saved.path)
     }
 
     static let attribute = "io.github.marvika.barnowl.capture"
@@ -66,8 +99,11 @@ enum CaptureLibrary {
     /// Remembers where the flattened file went, and tags it with the capture's id.
     static func setFile(_ url: URL, for id: UUID, in root: URL = folder) {
         tag(url, id: id)
-        guard var entry = entry(id, in: root), entry.fileURL != url else { return }
+        guard var entry = entry(id, in: root) else { return }
+        let stamp = FileStamp(of: url)
+        guard entry.fileURL != url || entry.fileStamp != stamp else { return }
         entry.fileURL = url
+        entry.fileStamp = stamp
         try? write(entry, in: root)
     }
 
@@ -106,6 +142,16 @@ enum CaptureLibrary {
         let url = folder(for: id, in: root).appending(path: "original.png") as CFURL
         guard let source = CGImageSourceCreateWithURL(url, nil) else { return nil }
         return CGImageSourceCreateImageAtIndex(source, 0, nil)
+    }
+
+    /// Whether the marks were changed after the file was last written.
+    static func documentIsNewer(than stamp: FileStamp?, for id: UUID, in root: URL = folder) -> Bool {
+        guard let stamp else { return false }
+        let url = folder(for: id, in: root).appending(path: "document.json")
+        guard let changed = (try? url.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate else {
+            return false
+        }
+        return changed.timeIntervalSince(stamp.modified) > 1
     }
 
     /// The thumbnail, or failing that the original.

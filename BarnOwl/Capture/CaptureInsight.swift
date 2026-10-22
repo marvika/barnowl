@@ -9,6 +9,8 @@ struct CaptureInsight: Sendable, Equatable {
     var windowRects: [CGRect] = []
     /// False if the text couldn't be read: never say "nothing private" then.
     var textWasRead = false
+    /// False when Settings › Capture says not to look for private info: then nothing was.
+    var lookedForPrivateInfo = true
 
     /// Reads the capture's text; `windowRects` comes from the capture itself.
     static func make(image: CGImage, windowRects: [CGRect]) async -> CaptureInsight {

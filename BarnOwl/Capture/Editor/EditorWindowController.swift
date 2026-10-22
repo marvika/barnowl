@@ -465,7 +465,8 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSTool
             model.showHint("Still reading the text · try again in a moment")
             return
         }
-        let words = insight.text.plainText(within: model.document.crop)
+        let covered = model.document.marks.filter { $0.kind == .redact }.map(\.rect)
+        let words = insight.text.plainText(within: model.document.crop, excluding: covered)
         guard !words.isEmpty else {
             NSSound.beep()
             model.showHint("No text in this capture")

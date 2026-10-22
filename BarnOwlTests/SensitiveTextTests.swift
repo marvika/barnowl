@@ -95,15 +95,30 @@ struct SensitiveTextTests {
     }
 
     @Test func readsTextInReadingOrder() {
-        func line(_ text: String, x: CGFloat, y: CGFloat) -> CaptureText.Line {
-            CaptureText.Line(rect: CGRect(x: x, y: y, width: 100, height: 20), text: text, words: [])
+        func line(_ text: String, x: CGFloat, y: CGFloat, width: CGFloat = 100) -> CaptureText.Line {
+            CaptureText.Line(rect: CGRect(x: x, y: y, width: width, height: 20), text: text, words: [])
         }
+        // A form: short labels and values on the same rows read across.
+        var form = CaptureText()
+        form.lines = [line("Sam", x: 300, y: 12), line("Name", x: 10, y: 10), line("Role", x: 10, y: 50),
+                      line("Owner", x: 300, y: 51)]
+        #expect(form.plainText() == "Name\tSam\nRole\tOwner")
+        // A sidebar beside a page: each column on its own, never interleaved.
+        var mail = CaptureText()
+        mail.lines = [line("Inbox", x: 10, y: 10, width: 80), line("Dear Anna, thanks for the notes.", x: 150, y: 10, width: 500),
+                      line("Please send the slides.", x: 150, y: 35, width: 420), line("Sent", x: 10, y: 50, width: 60),
+                      line("See you Friday.", x: 150, y: 60, width: 300), line("Drafts", x: 10, y: 90, width: 70)]
+        #expect(mail.plainText() == "Inbox\nSent\nDrafts\n\nDear Anna, thanks for the notes.\nPlease send the slides.\nSee you Friday.")
+        #expect(mail.plainText(within: CGRect(x: 140, y: 0, width: 600, height: 100)).hasPrefix("Dear Anna"))
+    }
+
+    @Test func leavesOutWhatIsHidden() {
+        let words = [CaptureText.Word(rect: CGRect(x: 10, y: 10, width: 60, height: 20), text: "Token:"),
+                     CaptureText.Word(rect: CGRect(x: 80, y: 10, width: 200, height: 20), text: "ghp_secret")]
         var text = CaptureText()
-        // Out of order, with a label and its value side by side on one row.
-        text.lines = [line("Second", x: 10, y: 52), line("Value", x: 300, y: 12), line("Label", x: 10, y: 10),
-                      line("Third", x: 10, y: 90)]
-        #expect(text.plainText() == "Label\tValue\nSecond\nThird")
-        #expect(text.plainText(within: CGRect(x: 0, y: 40, width: 200, height: 40)) == "Second")
+        text.lines = [CaptureText.Line(rect: CGRect(x: 10, y: 10, width: 270, height: 20), text: "Token: ghp_secret", words: words)]
+        #expect(text.plainText(excluding: [CGRect(x: 75, y: 5, width: 210, height: 30)]) == "Token:")
+        #expect(text.plainText(excluding: [CGRect(x: 0, y: 0, width: 400, height: 40)]).isEmpty)
     }
 
     @Test func padsToTheWholeLine() {
