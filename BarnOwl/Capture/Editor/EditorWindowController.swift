@@ -430,11 +430,25 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSTool
 
     // MARK: Sharing
 
+    /// AppKit asks for these every time it checks the toolbar, which happens after nearly every
+    /// event, so this only promises the picture: it's drawn when you actually pick a way to
+    /// share, and typing in a text mark carries on undisturbed.
     func items(for pickerToolbarItem: NSSharingServicePickerToolbarItem) -> [Any] {
-        canvas.endTextEditing()
-        guard let image = model.renderer.render(model.document) else { return [] }
-        let size = NSSize(width: CGFloat(image.width) / model.scale, height: CGFloat(image.height) / model.scale)
-        return [NSImage(cgImage: image, size: size)]
+        let renderer = model.renderer
+        let document = model.document
+        let scale = model.scale
+        let provider = NSItemProvider()
+        provider.registerObject(ofClass: NSImage.self, visibility: .all) { completion in
+            Task.detached(priority: .userInitiated) {
+                guard let image = renderer.render(document) else {
+                    return completion(nil, CocoaError(.fileWriteUnknown))
+                }
+                let size = NSSize(width: CGFloat(image.width) / scale, height: CGFloat(image.height) / scale)
+                completion(NSImage(cgImage: image, size: size), nil)
+            }
+            return nil
+        }
+        return [provider]
     }
 
     // MARK: Commands

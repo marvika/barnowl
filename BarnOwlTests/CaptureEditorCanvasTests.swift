@@ -138,6 +138,15 @@ struct CaptureEditorCanvasTests {
         #expect(model.document.marks.isEmpty)
     }
 
+    @Test func typingSurvivesTheToolbarAskingWhatToShare() {
+        model.choose(.text)
+        click(CGPoint(x: 400, y: 300))
+        // AppKit asks the Share item for its items whenever it checks the toolbar.
+        let items = controller.items(for: NSSharingServicePickerToolbarItem(itemIdentifier: .init("share")))
+        #expect(items.count == 1)
+        #expect(model.editingText != nil)
+    }
+
     @Test func typingRightAfterACounterGivesItALabel() {
         model.choose(.counter)
         click(CGPoint(x: 200, y: 200))
