@@ -3,6 +3,26 @@
 All notable changes to Barn Owl. Versions follow [semantic versioning](https://semver.org);
 before 1.0, a minor version can change behaviour.
 
+## Unreleased
+
+- **Capture history:** every kept capture in one window, newest first, by
+  day. Search finds a screenshot by the words in it. Open it to edit with
+  its marks still movable, or copy, pin or drag it out.
+- **Copy Text:** press T on a selection, ⌃⌥⌘T from anywhere, ⌥⌘C in the
+  editor, or the card's text button, and the words in the capture go to the
+  clipboard, read on your Mac.
+- **Open pictures with Barn Owl:** Finder's Open With now lists Barn Owl for
+  PNG, JPEG and HEIC. A screenshot Barn Owl saved comes back with its marks
+  still movable, wherever it's been moved; any other picture opens as a new
+  capture, and Done saves a copy instead of writing over it.
+- **Pen smoothing:** the pen steadies your hand. The line trails the pointer
+  on a short string, shown while you draw, so wobbles never reach it. Choose
+  Off, Low, Medium or High in the pen's options.
+- **Redact pixelates** out of the box. Hide still uses a light blur, until
+  you choose a Redact style of your own.
+- Copying, pinning or dragging an edited capture from history gives it with
+  its marks, and dragging a card out no longer waits while its file is made.
+
 ## 0.15.0
 
 - **Capture: screenshots with markup.** Optional; turn it on in Settings ›
