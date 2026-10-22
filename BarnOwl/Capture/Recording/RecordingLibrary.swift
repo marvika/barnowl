@@ -111,8 +111,8 @@ enum RecordingStore {
     /// A free name in the recordings folder, reserved until `CaptureStore.release`.
     static func reserveURL(date: Date, appName: String?, fileExtension: String) -> URL {
         let app = Preferences.captureNameIncludesApp ? appName : nil
-        return CaptureStore.freeURL(in: folder(), baseName: baseName(prefix: Preferences.captureNamePrefix, date: date, appName: app),
-                                    fileExtension: fileExtension)
+        let name = baseName(prefix: Preferences.captureNamePrefix, date: date, appName: app)
+        return CaptureStore.freeURL(in: folder(), baseName: name, fileExtension: fileExtension)
     }
 
     /// Where a take is written while it's recorded: a folder of its own among the temporary

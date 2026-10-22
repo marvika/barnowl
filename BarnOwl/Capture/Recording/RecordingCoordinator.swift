@@ -106,7 +106,9 @@ final class RecordingCoordinator {
     func shortcutPressed() {
         switch machine.phase {
         case .idle: host?.startRecording()
-        case .countingDown: countdown?.cancel()
+        case .countingDown:
+            // A restart may not have put its countdown up yet.
+            if let countdown { countdown.cancel() } else { send(.cancel) }
         case .starting, .recording, .paused: send(.stop)
         case .finishing: break
         }
@@ -151,6 +153,9 @@ final class RecordingCoordinator {
             startCapture()
         case .abortStart:
             hideControls()
+            if let take {
+                RecordingToast.show("Too short to keep", symbol: "timer", at: CGPoint(x: take.area.midX, y: take.area.midY))
+            }
             let recorder = self.recorder
             Task {
                 // The start, cut short, tears its stream down itself; nothing waits on it.
@@ -417,9 +422,10 @@ final class RecordingCoordinator {
         host.recordingSaved(take.id, file: saved, media: capture.media)
 
         // History keeps the movie with its separate tracks, for the video editor.
-        let entry = CaptureLibrary.Entry(id: take.id, date: take.date, scale: Double(scale), kind: capture.media.libraryKind ?? "video",
-                                         appName: take.appName, fileURL: saved, edited: false,
-                                         fileStamp: saved.flatMap(CaptureLibrary.FileStamp.init(of:)), duration: output.duration)
+        let kind = capture.media.libraryKind ?? "video"
+        let stamp = saved.flatMap(CaptureLibrary.FileStamp.init(of:))
+        let entry = CaptureLibrary.Entry(id: take.id, date: take.date, scale: Double(scale), kind: kind, appName: take.appName,
+                                         fileURL: saved, edited: false, fileStamp: stamp, duration: output.duration)
         let master = take.master
         let kept = await Task.detached(priority: .utility) { () -> Bool in
             do {
