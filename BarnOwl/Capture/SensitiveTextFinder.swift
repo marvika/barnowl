@@ -160,11 +160,12 @@ enum SensitiveTextFinder {
 
     /// Reads the capture once. Throws rather than report "nothing private"
     /// when Vision fails.
-    static func scan(_ image: CGImage) async throws -> CaptureText {
+    /// `forReading`: for Copy Text, where words read best corrected; looking for keys and
+    /// addresses, which aren't words, never corrects them.
+    static func scan(_ image: CGImage, forReading: Bool = false) async throws -> CaptureText {
         var request = RecognizeTextRequest()
         request.recognitionLevel = .accurate
-        // Keys and addresses aren't words: don't "correct" them.
-        request.usesLanguageCorrection = false
+        request.usesLanguageCorrection = forReading
         request.recognitionLanguages = languages(supported: request.supportedRecognitionLanguages)
         // The default skips text under 1/32 of the image's height: everything
         // on a full-screen Retina capture.

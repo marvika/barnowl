@@ -552,28 +552,6 @@ final class CaptureCoordinator {
         start(.area, copiesText: true)
     }
 
-    /// The capture's text, read now if it hasn't been yet.
-    func text(of id: UUID) async -> CaptureText? {
-        if let scan = scans[id] { await scan.value }
-        if let insight = insights[id], insight.textWasRead { return insight.text }
-        guard let capture = capture(id) else { return nil }
-        // The words under the marks, not the marks: read the original when it's kept.
-        let image = CaptureLibrary.original(id) ?? capture.image
-        let windows = insights[id]?.windowRects ?? CaptureLibrary.entry(id)?.windows ?? []
-        var insight = await Task.detached(priority: .userInitiated) {
-            await CaptureInsight.make(image: image, windowRects: windows)
-        }.value
-        guard insight.textWasRead else { return nil }
-        if !Preferences.capturePrivateInfo {
-            insight.text.findings = []
-            insight.lookedForPrivateInfo = false
-        }
-        insights[id] = insight
-        let words = insight.text.plainText()
-        if !words.isEmpty { inOrder(id) { CaptureLibrary.update(id) { $0.text = words } } }
-        return insight.text
-    }
-
     /// Without a kept copy, the edited picture is all there is, cropped and framed: its
     /// text is read again when it's next wanted, so places in it line up.
     private func forgetTextIfNotKept(_ id: UUID) {
@@ -595,9 +573,14 @@ final class CaptureCoordinator {
     }
 
     /// Puts the capture's words on the clipboard, in reading order, and says how it went.
+    /// Read again carefully, with words corrected, from the original when it's kept.
     func copyText(_ id: UUID) {
+        guard let capture = capture(id) else { return NSSound.beep() }
+        let image = storedDocument(id) != nil ? (CaptureLibrary.original(id) ?? capture.image) : capture.image
         Task {
-            let read = await text(of: id)
+            let read = try? await Task.detached(priority: .userInitiated) {
+                try await SensitiveTextFinder.scan(image, forReading: true)
+            }.value
             let words = read.map { visibleText($0, of: id) } ?? ""
             let status: String
             if read == nil {

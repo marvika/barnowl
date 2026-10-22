@@ -461,21 +461,27 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSTool
 
     /// The words in the capture, as much of it as the crop shows, in reading order.
     private func copyText() {
-        guard let insight = model.insight, insight.textWasRead else {
-            model.showHint("Still reading the text · try again in a moment")
-            return
-        }
+        let image = model.image
+        let crop = model.document.crop
         let covered = model.document.marks.filter { $0.kind == .redact }.map(\.rect)
-        let words = insight.text.plainText(within: model.document.crop, excluding: covered)
-        guard !words.isEmpty else {
-            NSSound.beep()
-            model.showHint("No text in this capture")
-            return
+        model.showHint("Reading the text…")
+        Task { [weak self] in
+            // Read again carefully, with words corrected, rather than the quick look for keys.
+            let read = try? await Task.detached(priority: .userInitiated) {
+                try await SensitiveTextFinder.scan(image, forReading: true)
+            }.value
+            guard let self else { return }
+            let words = read?.plainText(within: crop, excluding: covered) ?? ""
+            guard !words.isEmpty else {
+                NSSound.beep()
+                self.model.showHint(read == nil ? "Couldn't read the text" : "No text in this capture")
+                return
+            }
+            let pasteboard = NSPasteboard.general
+            pasteboard.clearContents()
+            pasteboard.setString(words, forType: .string)
+            self.model.showHint("Text copied")
         }
-        let pasteboard = NSPasteboard.general
-        pasteboard.clearContents()
-        pasteboard.setString(words, forType: .string)
-        model.showHint("Text copied")
     }
 
     func perform(_ id: EditorCommand.ID) {
@@ -562,7 +568,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSTool
         case .revert:
             return model.canRevert
         case .copyText:
-            return model.insight?.textWasRead != false
+            return true
         default:
             return true
         }
