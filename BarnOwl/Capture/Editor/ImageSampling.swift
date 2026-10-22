@@ -132,6 +132,57 @@ enum ImageSampler {
         return MarkColour(red: r / n, green: g / n, blue: b / n)
     }
 
+    /// The colour around the edge of `crop` (image pixels, top left): the median of each channel
+    /// over a ring two pixels deep, so a stray pixel or two of content doesn't sway it.
+    static func edgeColour(in image: CGImage, crop: CGRect) -> MarkColour {
+        let bounds = CGRect(x: 0, y: 0, width: image.width, height: image.height)
+        let area = crop.integral.intersection(bounds)
+        guard !area.isNull, area.width >= 1, area.height >= 1 else { return .white }
+        let depth: CGFloat = min(2, area.width, area.height)
+        let strips = [
+            CGRect(x: area.minX, y: area.minY, width: area.width, height: depth),
+            CGRect(x: area.minX, y: area.maxY - depth, width: area.width, height: depth),
+            CGRect(x: area.minX, y: area.minY, width: depth, height: area.height),
+            CGRect(x: area.maxX - depth, y: area.minY, width: depth, height: area.height),
+        ]
+        var reds: [UInt8] = []
+        var greens: [UInt8] = []
+        var blues: [UInt8] = []
+        for strip in strips {
+            let pixels = rgba(in: image, rect: strip)
+            for index in stride(from: 0, to: pixels.count, by: 4) {
+                reds.append(pixels[index])
+                greens.append(pixels[index + 1])
+                blues.append(pixels[index + 2])
+            }
+        }
+        func median(_ values: [UInt8]) -> Double {
+            guard !values.isEmpty else { return 1 }
+            return Double(values.sorted()[values.count / 2]) / 255
+        }
+        return MarkColour(red: median(reds), green: median(greens), blue: median(blues))
+    }
+
+    /// The pixels in `rect` (image pixels, top left), row by row, as RGBA bytes on white.
+    private static func rgba(in image: CGImage, rect: CGRect) -> [UInt8] {
+        guard let part = image.cropping(to: rect) else { return [] }
+        let width = part.width
+        let height = part.height
+        var bytes = [UInt8](repeating: 255, count: width * height * 4)
+        let space = CGColorSpace(name: CGColorSpace.sRGB) ?? CGColorSpaceCreateDeviceRGB()
+        let made: Bool = bytes.withUnsafeMutableBytes { buffer -> Bool in
+            guard let context = CGContext(data: buffer.baseAddress, width: width, height: height, bitsPerComponent: 8,
+                                          bytesPerRow: width * 4, space: space,
+                                          bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue) else { return false }
+            context.interpolationQuality = .none
+            context.setFillColor(CGColor(gray: 1, alpha: 1))
+            context.fill(CGRect(x: 0, y: 0, width: width, height: height))
+            context.draw(part, in: CGRect(x: 0, y: 0, width: width, height: height))
+            return true
+        }
+        return made ? bytes : []
+    }
+
     /// Whether the capture is a window caught with its shadow on a clear background: its corners
     /// are clear, and walking in from the middle of most edges passes through the shadow's soft,
     /// part-clear pixels before reaching the window. A window caught without its shadow has

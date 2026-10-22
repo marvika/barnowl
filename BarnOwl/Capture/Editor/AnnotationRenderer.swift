@@ -16,6 +16,7 @@ final class AnnotationRenderer: Sendable {
     /// its shadow alone, rather than drawing a second one.
     let ownShadow: Bool
     private let desktopPicture = Mutex<Picture?>(nil)
+    private let edgeColours = Mutex<[EdgeKey: MarkColour]>([:])
     private let effects: RedactionEffects
     private let pasted = Mutex<[UUID: PastedImage]>([:])
 
@@ -26,6 +27,13 @@ final class AnnotationRenderer: Sendable {
 
     private struct Picture: @unchecked Sendable {
         let image: CGImage
+    }
+
+    private struct EdgeKey: Hashable {
+        let x: Int
+        let y: Int
+        let width: Int
+        let height: Int
     }
 
     init(image: CGImage, scale: CGFloat, desktop: CGImage? = nil) {
@@ -89,8 +97,9 @@ final class AnnotationRenderer: Sendable {
         let frame = document.frame
         if frame.isOn { drawBackground(frame, layout: layout, in: context) }
         let shadowed = frame.isOn && frame.shadow && !ownShadow
-        guard includingImage || shadowed else { return }
-        let clip = MarkGeometry.roundedRect(layout.imageRect, radius: cornerRadius(frame))
+        let card = hasCard(frame)
+        guard includingImage || shadowed || card else { return }
+        let clip = MarkGeometry.roundedRect(card ? layout.cardRect : layout.imageRect, radius: cornerRadius(frame))
         let full = CGRect(x: layout.offset.x, y: layout.offset.y, width: CGFloat(image.width), height: CGFloat(image.height))
         context.saveGState()
         if shadowed {
@@ -104,7 +113,14 @@ final class AnnotationRenderer: Sendable {
         context.saveGState()
         context.addPath(clip)
         context.clip()
-        drawImage(image, in: full, context)
+        if card {
+            // The card, in the capture's own edge colour, so the capture runs on into it.
+            context.setFillColor(edgeColour(for: document.crop).cgColor())
+            context.fill(layout.cardRect)
+            context.clip(to: layout.imageRect)
+        }
+        // Without a card, the image is drawn even for the canvas: its shape casts the shadow.
+        if includingImage || !card { drawImage(image, in: full, context) }
         context.restoreGState()
         if shadowed { context.endTransparencyLayer() }
         context.restoreGState()
@@ -115,12 +131,29 @@ final class AnnotationRenderer: Sendable {
         frame.isOn && !ownShadow ? frame.cornerRadius : 0
     }
 
+    /// Whether the capture sits on a card: an inset, and not a window with its own shadow (whose
+    /// clear margin has no colour to carry on).
+    func hasCard(_ frame: FrameSettings) -> Bool {
+        frame.isOn && frame.inset > 0 && !ownShadow
+    }
+
+    /// The colour around the crop's edge, which the card takes: the median of a ring two pixels deep.
+    func edgeColour(for crop: CGRect) -> MarkColour {
+        let area = crop.integral
+        let key = EdgeKey(x: Int(area.minX), y: Int(area.minY), width: Int(area.width), height: Int(area.height))
+        if let cached = edgeColours.withLock({ $0[key] }) { return cached }
+        let colour = ImageSampler.edgeColour(in: image, crop: area)
+        edgeColours.withLock { $0[key] = colour }
+        return colour
+    }
+
     /// Every mark, clipped to the image. `imageUnderneath` false (on the canvas, where the image
     /// is a separate layer) makes highlights carry the pixels they blend with.
     func drawMarks(_ document: EditorDocument, in context: CGContext, imageUnderneath: Bool, editingText: UUID? = nil) {
         let layout = FrameLayout(document: document)
+        let clip: CGRect = hasCard(document.frame) ? layout.cardRect : layout.imageRect
         context.saveGState()
-        context.addPath(MarkGeometry.roundedRect(layout.imageRect, radius: cornerRadius(document.frame)))
+        context.addPath(MarkGeometry.roundedRect(clip, radius: cornerRadius(document.frame)))
         context.clip()
         context.translateBy(x: layout.offset.x, y: layout.offset.y)
         let numbers = document.counterNumbers
@@ -128,6 +161,9 @@ final class AnnotationRenderer: Sendable {
         let spotlights = ordered.filter { $0.kind == .spotlight }
         // What a magnifier enlarges with the image: never anything a redaction hides.
         let underneath = ordered.filter { $0.kind == .highlighter || $0.kind == .redact }
+        // Spotlights dim the whole card, its inset too.
+        let inset: CGFloat = hasCard(document.frame) ? layout.imageRect.minX - layout.cardRect.minX : 0
+        let dimmed = document.crop.insetBy(dx: -inset, dy: -inset)
         var spotlightsDrawn = false
         for mark in ordered {
             switch mark.kind {
@@ -140,7 +176,7 @@ final class AnnotationRenderer: Sendable {
             case .spotlight:
                 guard !spotlightsDrawn else { continue }
                 spotlightsDrawn = true
-                drawSpotlights(spotlights, area: document.crop, in: context)
+                drawSpotlights(spotlights, area: dimmed, in: context)
             default:
                 withOpacity(mark.style.opacity, context) {
                     drawObject(mark, number: numbers[mark.id] ?? 1, editing: mark.id == editingText, in: context)

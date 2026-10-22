@@ -7,6 +7,9 @@ struct FrameLayout: Equatable {
     let canvasSize: CGSize
     /// The cropped image, on the canvas.
     let imageRect: CGRect
+    /// The card under the image: the image grown by the frame's inset (the image itself when
+    /// there's none). Corners, shadow and the marks' clip follow it.
+    let cardRect: CGRect
     /// The part of the image shown, in image pixels.
     let crop: CGRect
 
@@ -18,11 +21,15 @@ struct FrameLayout: Equatable {
         guard frame.isOn else {
             canvasSize = crop.size
             imageRect = CGRect(origin: .zero, size: crop.size)
+            cardRect = imageRect
             return
         }
         let padding: CGFloat = max(0, frame.padding.rounded())
-        var canvasWidth: CGFloat = width + 2 * padding
-        var canvasHeight: CGFloat = height + 2 * padding
+        let inset: CGFloat = max(0, frame.inset.rounded())
+        let cardWidth: CGFloat = width + 2 * inset
+        let cardHeight: CGFloat = height + 2 * inset
+        var canvasWidth: CGFloat = cardWidth + 2 * padding
+        var canvasHeight: CGFloat = cardHeight + 2 * padding
         if let ratio = frame.ratio.value, canvasHeight > 0 {
             if canvasWidth / canvasHeight < ratio {
                 canvasWidth = (canvasHeight * ratio).rounded(.up)
@@ -32,13 +39,14 @@ struct FrameLayout: Equatable {
         }
         canvasSize = CGSize(width: canvasWidth, height: canvasHeight)
         // The padding is the least there is; the position says where any room beyond it goes.
-        let spareX: CGFloat = canvasWidth - width - 2 * padding
-        let spareY: CGFloat = canvasHeight - height - 2 * padding
+        let spareX: CGFloat = canvasWidth - cardWidth - 2 * padding
+        let spareY: CGFloat = canvasHeight - cardHeight - 2 * padding
         let along = CGFloat(min(max(frame.position.x, 0), 1))
         let down = CGFloat(min(max(frame.position.y, 0), 1))
         let x: CGFloat = (spareX * along + padding).rounded(.down)
         let y: CGFloat = (spareY * down + padding).rounded(.down)
-        imageRect = CGRect(x: x, y: y, width: width, height: height)
+        cardRect = CGRect(x: x, y: y, width: cardWidth, height: cardHeight)
+        imageRect = CGRect(x: x + inset, y: y + inset, width: width, height: height)
     }
 
     init(document: EditorDocument) {

@@ -32,6 +32,10 @@ struct FrameInspector: View {
                 if frame.isOn {
                     VStack(alignment: .leading, spacing: 18) {
                         slider("Padding", value: \.padding, range: 0...160, undoName: "Change Padding")
+                        if !model.renderer.ownShadow {
+                            slider("Inset", value: \.inset, range: 0...40, undoName: "Change Inset")
+                                .help("Room around the capture, in its own edge colour")
+                        }
                         if model.renderer.ownShadow {
                             ownShadowNote
                         } else {

@@ -347,7 +347,8 @@ final class EditorCanvas: NSView, NSTextViewDelegate, NSMenuItemValidation {
         let framed = shown.frame.isOn
         // A window with its own shadow needs no outline of ours around its clear margin.
         imageView.outlined = !framed && !renderer.ownShadow
-        imageView.cornerRadius = renderer.cornerRadius(shown.frame) / scale
+        // On a card, the card has the corners and the image's own are square.
+        imageView.cornerRadius = renderer.hasCard(shown.frame) ? 0 : renderer.cornerRadius(shown.frame) / scale
         imageView.zoom = zoom
         paper.zoom = zoom
         paper.outlined = framed

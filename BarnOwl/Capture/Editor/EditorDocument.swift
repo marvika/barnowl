@@ -760,22 +760,26 @@ struct FrameSettings: Codable, Equatable, Sendable {
     var ratio = AspectRatio.auto
     /// Where the capture sits in any room the ratio adds beyond the padding.
     var position = FramePosition()
+    /// Room between the capture and the edge of a card under it, in the capture's own edge
+    /// colour, so it sits on the frame like a page rather than at its very edge.
+    var inset: CGFloat = 0
 
     var isOn: Bool { background != .none }
     var shadow: Bool { shadowAmount > 0.001 }
 
     init(background: FrameBackground = .none, padding: CGFloat = 0, cornerRadius: CGFloat = 0,
-         shadowAmount: CGFloat = 0.5, ratio: AspectRatio = .auto, position: FramePosition = .centre) {
+         shadowAmount: CGFloat = 0.5, ratio: AspectRatio = .auto, position: FramePosition = .centre, inset: CGFloat = 0) {
         self.background = background
         self.padding = padding
         self.cornerRadius = cornerRadius
         self.shadowAmount = shadowAmount
         self.ratio = ratio
         self.position = position
+        self.inset = inset
     }
 
     enum CodingKeys: String, CodingKey {
-        case background, padding, cornerRadius, shadow, shadowAmount, ratio, position
+        case background, padding, cornerRadius, shadow, shadowAmount, ratio, position, inset
     }
 
     /// Anything this build doesn't know (a background or ratio from a newer one) falls back to
@@ -794,6 +798,7 @@ struct FrameSettings: Codable, Equatable, Sendable {
         }
         ratio = (try? c.decodeIfPresent(AspectRatio.self, forKey: .ratio)) ?? .auto
         position = (try? c.decodeIfPresent(FramePosition.self, forKey: .position)) ?? .centre
+        inset = max((try? c.decodeIfPresent(CGFloat.self, forKey: .inset)) ?? 0, 0)
     }
 
     func encode(to encoder: Encoder) throws {
@@ -806,6 +811,7 @@ struct FrameSettings: Codable, Equatable, Sendable {
         try c.encode(shadowAmount, forKey: .shadowAmount)
         try c.encode(ratio, forKey: .ratio)
         try c.encode(position, forKey: .position)
+        try c.encode(inset, forKey: .inset)
     }
 }
 
@@ -816,7 +822,7 @@ struct FrameSettings: Codable, Equatable, Sendable {
 /// still editable.
 struct EditorDocument: Codable, Equatable, Sendable {
     /// 2: weights in points, arrow heads, fills, fonts, counter formats, smart origins.
-    /// 3: gradients of your own, shadow strength, more ratios, position, magnifiers.
+    /// 3: gradients of your own, shadow strength, more ratios, position, inset, magnifiers.
     static let currentSchema = 3
 
     var schemaVersion = EditorDocument.currentSchema

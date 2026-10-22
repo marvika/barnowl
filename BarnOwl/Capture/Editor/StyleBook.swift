@@ -158,6 +158,7 @@ struct FrameLook: Codable, Equatable, Sendable {
     var shadowAmount: Double
     var ratio: AspectRatio
     var position: FramePosition
+    var inset: Double
 
     init(_ frame: FrameSettings, scale: CGFloat) {
         let scale: Double = Double(max(scale, 0.5))
@@ -167,6 +168,7 @@ struct FrameLook: Codable, Equatable, Sendable {
         shadowAmount = Double(frame.shadowAmount)
         ratio = frame.ratio
         position = frame.position
+        inset = Double(frame.inset) / scale
     }
 
     init(from decoder: Decoder) throws {
@@ -177,6 +179,7 @@ struct FrameLook: Codable, Equatable, Sendable {
         shadowAmount = (try? c.decodeIfPresent(Double.self, forKey: .shadowAmount)) ?? 0.5
         ratio = (try? c.decodeIfPresent(AspectRatio.self, forKey: .ratio)) ?? .auto
         position = (try? c.decodeIfPresent(FramePosition.self, forKey: .position)) ?? .centre
+        inset = (try? c.decodeIfPresent(Double.self, forKey: .inset)) ?? 0
     }
 
     /// The frame in pixels at `scale`.
@@ -184,8 +187,9 @@ struct FrameLook: Codable, Equatable, Sendable {
         let scale: CGFloat = max(scale, 0.5)
         let padding: CGFloat = (CGFloat(self.padding) * scale).rounded()
         let corners: CGFloat = (CGFloat(cornerRadius) * scale).rounded()
+        let inset: CGFloat = (CGFloat(self.inset) * scale).rounded()
         return FrameSettings(background: background, padding: padding, cornerRadius: corners,
-                             shadowAmount: CGFloat(shadowAmount), ratio: ratio, position: position)
+                             shadowAmount: CGFloat(shadowAmount), ratio: ratio, position: position, inset: inset)
     }
 }
 

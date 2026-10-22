@@ -334,6 +334,48 @@ struct CaptureEditorFrameTests {
         #expect(AspectRatio.allCases.map(\.title) == ["Auto", "16:9", "3:2", "4:3", "1:1", "4:5", "3:4", "9:16", "1.91:1"])
     }
 
+    // MARK: Inset
+
+    @Test func anInsetPutsTheCaptureOnACardOfItsOwnEdgeColour() throws {
+        let edge = MarkColour(hex: 0xF2EDE4)
+        let picture = Self.image(width: 300, height: 200) { context in
+            context.setFillColor(edge.cgColor())
+            context.fill(CGRect(x: 0, y: 0, width: 300, height: 200))
+            context.setFillColor(MarkColour.blue.cgColor())
+            context.fill(CGRect(x: 40, y: 40, width: 220, height: 120))
+        }
+        #expect(ImageSampler.edgeColour(in: picture, crop: CGRect(x: 0, y: 0, width: 300, height: 200)) == edge)
+        // Cropped into the blue, the edge is blue.
+        #expect(ImageSampler.edgeColour(in: picture, crop: CGRect(x: 50, y: 50, width: 100, height: 60)) == .blue)
+
+        var document = Self.framed(.solid(.ink))
+        document.frame.inset = 20
+        let layout = FrameLayout(document: document)
+        #expect(layout.canvasSize == CGSize(width: 440, height: 340))
+        #expect(layout.cardRect == CGRect(x: 50, y: 50, width: 340, height: 240))
+        #expect(layout.imageRect == CGRect(x: 70, y: 70, width: 300, height: 200))
+        document.frame.ratio = .wide
+        document.frame.position = FramePosition(x: 1, y: 0.5)
+        let right = FrameLayout(document: document)
+        #expect(right.cardRect.maxX == right.canvasSize.width - 50)
+        #expect(right.imageRect.maxX == right.cardRect.maxX - 20)
+
+        document.frame.ratio = .auto
+        // A pen line runs from the capture out across the inset and the padding.
+        var line = CaptureEditorTests.mark(.arrow, CGPoint(x: 150, y: -60), CGPoint(x: 150, y: 100), colour: .red)
+        line.style.heads = .none
+        document.marks = [line]
+        let renderer = AnnotationRenderer(image: picture, scale: 1)
+        let image = try #require(renderer.render(document))
+        // The card shows in the inset, in the edge colour…
+        #expect(Self.near(Self.pixel(image, 60, 150), edge))
+        // …the marks reach into it, but not past it…
+        #expect(Self.near(Self.pixel(image, 220, 55), .red, within: 10.0 / 255))
+        #expect(Self.near(Self.pixel(image, 220, 45), .ink))
+        // …and the frame's background starts beyond it.
+        #expect(Self.near(Self.pixel(image, 45, 150), .ink))
+    }
+
     // MARK: Shadow
 
     @Test func theShadowHasAStrength() throws {
