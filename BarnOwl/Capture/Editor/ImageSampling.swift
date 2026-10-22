@@ -163,6 +163,59 @@ enum ImageSampler {
         return MarkColour(red: median(reds), green: median(greens), blue: median(blues))
     }
 
+    /// What's in `crop` apart from its plain surround: the box around every pixel that stands
+    /// apart from `background`. Nil when nothing does. Looked at no larger than 800 pixels across,
+    /// so it's quick and within a few pixels.
+    static func contentBounds(in image: CGImage, crop: CGRect, background: MarkColour,
+                              tolerance: Double = 0.08) -> CGRect? {
+        let bounds = CGRect(x: 0, y: 0, width: image.width, height: image.height)
+        let area = crop.integral.intersection(bounds)
+        guard !area.isNull, area.width >= 4, area.height >= 4, let part = image.cropping(to: area) else { return nil }
+        let factor: CGFloat = min(1, 800 / max(area.width, area.height))
+        let width = max(1, Int((area.width * factor).rounded()))
+        let height = max(1, Int((area.height * factor).rounded()))
+        var bytes = [UInt8](repeating: 255, count: width * height * 4)
+        let space = CGColorSpace(name: CGColorSpace.sRGB) ?? CGColorSpaceCreateDeviceRGB()
+        let made: Bool = bytes.withUnsafeMutableBytes { buffer -> Bool in
+            guard let context = CGContext(data: buffer.baseAddress, width: width, height: height, bitsPerComponent: 8,
+                                          bytesPerRow: width * 4, space: space,
+                                          bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue) else { return false }
+            context.interpolationQuality = .medium
+            context.setFillColor(CGColor(gray: 1, alpha: 1))
+            context.fill(CGRect(x: 0, y: 0, width: width, height: height))
+            context.draw(part, in: CGRect(x: 0, y: 0, width: width, height: height))
+            return true
+        }
+        guard made else { return nil }
+        let limit = Int(tolerance * 255)
+        let red = Int((background.red * 255).rounded())
+        let green = Int((background.green * 255).rounded())
+        let blue = Int((background.blue * 255).rounded())
+        var minX = width
+        var minY = height
+        var maxX = -1
+        var maxY = -1
+        for y in 0..<height {
+            let row = y * width * 4
+            for x in 0..<width {
+                let index = row + x * 4
+                let apart = abs(Int(bytes[index]) - red) > limit || abs(Int(bytes[index + 1]) - green) > limit
+                    || abs(Int(bytes[index + 2]) - blue) > limit
+                guard apart else { continue }
+                minX = min(minX, x)
+                maxX = max(maxX, x)
+                minY = min(minY, y)
+                maxY = max(maxY, y)
+            }
+        }
+        guard maxX >= minX, maxY >= minY else { return nil }
+        let x: CGFloat = area.minX + CGFloat(minX) / factor
+        let y: CGFloat = area.minY + CGFloat(minY) / factor
+        let right: CGFloat = area.minX + CGFloat(maxX + 1) / factor
+        let bottom: CGFloat = area.minY + CGFloat(maxY + 1) / factor
+        return CGRect(x: x, y: y, width: right - x, height: bottom - y).integral.intersection(area)
+    }
+
     /// The pixels in `rect` (image pixels, top left), row by row, as RGBA bytes on white.
     private static func rgba(in image: CGImage, rect: CGRect) -> [UInt8] {
         guard let part = image.cropping(to: rect) else { return [] }

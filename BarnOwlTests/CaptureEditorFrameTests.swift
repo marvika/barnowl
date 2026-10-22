@@ -376,6 +376,35 @@ struct CaptureEditorFrameTests {
         #expect(Self.near(Self.pixel(image, 45, 150), .ink))
     }
 
+    // MARK: Balance
+
+    @Test func balancingCropsEveryMarginToTheSmallest() {
+        // A blue panel on a white page: 30 left, 100 right, 50 above and below.
+        let picture = Self.image(width: 300, height: 200) { context in
+            context.setFillColor(MarkColour.white.cgColor())
+            context.fill(CGRect(x: 0, y: 0, width: 300, height: 200))
+            context.setFillColor(MarkColour.blue.cgColor())
+            context.fill(CGRect(x: 30, y: 50, width: 170, height: 100))
+        }
+        let content = ImageSampler.contentBounds(in: picture, crop: CGRect(x: 0, y: 0, width: 300, height: 200), background: .white)
+        #expect(content == CGRect(x: 30, y: 50, width: 170, height: 100))
+        let model = EditorModel(image: picture, scale: 1, defaults: CaptureEditorTests.defaults())
+        #expect(model.balancedCrop == CGRect(x: 0, y: 20, width: 230, height: 160))
+        model.balanceMargins()
+        #expect(model.document.crop == CGRect(x: 0, y: 20, width: 230, height: 160))
+        #expect(model.undoManager.undoActionName == "Balance Margins")
+        // Even now: nothing more to offer.
+        #expect(model.balancedCrop == nil)
+        model.undo()
+        #expect(model.document.crop == model.document.imageBounds)
+
+        // Margins within 4% of each other, or content at an edge, aren't worth it.
+        let even = CGRect(x: 0, y: 0, width: 300, height: 200)
+        #expect(AnnotationRenderer.balanced(even, content: CGRect(x: 30, y: 32, width: 242, height: 138)) == nil)
+        #expect(AnnotationRenderer.balanced(even, content: CGRect(x: 0, y: 50, width: 170, height: 100)) == nil)
+        #expect(AnnotationRenderer.balanced(even, content: nil) == nil)
+    }
+
     // MARK: Shadow
 
     @Test func theShadowHasAStrength() throws {

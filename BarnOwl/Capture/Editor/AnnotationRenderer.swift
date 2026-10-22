@@ -17,6 +17,7 @@ final class AnnotationRenderer: Sendable {
     let ownShadow: Bool
     private let desktopPicture = Mutex<Picture?>(nil)
     private let edgeColours = Mutex<[EdgeKey: MarkColour]>([:])
+    private let balancedCrops = Mutex<[EdgeKey: CGRect]>([:])
     private let effects: RedactionEffects
     private let pasted = Mutex<[UUID: PastedImage]>([:])
 
@@ -135,6 +136,28 @@ final class AnnotationRenderer: Sendable {
     /// clear margin has no colour to carry on).
     func hasCard(_ frame: FrameSettings) -> Bool {
         frame.isOn && frame.inset > 0 && !ownShadow
+    }
+
+    /// The crop with even margins round what's in it, or nil when they're even already (within
+    /// 4% of the shorter side), or the content reaches an edge.
+    func balancedCrop(for crop: CGRect) -> CGRect? {
+        let area = crop.integral
+        let key = EdgeKey(x: Int(area.minX), y: Int(area.minY), width: Int(area.width), height: Int(area.height))
+        if let cached = balancedCrops.withLock({ $0[key] }) { return cached.isNull ? nil : cached }
+        let balanced = Self.balanced(area, content: ImageSampler.contentBounds(in: image, crop: area,
+                                                                               background: edgeColour(for: area)))
+        balancedCrops.withLock { $0[key] = balanced ?? .null }
+        return balanced
+    }
+
+    static func balanced(_ crop: CGRect, content: CGRect?) -> CGRect? {
+        guard let content else { return nil }
+        let margins: [CGFloat] = [content.minX - crop.minX, crop.maxX - content.maxX, content.minY - crop.minY,
+                                  crop.maxY - content.maxY]
+        guard let least = margins.min(), let most = margins.max(), least >= 1 else { return nil }
+        guard most - least > 0.04 * min(crop.width, crop.height) else { return nil }
+        let even = content.insetBy(dx: -least, dy: -least).integral.intersection(crop)
+        return even.isNull || even == crop ? nil : even
     }
 
     /// The colour around the crop's edge, which the card takes: the median of a ring two pixels deep.

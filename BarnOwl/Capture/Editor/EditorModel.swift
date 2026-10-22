@@ -523,6 +523,17 @@ final class EditorModel {
         }
     }
 
+    /// The crop that would even out the space round what's in the capture, if it's uneven.
+    var balancedCrop: CGRect? {
+        renderer.balancedCrop(for: document.crop)
+    }
+
+    /// Crops so every margin round the capture's content is as small as the smallest.
+    func balanceMargins() {
+        guard let balanced = balancedCrop else { return }
+        apply("Balance Margins") { $0.crop = balanced }
+    }
+
     /// Keeps a background you made in Yours, in place of `replacing` when you edited one there.
     @discardableResult
     func saveBackground(_ background: FrameBackground, replacing id: UUID? = nil) -> UUID {

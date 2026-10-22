@@ -36,6 +36,11 @@ struct FrameInspector: View {
                             slider("Inset", value: \.inset, range: 0...40, undoName: "Change Inset")
                                 .help("Room around the capture, in its own edge colour")
                         }
+                        if model.balancedCrop != nil {
+                            Button("Balance Margins") { model.balanceMargins() }
+                                .controlSize(.small)
+                                .help("The space round what's in the capture is uneven: crop it even")
+                        }
                         if model.renderer.ownShadow {
                             ownShadowNote
                         } else {
