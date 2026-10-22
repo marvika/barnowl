@@ -1090,7 +1090,7 @@ struct CaptureActionBar: View {
                     Divider().frame(height: 18).padding(.horizontal, 2)
                     BarButton(title: "Record", symbol: "record.circle", key: "R", compact: true) { act(.record) }
                     BarButton(title: "Record a GIF", glyph: "GIF", key: "G", compact: true) { act(.recordGIF) }
-                    BarButton(title: "Scrolling Capture", symbol: "arrow.up.and.down.text.horizontal", key: "S",
+                    BarButton(title: "Scrolling Capture", symbol: "rectangle.expand.vertical", key: "S",
                               compact: true) { act(.scroll) }
                     Divider().frame(height: 18).padding(.horizontal, 2)
                 }

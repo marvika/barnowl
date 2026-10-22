@@ -155,10 +155,9 @@ enum RecordingTime {
         return String(format: "%d:%02d", minutes, rest)
     }
 
-    /// "Saved · 0:42 · 12 MB".
-    static func status(_ prefix: String, duration: TimeInterval, bytes: Int64?) -> String {
-        var parts = [prefix, text(duration)]
-        if let bytes, bytes > 0 { parts.append(ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file)) }
-        return parts.joined(separator: " · ")
+    /// "Saved · 12 MB". The card's badge already says how long it is.
+    static func status(_ prefix: String, bytes: Int64?) -> String {
+        guard let bytes, bytes > 0 else { return prefix }
+        return "\(prefix) · \(ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file))"
     }
 }

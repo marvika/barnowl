@@ -64,6 +64,9 @@ final class RecordingWriter {
     /// The newest frame that came in while paused: the picture to resume with.
     private var heldFrame: CVPixelBuffer?
     private var audioEnd: [Source: CMTime] = [:]
+    /// Each source's format at the start. A mic that changes format mid-take (Bluetooth does) is
+    /// left out from then on rather than risk the whole file.
+    private var audioFormat: [Source: (rate: Float64, channels: UInt32)] = [:]
     private var finished = false
     private(set) var frames = 0
     private(set) var droppedFrames = 0
@@ -126,6 +129,7 @@ final class RecordingWriter {
         guard !finished, pausedAt == nil, let start, let input = audio[source] else { return }
         let time = CMSampleBufferGetPresentationTimeStamp(sample)
         guard time.isValid, time >= start, !inGap(time) else { return }
+        guard sameFormat(sample, as: source) else { return }
         let out = time - offset
         // Straddled a pause: it would overlap what's written already.
         if let end = audioEnd[source], out < end - CMTime(value: 1, timescale: 1000) { return }
@@ -152,6 +156,17 @@ final class RecordingWriter {
             lastFrameTime = time
             frames += 1
         }
+    }
+
+    private func sameFormat(_ sample: CMSampleBuffer, as source: Source) -> Bool {
+        guard let format = CMSampleBufferGetFormatDescription(sample),
+              let description = CMAudioFormatDescriptionGetStreamBasicDescription(format)?.pointee else { return false }
+        let now = (rate: description.mSampleRate, channels: description.mChannelsPerFrame)
+        guard let first = audioFormat[source] else {
+            audioFormat[source] = now
+            return true
+        }
+        return first.rate == now.rate && first.channels == now.channels
     }
 
     private func inGap(_ time: CMTime) -> Bool {

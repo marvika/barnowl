@@ -114,11 +114,12 @@ enum RecordingStore {
                                     fileExtension: fileExtension)
     }
 
-    /// Where a take is written while it's recorded: a folder of its own among the temporary copies.
+    /// Where a take is written while it's recorded: a folder of its own among the temporary
+    /// copies, and a new file for each attempt.
     static func masterURL(for id: UUID) -> URL {
         let folder = CaptureStore.temporaryFolder.appending(path: id.uuidString)
         try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
-        return folder.appending(path: "Recording.mov")
+        return folder.appending(path: "Recording \(UUID().uuidString.prefix(8)).mov")
     }
 
     /// Free space where recordings are written, in bytes.

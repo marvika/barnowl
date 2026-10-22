@@ -547,6 +547,7 @@ final class CaptureCoordinator {
         capture.fileURL = file
         capture.media = media
         captures[id] = capture
+        cards.update(id, media: media)
     }
 
     /// One dialog at a time: Barn Owl's own explanation first, then macOS's.
@@ -665,7 +666,7 @@ final class CaptureCoordinator {
     func copy(_ id: UUID) {
         guard let capture = capture(id) else { return }
         if capture.media.isMovie {
-            return recording.copy(id, file: isSaved(id) ? capture.fileURL : nil, duration: capture.media.duration ?? 0)
+            return recording.copy(id, file: isSaved(id) ? capture.fileURL : nil)
         }
         let copying = copyInOrder(id, image: capture.image, scale: capture.scale)
         Task {

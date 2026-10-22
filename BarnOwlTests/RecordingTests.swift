@@ -27,10 +27,11 @@ struct RecordingWriterTests {
 
     static func time(_ seconds: Double) -> CMTime { CMTime(seconds: seconds, preferredTimescale: 1_000_000_000) }
 
-    /// 1024 frames of float audio at 48 kHz, every sample `value`.
-    static func audio(at seconds: Double, channels: Int, value: Float = 0, frames: Int = 1024) -> CMSampleBuffer {
+    /// 1024 frames of float audio at 48 kHz (or `rate`), every sample `value`.
+    static func audio(at seconds: Double, channels: Int, value: Float = 0, frames: Int = 1024,
+                      rate: Double = 48_000) -> CMSampleBuffer {
         var description = AudioStreamBasicDescription(
-            mSampleRate: 48_000, mFormatID: kAudioFormatLinearPCM,
+            mSampleRate: rate, mFormatID: kAudioFormatLinearPCM,
             mFormatFlags: kAudioFormatFlagIsFloat | kAudioFormatFlagIsPacked,
             mBytesPerPacket: UInt32(4 * channels), mFramesPerPacket: 1, mBytesPerFrame: UInt32(4 * channels),
             mChannelsPerFrame: UInt32(channels), mBitsPerChannel: 32, mReserved: 0)
@@ -47,7 +48,7 @@ struct RecordingWriterTests {
         var sample: CMSampleBuffer?
         CMAudioSampleBufferCreateReadyWithPacketDescriptions(
             allocator: nil, dataBuffer: block!, formatDescription: format!, sampleCount: frames,
-            presentationTimeStamp: CMTime(value: CMTimeValue(seconds * 48_000), timescale: 48_000),
+            presentationTimeStamp: CMTime(value: CMTimeValue(seconds * rate), timescale: CMTimeScale(rate)),
             packetDescriptions: nil, sampleBufferOut: &sample)
         return sample!
     }
@@ -192,6 +193,29 @@ struct RecordingWriterTests {
         #expect(abs(try await track.load(.timeRange).duration.seconds - 2) < 0.1)
     }
 
+    @Test func hevcAndAMicAtAnotherRateStillWrite() async throws {
+        let url = Self.url()
+        defer { try? FileManager.default.removeItem(at: url) }
+        var settings = Self.settings(microphone: true)
+        settings.codec = .hevc
+        let writer = try RecordingWriter(url: url, settings: settings)
+        for step in 0..<10 { writer.appendVideo(Self.frame(), at: Self.time(Double(step) / 10)) }
+        var seconds = 0.0
+        while seconds < 1 {
+            writer.appendAudio(Self.audio(at: seconds, channels: 1, value: 0.2, rate: 44_100), from: .microphone)
+            seconds += 1024.0 / 44_100
+        }
+        // A Bluetooth mic switching format mid-take is left out, and the file survives.
+        writer.appendAudio(Self.audio(at: 1, channels: 2, value: 0.2), from: .microphone)
+        _ = try await Self.finish(writer, at: 1).get()
+        let asset = AVURLAsset(url: url)
+        let video = try #require(try await asset.loadTracks(withMediaType: .video).first)
+        let format = try #require(try await video.load(.formatDescriptions).first)
+        #expect(CMFormatDescriptionGetMediaSubType(format) == kCMVideoCodecType_HEVC)
+        let mic = try #require(try await asset.loadTracks(withMediaType: .audio).first)
+        #expect(abs(try await mic.load(.timeRange).duration.seconds - 1) < 0.1)
+    }
+
     @Test func measuresLoudness() {
         #expect(abs(AudioLevel.rms(of: Self.audio(at: 0, channels: 1, value: 0.5)) - 0.5) < 0.001)
         #expect(AudioLevel.rms(of: Self.audio(at: 0, channels: 2, value: 0)) == 0)
@@ -253,7 +277,8 @@ struct RecordingGeometryTests {
         #expect(RecordingTime.text(42.9) == "0:42")
         #expect(RecordingTime.text(725) == "12:05")
         #expect(RecordingTime.text(3723) == "1:02:03")
-        #expect(RecordingTime.status("Saved", duration: 42, bytes: nil) == "Saved · 0:42")
+        #expect(RecordingTime.status("Saved", bytes: nil) == "Saved")
+        #expect(RecordingTime.status("GIF", bytes: 2_100_000).hasPrefix("GIF · 2"))
     }
 }
 

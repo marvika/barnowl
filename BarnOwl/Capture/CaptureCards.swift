@@ -40,7 +40,7 @@ final class CaptureCards {
     static let width: CGFloat = 236
     private static let shown = 3
 
-    init(coordinator: CaptureCoordinator) {
+    init(coordinator: CaptureCoordinator?) {
         self.coordinator = coordinator
     }
 
@@ -68,6 +68,12 @@ final class CaptureCards {
     }
 
     func has(_ id: UUID) -> Bool { cards.contains { $0.id == id } }
+
+    /// A GIF that couldn't be made is a video after all.
+    func update(_ id: UUID, media: CaptureMedia) {
+        guard let index = cards.firstIndex(where: { $0.id == id }) else { return }
+        cards[index].media = media
+    }
 
     func update(_ id: UUID, link: CardLink?) {
         guard let index = cards.firstIndex(where: { $0.id == id }) else { return }
@@ -291,7 +297,7 @@ struct CaptureCardView: View {
                 CardDragArea(url: { cards.file(card.id) }, image: card.thumbnail,
                              click: { cards.edit(card.id) }, dropped: { cards.remove(card.id) })
             }
-            .overlay(alignment: .topTrailing) {
+            .overlay(alignment: .bottomTrailing) {
                 if card.media.isMovie && !hovering { MovieBadge(media: card.media).padding(6).transition(.opacity) }
             }
             .overlay(alignment: .bottom) {
@@ -313,7 +319,7 @@ struct CaptureCardView: View {
         IconButton(symbol: cards.isSaved(card.id) ? "folder" : "square.and.arrow.down",
                    label: cards.isSaved(card.id) ? "Show in Finder" : "Save") { cards.save(card.id) }
         if !card.media.isGIF {
-            IconButton(symbol: "photo.stack", label: "Make GIF") { cards.makeGIF(card.id) }
+            IconButton(glyph: "GIF", label: "Make GIF") { cards.makeGIF(card.id) }
         }
         IconButton(symbol: "pencil", label: "Edit", prominent: true) { cards.edit(card.id) }
     }
@@ -374,7 +380,9 @@ struct CaptureCardView: View {
 
 /// A round button with a symbol, for the card's hover row.
 private struct IconButton: View {
-    let symbol: String
+    var symbol = ""
+    /// A few letters in place of a symbol, like GIF.
+    var glyph = ""
     let label: String
     var prominent = false
     let action: () -> Void
@@ -382,8 +390,15 @@ private struct IconButton: View {
 
     var body: some View {
         Button(action: action) {
-            Image(systemName: symbol)
-                .font(.system(size: 12, weight: .semibold))
+            Group {
+                if glyph.isEmpty {
+                    Image(systemName: symbol).font(.system(size: 12, weight: .semibold))
+                } else {
+                    Text(glyph).font(.system(size: 8.5, weight: .heavy, design: .rounded))
+                        .padding(.horizontal, 2.5).padding(.vertical, 1)
+                        .overlay { RoundedRectangle(cornerRadius: 3).strokeBorder(.white, lineWidth: 1.2) }
+                }
+            }
                 .foregroundStyle(.white)
                 .frame(width: 30, height: 30)
                 .background(prominent ? AnyShapeStyle(Brand.lavenderFill) : AnyShapeStyle(.black.opacity(hovering ? 0.6 : 0.45)),

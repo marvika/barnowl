@@ -119,14 +119,14 @@ struct RecordBar: View {
 
     private var kindPicker: some View {
         HStack(spacing: 0) {
-            segment("Video", key: "R", selected: !makesGIF) { setGIF(false) }
-            segment("GIF", key: "G", selected: makesGIF) { setGIF(true) }
+            segment("Video", help: "Record a video (R)", selected: !makesGIF) { setGIF(false) }
+            segment("GIF", help: "Record a GIF (G)", selected: makesGIF) { setGIF(true) }
         }
         .padding(2)
         .background(.white.opacity(0.1), in: .capsule)
     }
 
-    private func segment(_ title: String, key: String, selected: Bool, action: @escaping () -> Void) -> some View {
+    private func segment(_ title: String, help: String, selected: Bool, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Text(title)
                 .font(.system(size: 12.5, weight: .semibold))
@@ -136,7 +136,7 @@ struct RecordBar: View {
                 .contentShape(.capsule)
         }
         .buttonStyle(.plain)
-        .help("\(title) (\(key))")
+        .help(help)
         .accessibilityAddTraits(selected ? .isSelected : [])
     }
 

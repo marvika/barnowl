@@ -17,7 +17,8 @@ final class RecordingCoordinator {
         let kind: Capture.Kind
         let appName: String?
         let options: RecordingOptions
-        let master: URL
+        /// Where this attempt is written; a restart writes a new one.
+        var master: URL
         var date = Date()
         /// Said on the card when the mic you chose couldn't be used.
         var note: String?
@@ -151,7 +152,11 @@ final class RecordingCoordinator {
         case .abortStart:
             hideControls()
             let recorder = self.recorder
-            Task { await recorder?.cancel() }
+            Task {
+                // The start, cut short, tears its stream down itself; nothing waits on it.
+                await recorder?.cancel()
+                send(.finished)
+            }
         case .pauseCapture:
             recorder?.pause()
             clock.pause(at: Self.now)
@@ -250,6 +255,8 @@ final class RecordingCoordinator {
         clock = RecordingClock()
         model.elapsed = 0
         take?.date = Date()
+        // A new file: the old one is still being let go.
+        if let id = take?.id { take?.master = RecordingStore.masterURL(for: id) }
         Task {
             await old?.cancel()
             guard machine.phase == .countingDown || machine.phase == .starting else { return }
@@ -340,11 +347,16 @@ final class RecordingCoordinator {
         ticker?.cancel()
         ticker = Task { [weak self] in
             var ticks = 0
+            var shown = -1
             while !Task.isCancelled {
                 guard let self else { return }
                 let elapsed = self.clock.elapsed(at: Self.now)
-                if Int(elapsed) != Int(self.model.elapsed) || elapsed < self.model.elapsed { self.model.elapsed = elapsed }
-                self.statusItem?.update(elapsed: elapsed, paused: self.model.isPaused)
+                // Only when the second changes: the pill and the menu bar redraw no more than they must.
+                if Int(elapsed) != shown {
+                    shown = Int(elapsed)
+                    self.model.elapsed = elapsed
+                    self.statusItem?.update(elapsed: elapsed, paused: self.model.isPaused)
+                }
                 ticks += 1
                 if ticks % 40 == 0, let free = RecordingStore.freeSpace(), free < RecordingStore.roomToGoOn {
                     self.stoppedEarly = "Disk nearly full"
@@ -419,7 +431,7 @@ final class RecordingCoordinator {
         if kept { movies[take.id] = CaptureLibrary.movie(take.id) }
 
         let bytes = saved.flatMap(CaptureLibrary.size(of:))
-        var status = saved == nil ? "Couldn't save · drag it from here" : RecordingTime.status(label, duration: output.duration, bytes: bytes)
+        var status = saved == nil ? "Couldn't save · drag it from here" : RecordingTime.status(label, bytes: bytes)
         if let note = reason ?? take.note { status = "\(note) · \(status)" }
         host.cards.update(take.id, status: status, kept: saved != nil)
         NSAccessibility.post(element: NSApp as Any, notification: .announcementRequested,
@@ -475,11 +487,10 @@ final class RecordingCoordinator {
     }
 
     /// A recording's file on the clipboard.
-    func copy(_ id: UUID, file: URL?, duration: TimeInterval) {
+    func copy(_ id: UUID, file: URL?) {
         guard let file = file ?? movie(for: id) else { return NSSound.beep() }
         RecordingStore.copy(file)
-        host?.cards.update(id, status: RecordingTime.status(host?.isSaved(id) == true ? "Copied and saved" : "Copied",
-                                                            duration: duration, bytes: nil), kept: true)
+        host?.cards.update(id, status: host?.isSaved(id) == true ? "Copied and saved" : "Copied", kept: true)
     }
 
     /// Saves a recording again whose file has gone: from the kept movie, mixed as before.
@@ -501,8 +512,7 @@ final class RecordingCoordinator {
             }
             CaptureLibrary.setFile(url, for: id)
             host?.recordingSaved(id, file: url, media: .video(duration: capture.media.duration ?? 0))
-            host?.cards.update(id, status: RecordingTime.status("Saved", duration: capture.media.duration ?? 0,
-                                                                bytes: CaptureLibrary.size(of: url)), kept: true)
+            host?.cards.update(id, status: RecordingTime.status("Saved", bytes: CaptureLibrary.size(of: url)), kept: true)
         }
     }
 
@@ -520,8 +530,8 @@ final class RecordingCoordinator {
                 return NSSound.beep()
             }
             RecordingStore.copy(url)
-            host.cards.update(id, status: RecordingTime.status("GIF copied and saved", duration: capture.media.duration ?? 0,
-                                                               bytes: CaptureLibrary.size(of: url)), kept: true)
+            host.cards.update(id, status: RecordingTime.status("GIF copied and saved", bytes: CaptureLibrary.size(of: url)),
+                              kept: true)
         }
     }
 }

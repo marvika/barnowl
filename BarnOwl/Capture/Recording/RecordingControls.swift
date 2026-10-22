@@ -300,6 +300,8 @@ final class RecordingCountdown {
         let size = panel.fittingSize
         panel.setFrame(CGRect(x: centre.x - size.width / 2, y: centre.y - size.height / 2, width: size.width, height: size.height),
                        display: false)
+        // Return and Esc reach it; after a restart, your app had the keyboard back.
+        NSApp.activate()
         panel.makeKeyAndOrderFront(nil)
         self.panel = panel
         monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
