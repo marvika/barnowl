@@ -313,6 +313,31 @@ enum RedactStrength: String, Codable, CaseIterable, Sendable {
     }
 }
 
+/// How much the pen steadies your hand: the line trails the pointer on a short string, so
+/// wobbles are taken out while you draw.
+enum PenSmoothing: String, Codable, CaseIterable, Sendable {
+    case off, low, medium, high
+
+    var title: String {
+        switch self {
+        case .off: "Off"
+        case .low: "Low"
+        case .medium: "Medium"
+        case .high: "High"
+        }
+    }
+
+    /// The string's length, in screen points.
+    var radius: Double {
+        switch self {
+        case .off: 0
+        case .low: 5
+        case .medium: 11
+        case .high: 22
+        }
+    }
+}
+
 enum SpotlightShape: String, Codable, CaseIterable, Sendable {
     case rectangle, ellipse
 
@@ -344,6 +369,7 @@ struct MarkStyle: Codable, Equatable, Sendable {
     var redact = RedactStyle.solid
     var strength = RedactStrength.medium
     var spotlight = SpotlightShape.rectangle
+    var smoothing = PenSmoothing.medium
     /// How dark a spotlight makes everything around it, from 0 to 1.
     var dim: Double = 0.5
 
@@ -367,6 +393,7 @@ struct MarkStyle: Codable, Equatable, Sendable {
         redact = try c.decodeIfPresent(RedactStyle.self, forKey: .redact) ?? base.redact
         strength = try c.decodeIfPresent(RedactStrength.self, forKey: .strength) ?? base.strength
         spotlight = try c.decodeIfPresent(SpotlightShape.self, forKey: .spotlight) ?? base.spotlight
+        smoothing = try c.decodeIfPresent(PenSmoothing.self, forKey: .smoothing) ?? base.smoothing
         dim = try c.decodeIfPresent(Double.self, forKey: .dim) ?? base.dim
     }
 }

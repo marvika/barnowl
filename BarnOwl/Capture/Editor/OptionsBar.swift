@@ -130,6 +130,7 @@ private struct MarkOptions: View {
         case .pen:
             ColourSection(model: model, kind: kind, actions: actions)
             SizeSection(model: model, kind: kind)
+            SmoothingSection(model: model)
             MoreButton(model: model, kind: kind)
         case .highlighter:
             ColourSection(model: model, kind: kind, actions: actions)
@@ -635,6 +636,29 @@ private struct PrivateInfoButton: View {
             }
             .help("Find emails, keys and other private things to hide (⇧B)")
         }
+    }
+}
+
+/// The pen's steadying: how far the line trails the pointer.
+private struct SmoothingSection: View {
+    let model: EditorModel
+
+    var body: some View {
+        let style = model.shownStyle
+        HStack(spacing: 6) {
+            Text("Smoothing").font(.system(size: 12)).foregroundStyle(.secondary)
+            Picker("Smoothing", selection: Binding(get: { style.smoothing }, set: { level in
+                model.updateStyle("Change Smoothing") { $0.smoothing = level }
+            })) {
+                ForEach(PenSmoothing.allCases, id: \.self) { level in
+                    Text(level.title).tag(level)
+                }
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            .fixedSize()
+        }
+        .help("Steadies your hand: the line trails the pointer and smooths out wobbles")
     }
 }
 

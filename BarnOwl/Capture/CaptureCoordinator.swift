@@ -447,11 +447,25 @@ final class CaptureCoordinator {
     /// A capture by id: from memory, or back from the library.
     func capture(_ id: UUID) -> Capture? {
         if let capture = captures[id] { return capture }
-        guard let entry = CaptureLibrary.entry(id), let image = CaptureLibrary.original(id) else { return nil }
+        guard let entry = CaptureLibrary.entry(id), let original = CaptureLibrary.original(id) else { return nil }
+        // As it looks now: its marks drawn on, so copying, pinning or dragging it from
+        // history gives what the thumbnail shows. The editor starts from the original.
+        let document = entry.edited ? storedDocument(id) : nil
+        let image = document.flatMap { renderer(for: original, scale: entry.scale, document: $0).render($0) } ?? original
         let capture = Capture(id: id, image: image, scale: entry.scale, kind: Capture.Kind(rawValue: entry.kind) ?? .area,
                               date: entry.date, appName: entry.appName, fileURL: entry.fileURL)
         remember(capture)
         return capture
+    }
+
+    /// Draws marks over `image`, with the desktop picture when the frame asks for it.
+    private func renderer(for image: CGImage, scale: CGFloat, document: EditorDocument) -> AnnotationRenderer {
+        let renderer = AnnotationRenderer(image: image, scale: scale)
+        if document.frame.background == .desktop, let screen = NSScreen.main ?? NSScreen.screens.first,
+           let url = NSWorkspace.shared.desktopImageURL(for: screen) {
+            renderer.setDesktop(AnnotationRenderer.loadDesktopPicture(from: url))
+        }
+        return renderer
     }
 
     func status(copied: Bool, saved: Bool) -> String {
@@ -628,18 +642,20 @@ final class CaptureCoordinator {
         let before = CaptureLibrary.document(id)
         var document = storedDocument(id) ?? EditorDocument(imageSize: CGSize(width: capture.image.width, height: capture.image.height),
                                                              scale: capture.scale)
+        // What it looks like now, for Undo; marks are drawn again over the original, never twice.
         let original = capture.image
+        let base = storedDocument(id) != nil ? (CaptureLibrary.original(id) ?? original) : original
         let book = EditorModel.savedStyleBook()
         let style = book.hideStyle
         for finding in findings {
             let solid = style.redact == .solid && !book.redactColourChosen
-            let colour = solid ? ImageSampler.redactionColour(in: original, rect: finding.rect) : book.redactColour
+            let colour = solid ? ImageSampler.redactionColour(in: base, rect: finding.rect) : book.redactColour
             var mark = Mark(kind: .redact, colour: colour, style: style,
                             start: finding.rect.origin, end: CGPoint(x: finding.rect.maxX, y: finding.rect.maxY))
             mark.origin = MarkOrigin(source: .privateInfo, category: finding.kind.rawValue)
             document.marks.append(mark)
         }
-        let renderer = AnnotationRenderer(image: original, scale: capture.scale)
+        let renderer = renderer(for: base, scale: capture.scale, document: document)
         let covering = document
         // Nothing secret to paste while the covered copy is being made.
         if clipboardHolds(id) { NSPasteboard.general.clearContents() }

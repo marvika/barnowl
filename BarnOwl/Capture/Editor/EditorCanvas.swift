@@ -67,6 +67,8 @@ final class EditorCanvas: NSView, NSTextViewDelegate, NSMenuItemValidation {
     var hoverTask: Task<Void, Never>?
     var guides: [SnapGuide] = []
     var marquee: CGRect?
+    /// While the pen draws with smoothing: where the line is, and the pointer pulling it.
+    var penGuide: (tip: CGPoint, pointer: CGPoint)?
     var trackingArea: NSTrackingArea?
     /// The pasteboard's marks, and how many times in a row they've been pasted.
     var pasteRun = (change: 0, count: 0)
