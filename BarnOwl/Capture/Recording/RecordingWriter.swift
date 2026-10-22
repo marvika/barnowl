@@ -14,7 +14,7 @@ final class RecordingWriter {
         case system, microphone
 
         /// The track's name in the file, which the video editor reads back.
-        var trackName: String { self == .system ? "Computer audio" : "Microphone" }
+        var trackName: String { self == .system ? "Computer" : "Mic" }
     }
 
     struct Settings: Sendable {

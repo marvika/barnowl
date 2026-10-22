@@ -147,7 +147,7 @@ struct RecordingWriterTests {
             let items = AVMetadataItem.metadataItems(from: metadata, filteredByIdentifier: .quickTimeUserDataTrackName)
             if let name = try await items.first?.load(.stringValue) { names.append(name) }
         }
-        #expect(names == ["Computer audio", "Microphone"])
+        #expect(names == ["Computer", "Mic"])
         let micFormat = try #require(try await tracks[1].load(.formatDescriptions).first)
         #expect(CMAudioFormatDescriptionGetStreamBasicDescription(micFormat)?.pointee.mChannelsPerFrame == 1)
     }
