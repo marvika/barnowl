@@ -43,7 +43,7 @@ before 1.0, a minor version can change behaviour.
       with padding, rounded corners, a shadow and an aspect ratio for
       sharing.
     - **Private info:** the editor reads the capture's text on your Mac and
-      offers to hide keys, passwords, card numbers, emails and other
+      offers to blur keys, passwords, card numbers, emails and other
       personal details; ⇧B reviews what it found before you hide it. Done
       asks once if a key is still showing.
     - Done (⌘Return) copies it and saves over its file. Close without Done
