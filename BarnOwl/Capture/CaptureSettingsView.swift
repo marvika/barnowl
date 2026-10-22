@@ -62,11 +62,14 @@ struct CapturePane: View {
                     Text("Don't keep them").tag(0)
                 }
                 LabeledContent("Kept captures") {
-                    Button(cleared ? "Cleared" : "Clear Now") {
-                        CaptureLibrary.clear()
-                        cleared = true
+                    HStack(spacing: 8) {
+                        Button("Show History…") { model.capture.showHistory() }
+                        Button(cleared ? "Cleared" : "Clear Now") {
+                            CaptureLibrary.clear()
+                            cleared = true
+                        }
+                        .disabled(cleared)
                     }
-                    .disabled(cleared)
                 }
             } header: {
                 Text("History")
@@ -106,6 +109,7 @@ struct CapturePane: View {
             LabeledContent("Capture the same area again") { KeyboardShortcuts.Recorder(for: .captureSameArea) }
             LabeledContent("Edit the last capture") { KeyboardShortcuts.Recorder(for: .editLastCapture) }
             LabeledContent("Copy text from the screen") { KeyboardShortcuts.Recorder(for: .captureText) }
+            LabeledContent("Show capture history") { KeyboardShortcuts.Recorder(for: .captureHistory) }
             Toggle(isOn: $appleKeys) {
                 Text("Also answer ⇧⌘4 and ⇧⌘3")
                 Text(systemKeysOn

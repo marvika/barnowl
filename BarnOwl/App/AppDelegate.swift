@@ -355,8 +355,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     }
                 }
             case ("capture", _):
-                // barnowl://capture, or ?mode=window, screen or same (the last area again)
+                // barnowl://capture, or ?mode=window, screen, same (the last area again) or history
                 switch query?.first(where: { $0.name == "mode" })?.value {
+                case "history": model.capture.showHistory()
                 case "screen": model.capture.captureScreen()
                 case "same": model.capture.captureSameArea()
                 case "text": model.capture.captureText()

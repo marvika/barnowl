@@ -98,6 +98,7 @@ final class AppModel {
         case .captureSameArea: capture.captureSameArea()
         case .editLastCapture: capture.editLastCapture()
         case .captureText: capture.captureText()
+        case .captureHistory: capture.showHistory()
         case .settings(let pane): showSettings(SettingsPane(rawValue: pane.rawValue))
         }
     }
