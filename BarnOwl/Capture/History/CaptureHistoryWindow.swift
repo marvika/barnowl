@@ -240,7 +240,16 @@ final class CaptureHistoryWindowController: NSWindowController, NSWindowDelegate
         grid.apply()
         let state = model.state
         empty.isHidden = state == .grid || state == .loading
-        window?.subtitle = model.subtitle
+        updateSubtitle()
+    }
+
+    private func updateSubtitle() {
+        guard let window else { return }
+        window.subtitle = model.subtitle(compact: window.frame.width < 720)
+    }
+
+    func windowDidResize(_ notification: Notification) {
+        updateSubtitle()
     }
 
     /// From the "isn't keeping captures" page.

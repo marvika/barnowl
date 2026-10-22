@@ -76,20 +76,27 @@ final class CaptureHistoryGrid: NSView, NSCollectionViewDelegate, NSCollectionVi
 
     // MARK: Showing
 
-    /// Shows the model's days, keeping the same captures selected.
+    /// Shows the model's days, keeping the same captures selected. One a search hides stays
+    /// selected underneath, and is again when the search is cleared.
     func apply(animated: Bool = true) {
         guard let dataSource else { return }
         let selected = selectedIDs
+        let wanted = selected + hiddenSelection.filter { !selected.contains($0) }
         var snapshot = NSDiffableDataSourceSnapshot<Date, UUID>()
         for day in model.days {
             snapshot.appendSections([day.start])
             snapshot.appendItems(day.items.map(\.id), toSection: day.start)
         }
         dataSource.apply(snapshot, animatingDifferences: animated && window?.isVisible == true)
-        let still = selected.filter { dataSource.indexPath(for: $0) != nil }
-        if still != selected { select(still, scroll: false) }
+        let shown = wanted.filter { dataSource.indexPath(for: $0) != nil }
+        let hidden = wanted.filter { dataSource.indexPath(for: $0) == nil && model.item($0) != nil }
+        if shown != selected { select(shown, scroll: false) }
+        hiddenSelection = hidden
         refreshVisible()
     }
+
+    /// Selected, but hidden by the search.
+    private var hiddenSelection: [UUID] = []
 
     /// The selected captures, in grid order.
     var selectedIDs: [UUID] {
@@ -99,6 +106,7 @@ final class CaptureHistoryGrid: NSView, NSCollectionViewDelegate, NSCollectionVi
 
     func select(_ ids: [UUID], scroll: Bool) {
         guard let dataSource else { return }
+        hiddenSelection = []
         let paths = Set(ids.compactMap { dataSource.indexPath(for: $0) })
         collectionView.selectionIndexPaths = paths
         if scroll, let first = paths.min() {
@@ -165,6 +173,17 @@ final class CaptureHistoryGrid: NSView, NSCollectionViewDelegate, NSCollectionVi
         let tiles = CaptureHistory.tiles(across: width - HistoryStyle.sideInset * 2, minimum: HistoryStyle.minimumTileWidth,
                                          spacing: HistoryStyle.spacing)
         return NSSize(width: tiles.width, height: HistoryStyle.tileHeight(forWidth: tiles.width))
+    }
+
+    // MARK: Choosing
+
+    /// You chose something else: what the search hid is let go.
+    func collectionView(_ collectionView: NSCollectionView, didSelectItemsAt indexPaths: Set<IndexPath>) {
+        hiddenSelection = []
+    }
+
+    func collectionView(_ collectionView: NSCollectionView, didDeselectItemsAt indexPaths: Set<IndexPath>) {
+        hiddenSelection = []
     }
 
     // MARK: Dragging out
@@ -257,6 +276,8 @@ final class HistoryTileItem: NSCollectionViewItem {
     private var item: CaptureHistory.Item?
     private var thumbnail: NSImage?
     private var focused = true
+    /// Reused for another capture, and not drawn for it yet.
+    private var reused = true
 
     override func loadView() {
         let root = PassThroughView()
@@ -273,7 +294,8 @@ final class HistoryTileItem: NSCollectionViewItem {
     }
 
     func show(_ item: CaptureHistory.Item?, thumbnail: NSImage?, focused: Bool) {
-        guard item != self.item || thumbnail !== self.thumbnail || focused != self.focused else { return }
+        guard reused || item != self.item || thumbnail !== self.thumbnail || focused != self.focused else { return }
+        reused = false
         self.item = item
         self.thumbnail = thumbnail
         self.focused = focused
@@ -285,11 +307,13 @@ final class HistoryTileItem: NSCollectionViewItem {
         render()
     }
 
+    /// The grid shows the next capture straight after; drawing nothing in between keeps
+    /// scrolling from flickering.
     override func prepareForReuse() {
         super.prepareForReuse()
         item = nil
         thumbnail = nil
-        render()
+        reused = true
     }
 
     private func render() {

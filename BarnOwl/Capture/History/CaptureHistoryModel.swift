@@ -44,7 +44,10 @@ final class CaptureHistoryModel {
     var isSearching: Bool { !CaptureHistory.terms(of: query).isEmpty }
 
     /// Under the window's title: how many, and for how long.
-    var subtitle: String {
+    var subtitle: String { subtitle(compact: false) }
+
+    /// Just how many, for a narrow window.
+    func subtitle(compact: Bool) -> String {
         switch state {
         case .off: return "Not keeping captures"
         case .loading: return ""
@@ -52,6 +55,7 @@ final class CaptureHistoryModel {
         case .noResults, .grid:
             let shown = days.reduce(0) { $0 + $1.items.count }
             if isSearching { return "\(shown) of \(Self.count(all.count))" }
+            if compact { return Self.count(all.count) }
             return "\(Self.count(all.count)) · kept for \(HistoryEmptyState.days(keepDays))"
         }
     }

@@ -258,6 +258,7 @@ struct CaptureHistoryModelTests {
         model.show([first, second])
         #expect(model.state == .grid)
         #expect(model.subtitle == "2 captures · kept for 30 days")
+        #expect(model.subtitle(compact: true) == "2 captures")
         model.query = "plan"
         #expect(model.days.flatMap(\.items).map(\.id) == [first.id])
         #expect(model.subtitle == "1 of 2 captures")
@@ -296,5 +297,77 @@ struct CaptureHistoryModelTests {
         try await Task.sleep(for: .milliseconds(200))
         #expect(heard.ids.contains(entry.id))
         #expect(heard.ids.contains(nil))
+    }
+}
+
+/// The window itself, offscreen: the keys, Remove from History and Undo.
+@MainActor
+struct CaptureHistoryWindowTests {
+    private func key(_ code: UInt16, _ characters: String, in window: NSWindow) -> NSEvent {
+        NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [], timestamp: 0, windowNumber: window.windowNumber,
+                         context: nil, characters: characters, charactersIgnoringModifiers: characters, isARepeat: false,
+                         keyCode: code)!
+    }
+
+    private func waitUntil(_ condition: () -> Bool) async throws {
+        for _ in 0..<40 where !condition() { try await Task.sleep(for: .milliseconds(50)) }
+    }
+
+    @Test func removesWithDeleteAndUndoes() async throws {
+        let root = FileManager.default.temporaryDirectory.appending(path: "capture-history-window-\(UUID())")
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let image = try #require(CaptureStoreTests.image(width: 64, height: 40))
+        let today = Calendar.current.startOfDay(for: Date())
+        var ids: [UUID] = []
+        for hour in [12, 11, 10] {
+            let entry = CaptureLibrary.Entry(id: UUID(), date: today.addingTimeInterval(Double(hour) * 3600), scale: 2,
+                                             kind: "selection", appName: "Notes", fileURL: nil, edited: false)
+            try CaptureLibrary.store(image, entry: entry, in: root)
+            ids.append(entry.id)
+        }
+        let controller = CaptureHistoryWindowController(host: nil, root: root)
+        let window = try #require(controller.window)
+        // Tests share the app's defaults: never remember this window's frame.
+        window.setFrameAutosaveName("")
+        window.setFrame(NSRect(x: 0, y: 0, width: 900, height: 600), display: false)
+        controller.model.keepDays = 30
+        controller.model.reload()
+        try await waitUntil { controller.model.all.count == 3 }
+        #expect(controller.model.days.flatMap { $0.items.map(\.id) } == ids)
+        let grid = controller.grid
+        window.makeFirstResponder(grid.collectionView)
+        grid.select([ids[0]], scroll: false)
+
+        // → moves on; Delete removes it in one step and selects the next.
+        grid.collectionView.keyDown(with: key(124, "\u{F703}", in: window))
+        #expect(grid.selectedIDs == [ids[1]])
+        grid.collectionView.keyDown(with: key(51, "\u{7F}", in: window))
+        #expect(controller.model.item(ids[1]) == nil)
+        #expect(CaptureLibrary.entry(ids[1], in: root) == nil)
+        #expect(grid.selectedIDs == [ids[2]])
+        #expect(window.undoManager?.undoMenuItemTitle == "Undo Remove from History")
+
+        // Undo brings it back, selected.
+        controller.undo(nil)
+        try await waitUntil { controller.model.item(ids[1]) != nil && grid.selectedIDs == [ids[1]] }
+        #expect(CaptureLibrary.entry(ids[1], in: root) != nil)
+        #expect(grid.selectedIDs == [ids[1]])
+
+        // Esc clears a search before it closes anything; what was selected still is.
+        controller.model.query = "nothing like it"
+        #expect(controller.model.state == .noResults)
+        #expect(grid.selectedIDs.isEmpty)
+        grid.collectionView.keyDown(with: key(53, "\u{1B}", in: window))
+        #expect(controller.model.query.isEmpty)
+        #expect(grid.selectedIDs == [ids[1]])
+
+        // Closing lets removed captures go for good.
+        grid.select([ids[0]], scroll: false)
+        controller.removeFromHistory(nil)
+        #expect(FileManager.default.fileExists(atPath: CaptureLibrary.removedFolder(in: root).path))
+        controller.windowWillClose(Notification(name: NSWindow.willCloseNotification))
+        #expect(!FileManager.default.fileExists(atPath: CaptureLibrary.removedFolder(in: root).path))
+        #expect(CaptureLibrary.entries(in: root).count == 2)
     }
 }
