@@ -59,6 +59,29 @@ enum BackgroundHarmony {
         return Suggestions(gradients: kept, colours: Array(colours.prefix(5)), hue: hue, edgeLightness: edge)
     }
 
+    /// A pleasing gradient within 30° of `hue`, different every time: a colour, and a second
+    /// one turned toward dusk and a little deeper, at a 45° step. Kept apart from the capture's
+    /// edge, as the suggestions are.
+    static func shuffled(around hue: Double, edgeLightness: Double, using generator: inout some RandomNumberGenerator)
+        -> CustomGradient {
+        var gradient = FrameGradient.dawn.custom
+        for _ in 0..<12 {
+            let start: Double = hue + Double.random(in: -30...30, using: &generator)
+            let lightness: Double = Double.random(in: 0.55...0.9, using: &generator)
+            let chroma: Double = Double.random(in: 0.07...0.17, using: &generator)
+            let turn: Double = Double.random(in: 25...70, using: &generator)
+            // Near dusk already, it turns the other way rather than standing still.
+            let towardDusk: Double = toward(start, by: turn)
+            let end: Double = abs(towardDusk - start) < 10 ? start - turn : towardDusk
+            let deeper: Double = lightness - Double.random(in: 0.08...0.22, using: &generator)
+            let angle: Double = Double(Int.random(in: 0..<8, using: &generator)) * 45
+            let colours = [OKLab.lch(lightness, chroma, start).colour, OKLab.lch(deeper, chroma, end).colour]
+            gradient = CustomGradient(colours: colours, angle: angle)
+            if abs(meanLightness(gradient) - edgeLightness) > separation { break }
+        }
+        return gradient
+    }
+
     /// `hue` turned `degrees` toward the shade hue, the shorter way, stopping there.
     static func toward(_ hue: Double, by degrees: Double) -> Double {
         let gap = signedTurn(from: hue, to: shadeHue)

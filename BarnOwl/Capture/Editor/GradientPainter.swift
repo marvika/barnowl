@@ -45,7 +45,7 @@ enum GradientPainter {
                                        options: options)
         }
         if gradient.softLight { drawSoftLight(in: canvas, context) }
-        drawGrain(in: canvas, context)
+        drawGrain(in: canvas, context, alpha: gradient.grain ? visibleGrainAlpha : grainAlpha)
         context.restoreGState()
     }
 
@@ -107,17 +107,19 @@ enum GradientPainter {
         context.drawRadialGradient(glow, startCenter: centre, startRadius: 0, endCenter: centre, endRadius: reach, options: [])
     }
 
-    /// The grain's strength: about one level of 8-bit either way, so it dithers without showing.
+    /// The grain's strength: a level or two of 8-bit either way, so it dithers without showing.
     static let grainAlpha: CGFloat = 0.04
+    /// Grain you can see, when you ask for it.
+    static let visibleGrainAlpha: CGFloat = 0.16
 
     /// A fixed noise tile laid over the gradient in overlay mode, so the same document always
     /// renders to the same bytes.
-    static func drawGrain(in canvas: CGRect, _ context: CGContext) {
+    static func drawGrain(in canvas: CGRect, _ context: CGContext, alpha: CGFloat = grainAlpha) {
         guard let tile = noise.image else { return }
         context.saveGState()
         context.clip(to: canvas)
         context.setBlendMode(.overlay)
-        context.setAlpha(grainAlpha)
+        context.setAlpha(alpha)
         context.interpolationQuality = .none
         let size = CGFloat(Noise.side)
         context.draw(tile, in: CGRect(x: 0, y: 0, width: size, height: size), byTiling: true)

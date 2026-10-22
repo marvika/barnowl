@@ -146,7 +146,9 @@ struct FrameInspector: View {
     /// The capture's own colours, then lavender, white and ink, for the popover's chips.
     private var chips: [MarkColour] {
         var chips: [MarkColour] = []
-        for colour in (model.harmony?.colours ?? []) + [.lavender, .white, .ink] where !chips.contains(colour) {
+        // Colours too close to tell apart show once.
+        for colour in (model.harmony?.colours ?? []) + [.lavender, .white, .ink]
+            where !chips.contains(where: { BackgroundHarmony.distance($0, colour) < 0.04 }) {
             chips.append(colour)
         }
         return Array(chips.prefix(8))

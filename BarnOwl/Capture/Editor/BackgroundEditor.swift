@@ -108,6 +108,11 @@ struct BackgroundEditor: View {
             colours
             if draft.fill != .colour {
                 gradientOptions
+            } else {
+                HStack {
+                    Spacer()
+                    shuffleButton
+                }
             }
         }
         .font(.system(size: 12))
@@ -196,9 +201,12 @@ struct BackgroundEditor: View {
                     draft.gradient = draft.gradient.reversed
                     selected = max(0, count - 1 - selected)
                 } label: {
-                    Label("Reverse", systemImage: "arrow.left.arrow.right")
+                    Image(systemName: "arrow.left.arrow.right")
+                        .frame(width: 18)
                 }
-                .help(draft.fill == .radial ? "Swap the inside and outside colours" : "Run the colours the other way")
+                .help(draft.fill == .radial ? "Reverse: swap the inside and outside colours" : "Reverse: run the colours the other way")
+                .accessibilityLabel("Reverse")
+                shuffleButton
             }
             HStack {
                 VStack(alignment: .leading, spacing: 1) {
@@ -212,6 +220,42 @@ struct BackgroundEditor: View {
                     .controlSize(.mini)
             }
             .help("A soft light from the top left, as through a window")
+            HStack {
+                Text("Grain")
+                Spacer()
+                Toggle("Grain", isOn: $draft.gradient.grain)
+                    .toggleStyle(.switch)
+                    .labelsHidden()
+                    .controlSize(.mini)
+            }
+            .help("A fine texture, like paper")
+        }
+    }
+
+    /// A pleasing gradient round the capture's colours, different each time.
+    private var shuffleButton: some View {
+        Button {
+            shuffle()
+        } label: {
+            Image(systemName: "die.face.5")
+                .frame(width: 18)
+        }
+        .help("Shuffle: a new gradient around the capture's colours")
+        .accessibilityLabel("Shuffle")
+    }
+
+    private func shuffle() {
+        let harmony = model.harmony
+        var generator = SystemRandomNumberGenerator()
+        let hue = harmony?.hue ?? BackgroundHarmony.fallbackHue
+        var next = BackgroundHarmony.shuffled(around: hue, edgeLightness: harmony?.edgeLightness ?? 0.5, using: &generator)
+        next.softLight = draft.gradient.softLight
+        next.grain = draft.gradient.grain
+        if draft.fill == .colour {
+            draft.colour = next.stops.first?.colour ?? draft.colour
+        } else {
+            draft.gradient = next
+            selected = 0
         }
     }
 

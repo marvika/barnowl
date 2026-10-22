@@ -302,6 +302,48 @@ struct CaptureEditorFrameTests {
         #expect(suggestions.edgeLightness > 0.7)
     }
 
+    /// The same "random" numbers every run.
+    struct SplitMix: RandomNumberGenerator {
+        var state: UInt64
+        mutating func next() -> UInt64 {
+            state &+= 0x9E37_79B9_7F4A_7C15
+            var z = state
+            z = (z ^ (z >> 30)) &* 0xBF58_476D_1CE4_E5B9
+            z = (z ^ (z >> 27)) &* 0x94D0_49BB_1331_11EB
+            return z ^ (z >> 31)
+        }
+    }
+
+    @Test func shuffleStaysNearTheCapturesHueAndApartFromItsEdge() {
+        var generator = SplitMix(state: 7)
+        let hue = MarkColour.blue.oklab.hue
+        var seen: Set<CustomGradient> = []
+        for _ in 0..<20 {
+            let gradient = BackgroundHarmony.shuffled(around: hue, edgeLightness: 0.98, using: &generator)
+            seen.insert(gradient)
+            #expect(BackgroundHarmony.angle(between: gradient.stops[0].colour.oklab.hue, and: hue) <= 31)
+            #expect(abs(BackgroundHarmony.meanLightness(gradient) - 0.98) > BackgroundHarmony.separation)
+            #expect(gradient.angle.truncatingRemainder(dividingBy: 45) == 0)
+        }
+        #expect(seen.count == 20)
+    }
+
+    @Test func grainYouCanSeeIsStrongerThanTheDither() throws {
+        var gradient = CustomGradient(colours: [MarkColour(hex: 0x808080), MarkColour(hex: 0x808080)], softLight: false)
+        let renderer = AnnotationRenderer(image: Self.solid(.white), scale: 1)
+        func spread(_ gradient: CustomGradient) throws -> Double {
+            let image = try #require(renderer.render(Self.framed(.custom(gradient))))
+            let values = (0..<40).map { Self.pixel(image, 5 + $0, 10).red }
+            return (values.max() ?? 0) - (values.min() ?? 0)
+        }
+        let faint = try spread(gradient)
+        gradient.grain = true
+        let visible = try spread(gradient)
+        #expect(faint > 0)
+        #expect(faint < 0.05)
+        #expect(visible > faint * 2.5)
+    }
+
     // MARK: Layout
 
     @Test func positionPutsTheSpareRoomWhereYouSay() {

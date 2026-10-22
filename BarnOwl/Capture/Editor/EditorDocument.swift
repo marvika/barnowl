@@ -599,22 +599,28 @@ struct CustomGradient: Codable, Hashable, Sendable {
     /// The ready-made gradients' soft light from the top left, as through a window. Off keeps
     /// brand colours exact.
     var softLight = true
+    /// A fine texture you can see, like paper. (A fainter one, too faint to see, always keeps
+    /// gradients from banding.)
+    var grain = false
 
-    init(stops: [GradientStop], angle: Double = 135, kind: GradientKind = .linear, softLight: Bool = true) {
+    init(stops: [GradientStop], angle: Double = 135, kind: GradientKind = .linear, softLight: Bool = true,
+         grain: Bool = false) {
         self.stops = stops
         self.angle = angle
         self.kind = kind
         self.softLight = softLight
+        self.grain = grain
         self = normalised
     }
 
     /// Evenly spaced colours.
-    init(colours: [MarkColour], angle: Double = 135, kind: GradientKind = .linear, softLight: Bool = true) {
+    init(colours: [MarkColour], angle: Double = 135, kind: GradientKind = .linear, softLight: Bool = true,
+         grain: Bool = false) {
         let last: Double = Double(max(colours.count - 1, 1))
         let stops: [GradientStop] = colours.enumerated().map { index, colour in
             GradientStop(colour: colour, location: Double(index) / last)
         }
-        self.init(stops: stops, angle: angle, kind: kind, softLight: softLight)
+        self.init(stops: stops, angle: angle, kind: kind, softLight: softLight, grain: grain)
     }
 
     init(from decoder: Decoder) throws {
@@ -623,6 +629,7 @@ struct CustomGradient: Codable, Hashable, Sendable {
         angle = (try? c.decodeIfPresent(Double.self, forKey: .angle)) ?? 135
         kind = (try? c.decodeIfPresent(GradientKind.self, forKey: .kind)) ?? .linear
         softLight = (try? c.decodeIfPresent(Bool.self, forKey: .softLight)) ?? true
+        grain = (try? c.decodeIfPresent(Bool.self, forKey: .grain)) ?? false
         self = normalised
     }
 
