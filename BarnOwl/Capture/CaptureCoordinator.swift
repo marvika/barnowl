@@ -11,7 +11,11 @@ final class CaptureCoordinator {
     /// Barn Owl's own menu bar items (the arrow, dividers, the owl), left out of a clean menu bar too.
     @ObservationIgnored var ownStatusWindows: () -> Set<CGWindowID> = { [] }
     @ObservationIgnored private var overlay: SelectionOverlay?
-    @ObservationIgnored private lazy var cards = CaptureCards(coordinator: self)
+    @ObservationIgnored lazy var cards = CaptureCards(coordinator: self)
+    /// Screen recordings, from the countdown to the file.
+    @ObservationIgnored lazy var recording = RecordingCoordinator(host: self)
+    /// Opens Settings › Capture.
+    @ObservationIgnored var showCaptureSettings: () -> Void = {}
     @ObservationIgnored private var editors: [ObjectIdentifier: (editor: CaptureEditor, captureID: UUID)] = [:]
     @ObservationIgnored private var pins: [CapturePin] = []
     /// Editors closed with Done, so their close isn't mistaken for leaving.
@@ -63,6 +67,7 @@ final class CaptureCoordinator {
         KeyboardShortcuts.onKeyUp(for: .editLastCapture) { [weak self] in self?.editLastCapture() }
         KeyboardShortcuts.onKeyUp(for: .captureText) { [weak self] in self?.captureText() }
         KeyboardShortcuts.onKeyUp(for: .captureHistory) { [weak self] in self?.showHistory() }
+        KeyboardShortcuts.onKeyUp(for: .recordScreen) { [weak self] in self?.recording.shortcutPressed() }
         NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.didActivateApplicationNotification,
                                                           object: nil, queue: .main) { [weak self] note in
             let app = note.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication
@@ -89,7 +94,7 @@ final class CaptureCoordinator {
     /// only while you've asked for them and macOS's own are off.
     func applySettings() {
         let names: [KeyboardShortcuts.Name] = [.captureArea, .captureScreen, .captureSameArea, .editLastCapture,
-                                               .captureText, .captureHistory]
+                                               .captureText, .captureHistory, .recordScreen]
         if Preferences.captureEnabled { KeyboardShortcuts.enable(names) } else { KeyboardShortcuts.disable(names) }
         // At launch, and whenever you keep captures for less time.
         if CaptureLibrary.keepDays != lastKeepDays {
@@ -123,8 +128,9 @@ final class CaptureCoordinator {
 
     /// Freezes the screens and lets you pick an area, a window or a screen.
     /// `copiesText`: Return copies the words in what you select instead of the picture.
-    func start(_ mode: CaptureMode = .area, copiesText: Bool = false) {
-        guard Preferences.captureEnabled, !isCapturing, Self.hasPermission() else { return }
+    /// `recording`: Return records what you select.
+    func start(_ mode: CaptureMode = .area, copiesText: Bool = false, recording setup: RecordingSetup? = nil) {
+        guard Preferences.captureEnabled, !isCapturing, setup == nil || !recording.isActive, Self.hasPermission() else { return }
         isCapturing = true
         rememberFrontApp()
         let appName = previousApp?.localizedName
@@ -135,7 +141,7 @@ final class CaptureCoordinator {
                 guard !snapshots.isEmpty else { isCapturing = false; return NSSound.beep() }
                 targets = WindowLocator.onScreenWindows()
                 let overlay = SelectionOverlay(snapshots: snapshots, targets: targets, mode: mode,
-                                               copiesText: copiesText) { [weak self] result in
+                                               copiesText: copiesText, recording: setup) { [weak self] result in
                     guard let self else { return }
                     self.overlay = nil
                     Task { await self.finish(result, appName: appName) }
@@ -197,6 +203,9 @@ final class CaptureCoordinator {
         }
     }
 
+    /// What's left out of pictures, and recordings too.
+    var leftOut: CaptureOptions { options }
+
     private var options: CaptureOptions {
         var hidden: Set<CGWindowID> = []
         if Preferences.captureCleanMenuBar {
@@ -219,6 +228,11 @@ final class CaptureCoordinator {
             giveFocusBack()
             return
         }
+        if action == .record || action == .recordGIF {
+            // The keyboard goes back to your app once the countdown is done.
+            return recording.begin(target, makesGIF: action == .recordGIF, appName: appName)
+        }
+        if action == .scroll { return startScrollingCapture(rect: target.rect, snapshot: target.snapshot) }
         switch target {
         case .area(let rect, let snapshot):
             guard let image = snapshot.crop(rect) else {
@@ -266,7 +280,7 @@ final class CaptureCoordinator {
         case .primary: copies = Preferences.captureCopies; saves = Preferences.captureSaves
         case .copy: copies = true; saves = false
         case .save: copies = false; saves = true
-        case .edit, .pin, .copyText: copies = false; saves = false
+        case .edit, .pin, .copyText, .record, .recordGIF, .scroll: copies = false; saves = false
         }
         if Preferences.captureSound { shutter?.stop(); shutter?.play() }
         if saves { capture.fileURL = CaptureStore.reserveURL(for: capture) }
@@ -504,6 +518,7 @@ final class CaptureCoordinator {
         let image = document.flatMap { renderer(for: original, scale: entry.scale, document: $0).render($0) } ?? original
         var capture = Capture(id: id, image: image, scale: entry.scale, kind: Capture.Kind(rawValue: entry.kind) ?? .area,
                               date: entry.date, appName: entry.appName, fileURL: entry.fileURL)
+        capture.media = entry.media
         if let file = entry.fileURL, let stamp = entry.fileStamp {
             if !stamp.matches(CaptureLibrary.FileStamp(of: file)) {
                 // Changed elsewhere, or gone: not this capture's to write over any more.
@@ -536,8 +551,32 @@ final class CaptureCoordinator {
     }
 
     /// Back to the app you were in, unless one of Barn Owl's own windows is in front.
-    private func giveFocusBack() {
+    func giveFocusBack() {
         FocusReturn.afterPanelCloses(to: previousApp)
+    }
+
+    /// Closes the frozen screen, if it's up, as Esc would.
+    func cancelSelection() {
+        overlay?.finish(.cancelled)
+    }
+
+    // MARK: Recordings
+
+    /// A finished recording, kept in memory and shown on a card like any capture. Its file
+    /// follows with `recordingSaved`.
+    func showRecording(_ capture: Capture, status: String) {
+        remember(capture)
+        lastCaptureID = capture.id
+        if Preferences.captureThen == .card { cards.add(capture, status: status, kept: false) }
+    }
+
+    /// The recording's file is in place (nil: it couldn't be saved).
+    func recordingSaved(_ id: UUID, file: URL?, media: CaptureMedia) {
+        guard var capture = captures[id] else { return }
+        capture.fileURL = file
+        capture.media = media
+        captures[id] = capture
+        cards.update(id, media: media)
     }
 
     /// One dialog at a time: Barn Owl's own explanation first, then macOS's.
@@ -605,6 +644,8 @@ final class CaptureCoordinator {
     /// corrected, from the original when it's kept, leaving out what's cropped away or hidden.
     /// Empty when there are none; nil when they couldn't be read.
     func readVisibleText(_ id: UUID) async -> String? {
+        // A recording's words aren't in its first frame.
+        if (captures[id]?.media ?? CaptureLibrary.entry(id)?.media)?.isMovie == true { return "" }
         guard let image = pictureToRead(id) else { return nil }
         let read = try? await Task.detached(priority: .userInitiated) {
             try await SensitiveTextFinder.scan(image, forReading: true)
@@ -654,6 +695,12 @@ final class CaptureCoordinator {
     @discardableResult
     func copy(_ id: UUID) -> Bool {
         guard let capture = capture(id) else { return false }
+        if capture.media.isMovie {
+            let file = isSaved(id) ? capture.fileURL : nil
+            guard file != nil || recording.movie(for: id) != nil else { return false }
+            recording.copy(id, file: file)
+            return true
+        }
         let copying = copyInOrder(id, image: capture.image, scale: capture.scale)
         Task {
             await copying.value
@@ -669,6 +716,7 @@ final class CaptureCoordinator {
             NSWorkspace.shared.activateFileViewerSelecting([url])
             return
         }
+        if capture.media.isMovie { return recording.saveAgain(id, capture: capture) }
         let saving = saveFile(id)
         Task {
             let saved = await saving.value != nil
@@ -685,6 +733,7 @@ final class CaptureCoordinator {
     func fileForDragging(_ id: UUID) -> URL? {
         guard let capture = capture(id) else { return nil }
         if isSaved(id), let url = capture.fileURL { return url }
+        if capture.media.isMovie { return recording.movie(for: id) }
         if let ready = dragFiles[id], ready.image === capture.image { return ready.url }
         return CaptureStore.temporaryFile(for: capture)
     }
@@ -693,7 +742,7 @@ final class CaptureCoordinator {
     /// at a tile in history.
     func prepareDragFile(_ id: UUID) {
         guard captures[id] != nil else { return loadForDragging(id) }
-        guard !isSaved(id), let capture = capture(id), dragFiles[id]?.image !== capture.image else { return }
+        guard !isSaved(id), let capture = capture(id), capture.media == .image, dragFiles[id]?.image !== capture.image else { return }
         let image = capture.image
         Task {
             let url = await Task.detached(priority: .userInitiated) { CaptureStore.temporaryFile(for: capture) }.value
@@ -705,7 +754,8 @@ final class CaptureCoordinator {
     /// A kept capture pointed at in history: its marks drawn and its drag file written off the
     /// main thread, then held in memory like any other, so the drag never waits for either.
     private func loadForDragging(_ id: UUID) {
-        guard !loadingForDrag.contains(id), let kept = keptCapture(id, rendered: false) else { return }
+        // A recording drags its movie: nothing to draw.
+        guard !loadingForDrag.contains(id), let kept = keptCapture(id, rendered: false), kept.media == .image else { return }
         let document = storedDocument(id)
         let renderer = document.map { renderer(for: kept.image, scale: kept.scale, document: $0) }
         let saved = !kept.unsavedEdits && kept.fileURL.map { FileManager.default.fileExists(atPath: $0.path) } == true
@@ -738,7 +788,7 @@ final class CaptureCoordinator {
     }
 
     func pin(_ id: UUID) {
-        guard let capture = capture(id) else { return }
+        guard let capture = capture(id), !capture.media.isMovie else { return NSSound.beep() }
         pin(capture.image, scale: capture.scale, captureID: id)
     }
 
@@ -937,6 +987,7 @@ final class CaptureCoordinator {
     }
 
     func openEditor(_ id: UUID) {
+        if (captures[id]?.media ?? CaptureLibrary.entry(id)?.media)?.isMovie == true { return openVideoEditor(id) }
         // The editor draws the marks itself: no need to render them here.
         let inMemory = captures[id] != nil
         guard let capture = captures[id] ?? keptCapture(id, rendered: false) else { return }

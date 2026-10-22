@@ -54,6 +54,7 @@ struct CapturePane: View {
                 saving
                 inEveryCapture
                 card
+                RecordingSettingsSection(access: model.capture.recording.microphoneAccess)
             }
             .disabled(!enabled)
             Section {
@@ -77,7 +78,7 @@ struct CapturePane: View {
                 Text("History")
             } footer: {
                 Text(keepDays > 0
-                     ? "⌃⌥⌘E and Capture History reopen captures with their marks still movable. To do that, Barn Owl keeps each original and its text, as captured and before anything was hidden, in Application Support on your Mac."
+                     ? "⌃⌥⌘E and Capture History reopen captures with their marks still movable. To do that, Barn Owl keeps each original and its text, as captured and before anything was hidden, in Application Support on your Mac. Recordings are kept for up to 7 days, and 2 GB of them at most."
                      : "Barn Owl keeps nothing, so marks can't be moved again once you're done.")
             }
             .disabled(!enabled)
@@ -112,6 +113,7 @@ struct CapturePane: View {
             LabeledContent("Edit the last capture") { KeyboardShortcuts.Recorder(for: .editLastCapture) }
             LabeledContent("Copy text from the screen") { KeyboardShortcuts.Recorder(for: .captureText) }
             LabeledContent("Show capture history") { KeyboardShortcuts.Recorder(for: .captureHistory) }
+            LabeledContent("Record the screen") { KeyboardShortcuts.Recorder(for: .recordScreen) }
             Toggle(isOn: $appleKeys) {
                 Text("Also answer ⇧⌘4 and ⇧⌘3")
                 Text(systemKeysOn

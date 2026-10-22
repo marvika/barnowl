@@ -6,6 +6,8 @@ import ScreenCaptureKit
 @MainActor
 enum OwnCaptures {
     static var last = Date.distantPast
+    /// Barn Owl is recording the screen: the indicator stays on until it stops.
+    static var isRecording = false
 }
 
 /// Hides desktop icons by covering them with a picture of the wallpaper: one

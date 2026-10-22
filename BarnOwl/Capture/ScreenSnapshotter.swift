@@ -82,7 +82,9 @@ enum ScreenSnapshotter {
         return (image, scale)
     }
 
-    private static func leftOut(_ window: SCWindow, options: CaptureOptions) -> Bool {
+    /// Whether a window stays out of pictures and recordings: Barn Owl's own (apart from its
+    /// desktop cover and pins), and whatever the options leave out.
+    static func leftOut(_ window: SCWindow, options: CaptureOptions) -> Bool {
         if window.owningApplication?.processID == ProcessInfo.processInfo.processIdentifier {
             return !(window.title == "BarnOwlDesktopCover" || window.title == CapturePin.windowTitle)
         }

@@ -135,8 +135,10 @@ final class PresenterMode {
         guard !DemoMode.isOn else { return }
         guard Preferences.presenterAutomatic else { return }
         // Barn Owl's own icon pictures light up the same indicator for a few
-        // seconds; ignore it then, and require it to stay on for two checks.
-        let ownCaptureRecently = Date().timeIntervalSince(max(images.lastCapture, OwnCaptures.last)) < 10
+        // seconds, and its recordings for as long as they last; ignore it then,
+        // and require it to stay on for two checks.
+        let ownCaptureRecently = OwnCaptures.isRecording
+            || Date().timeIntervalSince(max(images.lastCapture, OwnCaptures.last)) < 10
         // Off the main thread: a busy Control Center mustn't freeze Barn Owl.
         let indicator = await Task.detached { Self.isScreenBeingShared }.value
         // Automatic turned off while we looked: don't start a session nobody will end.
