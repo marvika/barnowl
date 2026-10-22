@@ -619,8 +619,8 @@ final class CaptureCoordinator {
         pin.show()
     }
 
-    /// Hides what looks secret, in the clipboard and the file, the way the Redact tool
-    /// does (a light blur unless you chose otherwise). They're ordinary redaction marks, so the editor can take them off
+    /// Hides what looks secret, in the clipboard and the file, with a light blur (or the
+    /// Redact style you chose). They're ordinary redaction marks, so the editor can take them off
     /// again; the library keeps the original.
     func hideSecrets(_ id: UUID) {
         guard let capture = capture(id), let insight = insights[id] else { return }
@@ -630,7 +630,7 @@ final class CaptureCoordinator {
                                                              scale: capture.scale)
         let original = capture.image
         let book = EditorModel.savedStyleBook()
-        let style = book.style(for: .redact)
+        let style = book.hideStyle
         for finding in findings {
             let solid = style.redact == .solid && !book.redactColourChosen
             let colour = solid ? ImageSampler.redactionColour(in: original, rect: finding.rect) : book.redactColour
@@ -732,6 +732,41 @@ final class CaptureCoordinator {
         openEditor(id)
     }
 
+    /// Opens a picture in the editor. One Barn Owl saved comes back with its marks still
+    /// movable, from wherever it is now; any other opens as a new capture, and Done saves a
+    /// copy rather than writing over it.
+    func open(_ file: URL) {
+        if let id = CaptureLibrary.id(of: file), CaptureLibrary.entry(id) != nil, var capture = capture(id) {
+            if capture.fileURL != file {
+                // Moved or renamed since: Done saves over it where it is now.
+                capture.fileURL = file
+                captures[id] = capture
+                CaptureLibrary.setFile(file, for: id)
+            }
+            rememberFrontApp()
+            return openEditor(id)
+        }
+        guard let source = CGImageSourceCreateWithURL(file as CFURL, nil),
+              let picture = CGImageSourceCreateImageAtIndex(source, 0, nil) else { return NSSound.beep() }
+        // 144 dpi is a Retina screenshot: two pixels to a point.
+        let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any]
+        let dpi = (properties?[kCGImagePropertyDPIWidth] as? Double) ?? 72
+        var capture = Capture(image: CaptureStore.ownBitmap(picture), scale: max(1, (dpi / 72).rounded()), kind: .area,
+                              date: Date(), appName: nil)
+        // A file Barn Owl made whose kept copy is gone: still its own, so Done may save over it.
+        if CaptureLibrary.id(of: file) != nil {
+            capture.fileURL = file
+        } else {
+            capture.openedFrom = file.deletingPathExtension().lastPathComponent
+        }
+        remember(capture)
+        lastCaptureID = capture.id
+        writeInBackground(capture, copies: false, saves: false, windows: [])
+        scanInBackground(capture, windows: [])
+        rememberFrontApp()
+        openEditor(capture.id)
+    }
+
     func openEditor(_ id: UUID) {
         guard let capture = capture(id) else { return }
         if editors.isEmpty { rememberFrontApp() }
@@ -740,7 +775,7 @@ final class CaptureCoordinator {
             open.editor.show()
             return
         }
-        let title = capture.fileURL?.deletingPathExtension().lastPathComponent
+        let title = capture.openedFrom ?? capture.fileURL?.deletingPathExtension().lastPathComponent
             ?? CaptureStore.baseName(prefix: Preferences.captureNamePrefix, date: capture.date, appName: nil)
         // The marks stay editable: the original pixels plus the stored document.
         let document = storedDocument(id)

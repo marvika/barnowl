@@ -61,6 +61,8 @@ struct Capture: Identifiable {
     var fileURL: URL?
     /// Edited since it was saved, so the file is behind what the card shows.
     var unsavedEdits = false
+    /// The name of a picture you opened with Barn Owl, which is never saved over.
+    var openedFrom: String?
 
     /// Its size on screen, in points.
     var pointSize: CGSize { CGSize(width: CGFloat(image.width) / scale, height: CGFloat(image.height) / scale) }

@@ -163,9 +163,7 @@ struct StyleBook: Codable, Equatable, Sendable {
         case .counter: style.weight = 28
         case .text: style.fontSize = 20
         case .redact:
-            // A light blur looks like what it is, hidden text, and still keeps it unreadable.
-            style.redact = .blur
-            style.strength = .light
+            style.redact = .pixelate
         case .highlighter, .spotlight, .image: break
         }
         return style
@@ -201,6 +199,16 @@ struct StyleBook: Codable, Equatable, Sendable {
         default: penColour = colour
         }
         noteRecent(colour)
+    }
+
+    /// How Hide covers private info: a light blur, which looks like hidden text and keeps it
+    /// unreadable, until you choose a Redact style of your own; then it's that.
+    var hideStyle: MarkStyle {
+        if let chosen = styles[Mark.Kind.redact.rawValue] { return chosen }
+        var style = Self.defaultStyle(for: .redact)
+        style.redact = .blur
+        style.strength = .light
+        return style
     }
 
     mutating func remember(style: MarkStyle, for kind: Mark.Kind) {

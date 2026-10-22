@@ -261,6 +261,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             pendingURLs += urls
             return
         }
+        // A picture opened with Barn Owl (Open With, or dropped on its Dock icon) goes to the editor.
+        for file in urls where file.isFileURL {
+            model.capture.open(file)
+        }
         for url in urls where url.scheme == "barnowl" {
             let query = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems
             switch (url.host() ?? "", url.path()) {
