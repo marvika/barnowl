@@ -11,6 +11,7 @@ struct CapturePane: View {
     @AppStorage(PrefKey.captureThen) private var then = CaptureThen.card
     @AppStorage(PrefKey.captureAdjusts) private var adjusts = true
     @AppStorage(PrefKey.capturePrivateInfo) private var privateInfo = true
+    @AppStorage(PrefKey.captureHideStyle) private var hideStyle = RedactStyle.blur
     @AppStorage(PrefKey.captureKeepDays) private var keepDays = 30
     @State private var cleared = false
     @AppStorage(PrefKey.captureFolder) private var folder = ""
@@ -142,6 +143,12 @@ struct CapturePane: View {
                         .font(.caption).foregroundStyle(.secondary)
                 }
             }
+            Picker("Hide with", selection: $hideStyle) {
+                Text("Blur").tag(RedactStyle.blur)
+                Text("Pixelate").tag(RedactStyle.pixelate)
+                Text("Solid bars").tag(RedactStyle.solid)
+            }
+            .disabled(!privateInfo)
         } header: {
             Text("After capturing")
         } footer: {

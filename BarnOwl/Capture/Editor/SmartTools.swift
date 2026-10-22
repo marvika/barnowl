@@ -216,10 +216,10 @@ extension EditorModel {
     /// Redactions over each finding, styled like the Redact tool's marks.
     func hide(_ findings: [SensitiveTextFinder.Finding], name: String) {
         let marks: [Mark] = findings.map { finding in
-            // A light blur, or the Redact style you chose; solid bars take the colour of the
-            // text under them.
+            // As Settings › Capture says (a light blur out of the box); solid bars take the
+            // colour of the text under them.
             var mark = newMark(.redact, at: finding.rect.origin)
-            mark.style = styleBook.hideStyle
+            mark.style = StyleBook.hideStyle()
             mark.end = CGPoint(x: finding.rect.maxX, y: finding.rect.maxY)
             if mark.style.redact == .solid { mark.colour = redactionColour(over: finding.rect) }
             mark.origin = MarkOrigin(source: .privateInfo, category: finding.kind.rawValue)

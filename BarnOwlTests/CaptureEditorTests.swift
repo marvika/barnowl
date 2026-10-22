@@ -537,15 +537,16 @@ struct CaptureEditorTests {
         #expect(SmartFit.highlights(from: CGPoint(x: 300, y: 150), to: CGPoint(x: 60, y: 70), insight: insight) == nil)
     }
 
-    @Test func redactPixelatesButHideBlursUntilYouChoose() {
+    @Test func redactPixelatesButHideBlurs() {
         var book = StyleBook()
         #expect(book.style(for: .redact).redact == .pixelate)
-        #expect(book.hideStyle.redact == .blur && book.hideStyle.strength == .light)
-        // Once you pick a Redact style, Hide uses it too.
+        #expect(StyleBook.hideStyle(.blur).redact == .blur && StyleBook.hideStyle(.blur).strength == .light)
+        // Hide follows its own setting, never the Redact tool's last style.
         var solid = book.style(for: .redact)
         solid.redact = .solid
         book.remember(style: solid, for: .redact)
-        #expect(book.hideStyle.redact == .solid)
+        #expect(StyleBook.hideStyle(.blur).redact == .blur)
+        #expect(StyleBook.hideStyle(.solid).redact == .solid)
     }
 
     @Test func hidePrivateInfoBlursLightlyInOneStep() {

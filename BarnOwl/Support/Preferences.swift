@@ -60,6 +60,7 @@ enum PrefKey {
     static let captureCopies = "captureCopies"
     static let captureSaves = "captureSaves"
     static let captureThen = "captureThen"
+    static let captureHideStyle = "captureHideStyle"
     static let captureAdjusts = "captureAdjusts"
     static let capturePrivateInfo = "capturePrivateInfo"
     static let captureHintCount = "captureHintCount"
@@ -138,6 +139,7 @@ enum Preferences {
             PrefKey.captureCopies: true,
             PrefKey.captureSaves: true,
             PrefKey.captureThen: CaptureThen.card.rawValue,
+            PrefKey.captureHideStyle: RedactStyle.blur.rawValue,
             PrefKey.captureAdjusts: true,
             PrefKey.capturePrivateInfo: true,
             PrefKey.captureHintCount: 0,
@@ -266,6 +268,10 @@ enum Preferences {
     /// What follows a capture: the card, the editor, or nothing.
     static var captureThen: CaptureThen {
         CaptureThen(rawValue: defaults.string(forKey: PrefKey.captureThen) ?? "") ?? .card
+    }
+    /// How Hide covers private info: a light blur out of the box.
+    static var captureHideStyle: RedactStyle {
+        RedactStyle(rawValue: defaults.string(forKey: PrefKey.captureHideStyle) ?? "") ?? .blur
     }
     /// Keep the selection adjustable after you let go, rather than capturing at once.
     static var captureAdjusts: Bool { defaults.bool(forKey: PrefKey.captureAdjusts) }

@@ -691,7 +691,7 @@ final class CaptureCoordinator {
         let original = capture.image
         let base = storedDocument(id) != nil ? (CaptureLibrary.original(id) ?? original) : original
         let book = EditorModel.savedStyleBook()
-        let style = book.hideStyle
+        let style = StyleBook.hideStyle()
         for finding in findings {
             let solid = style.redact == .solid && !book.redactColourChosen
             let colour = solid ? ImageSampler.redactionColour(in: base, rect: finding.rect) : book.redactColour

@@ -201,13 +201,12 @@ struct StyleBook: Codable, Equatable, Sendable {
         noteRecent(colour)
     }
 
-    /// How Hide covers private info: a light blur, which looks like hidden text and keeps it
-    /// unreadable, until you choose a Redact style of your own; then it's that.
-    var hideStyle: MarkStyle {
-        if let chosen = styles[Mark.Kind.redact.rawValue] { return chosen }
-        var style = Self.defaultStyle(for: .redact)
-        style.redact = .blur
-        style.strength = .light
+    /// How Hide covers private info, as Settings › Capture says: a light blur out of the box,
+    /// which looks like hidden text and keeps it unreadable. The Redact tool has its own style.
+    static func hideStyle(_ redact: RedactStyle = Preferences.captureHideStyle) -> MarkStyle {
+        var style = defaultStyle(for: .redact)
+        style.redact = redact
+        style.strength = redact == .blur ? .light : .medium
         return style
     }
 

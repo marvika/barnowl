@@ -18,8 +18,8 @@ before 1.0, a minor version can change behaviour.
 - **Pen smoothing:** the pen steadies your hand. The line trails the pointer
   on a short string, shown while you draw, so wobbles never reach it. Choose
   Off, Low, Medium or High in the pen's options.
-- **Redact pixelates** out of the box. Hide still uses a light blur, until
-  you choose a Redact style of your own.
+- **Redact pixelates** out of the box. Hide uses a light blur, or what you
+  choose in Settings › Capture › Hide with: Blur, Pixelate or Solid bars.
 - Copying, pinning or dragging an edited capture from history gives it with
   its marks, and dragging a card out no longer waits while its file is made.
 
