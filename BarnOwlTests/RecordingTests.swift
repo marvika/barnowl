@@ -216,6 +216,19 @@ struct RecordingWriterTests {
         #expect(abs(try await mic.load(.timeRange).duration.seconds - 1) < 0.1)
     }
 
+    @Test func framesInsideOneTickAndAStopJustAfterAFrameStillWrite() async throws {
+        let url = Self.url()
+        defer { try? FileManager.default.removeItem(at: url) }
+        let writer = try RecordingWriter(url: url, settings: Self.settings())
+        writer.appendVideo(Self.frame(), at: Self.time(10))
+        // Half a millisecond later rounds to the same tick: left out, not a failed file.
+        writer.appendVideo(Self.frame(9), at: Self.time(10.0005))
+        writer.appendVideo(Self.frame(), at: Self.time(10.1))
+        let output = try await Self.finish(writer, at: 10.1004).get()
+        #expect(output.frames == 2)
+        #expect(abs(output.duration - 0.1) < 0.01)
+    }
+
     @Test func measuresLoudness() {
         #expect(abs(AudioLevel.rms(of: Self.audio(at: 0, channels: 1, value: 0.5)) - 0.5) < 0.001)
         #expect(AudioLevel.rms(of: Self.audio(at: 0, channels: 2, value: 0)) == 0)
@@ -412,5 +425,88 @@ struct RecordingSettingsTests {
         #expect(video.frameRate == 60 && video.systemAudio && video.microphoneID == "mic")
         // A mic that isn't allowed is never asked for.
         #expect(RecordingOptions(settings: settings, makesGIF: false, microphoneAllowed: false).microphoneID == nil)
+    }
+}
+
+/// Recordings in the library: kept like captures, but for a week and two gigabytes at most.
+struct RecordingLibraryTests {
+    static func root() throws -> URL {
+        let root = FileManager.default.temporaryDirectory.appending(path: "recording-library-\(UUID())")
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        return root
+    }
+
+    static func poster() -> CGImage {
+        let context = CGContext(data: nil, width: 32, height: 20, bitsPerComponent: 8, bytesPerRow: 0,
+                                space: CGColorSpace(name: CGColorSpace.sRGB)!,
+                                bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
+        return context.makeImage()!
+    }
+
+    /// A kept entry `days` old; a recording gets a movie of `bytes`.
+    @discardableResult
+    static func keep(_ kind: String, daysAgo days: Double, bytes: Int = 1000, now: Date, in root: URL) throws -> UUID {
+        let id = UUID()
+        let entry = CaptureLibrary.Entry(id: id, date: now.addingTimeInterval(-days * 86_400), scale: 2, kind: kind,
+                                         appName: nil, fileURL: nil, edited: false, duration: kind == "selection" ? nil : 12)
+        if kind == "selection" {
+            try CaptureLibrary.store(poster(), entry: entry, in: root)
+        } else {
+            let movie = root.appending(path: "incoming-\(id).mov")
+            try Data(count: bytes).write(to: movie)
+            try CaptureLibrary.storeMovie(movie, poster: poster(), entry: entry, days: 30, in: root)
+        }
+        return id
+    }
+
+    @Test func keepsTheMovieAndThePosterAndSaysWhatItIs() throws {
+        let root = try Self.root()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let id = try Self.keep("video", daysAgo: 0, now: Date(), in: root)
+        #expect(CaptureLibrary.movie(id, in: root) != nil)
+        #expect(CaptureLibrary.original(id, in: root) != nil)
+        let entry = try #require(CaptureLibrary.entry(id, in: root))
+        #expect(entry.media == .video(duration: 12))
+        #expect(CaptureLibrary.Entry(id: UUID(), date: Date(), scale: 2, kind: "gif", appName: nil, fileURL: nil, edited: false,
+                                     duration: 3).media == .gif(duration: 3))
+        // Entries from before recordings still read as pictures.
+        #expect(CaptureLibrary.Entry(id: UUID(), date: Date(), scale: 2, kind: "selection", appName: nil, fileURL: nil,
+                                     edited: false).media == .image)
+    }
+
+    @Test func recordingsGoAfterAWeekPicturesStay() throws {
+        let root = try Self.root()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let now = Date()
+        let fresh = try Self.keep("video", daysAgo: 1, now: now, in: root)
+        let old = try Self.keep("gif", daysAgo: 8, now: now, in: root)
+        let picture = try Self.keep("selection", daysAgo: 8, now: now, in: root)
+        CaptureLibrary.prune(now: now, days: 30, in: root)
+        #expect(CaptureLibrary.entry(fresh, in: root) != nil)
+        #expect(CaptureLibrary.entry(old, in: root) == nil)
+        #expect(CaptureLibrary.entry(picture, in: root) != nil)
+    }
+
+    @Test func theOldestGoOnceMoviesTakeTooMuchButNeverTheNewest() throws {
+        let root = try Self.root()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let now = Date()
+        let oldest = try Self.keep("video", daysAgo: 3, bytes: 4000, now: now, in: root)
+        let middle = try Self.keep("video", daysAgo: 2, bytes: 4000, now: now, in: root)
+        let newest = try Self.keep("video", daysAgo: 1, bytes: 9000, now: now, in: root)
+        CaptureLibrary.pruneMovies(now: now, days: 30, bytes: 10_000, in: root)
+        #expect(CaptureLibrary.entry(newest, in: root) != nil)
+        #expect(CaptureLibrary.entry(middle, in: root) == nil)
+        #expect(CaptureLibrary.entry(oldest, in: root) == nil)
+    }
+
+    @Test func historyFindsRecordingsByWhatTheyAre() {
+        let namer = CaptureHistory.DayNamer(now: Date())
+        let entry = CaptureLibrary.Entry(id: UUID(), date: Date(), scale: 2, kind: "video", appName: nil, fileURL: nil,
+                                         edited: false, duration: 5)
+        let item = CaptureHistory.Item(entry: entry, isSaved: false, searchKey: CaptureHistory.searchKey(for: entry, namer: namer))
+        #expect(item.subtitle == "Recording")
+        #expect(CaptureHistory.filter([item], query: "recording").count == 1)
+        #expect(CaptureHistory.filter([item], query: "video").count == 1)
     }
 }

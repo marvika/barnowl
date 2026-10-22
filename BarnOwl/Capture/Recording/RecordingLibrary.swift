@@ -55,7 +55,7 @@ extension CaptureLibrary {
 
     /// Keeps a recording: moves its movie in, with its first frame as the picture. Runs off
     /// the main thread. Nothing is kept while history is off.
-    static func storeMovie(_ movie: URL, poster: CGImage, entry: Entry, in root: URL = folder) throws {
+    static func storeMovie(_ movie: URL, poster: CGImage, entry: Entry, days: Int = keepDays, in root: URL = folder) throws {
         guard root != folder || isOn else { return }
         let dir = folder(for: entry.id, in: root)
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
@@ -64,12 +64,13 @@ extension CaptureLibrary {
         try FileManager.default.moveItem(at: movie, to: kept)
         try store(poster, entry: entry, in: root)
         storeThumbnail(poster, for: entry.id, in: root)
-        pruneMovies(in: root)
+        pruneMovies(days: days, in: root)
     }
 
     /// Lets go of recordings past seven days (or sooner, if captures are kept for less),
     /// and of the oldest once their movies take more than two gigabytes.
-    static func pruneMovies(now: Date = Date(), days: Int = keepDays, in root: URL = folder) {
+    static func pruneMovies(now: Date = Date(), days: Int = keepDays, bytes limit: Int64 = movieBytes,
+                            in root: URL = folder) {
         let cutoff = now.addingTimeInterval(-Double(min(days, movieDays)) * 86_400)
         var total: Int64 = 0
         var removed = false
@@ -77,7 +78,7 @@ extension CaptureLibrary {
         for (index, entry) in movies.enumerated() {
             total += movie(entry.id, in: root).flatMap(Self.size(of:)) ?? 0
             // The newest is always kept, however long it is.
-            guard entry.date < cutoff || (index > 0 && total > movieBytes) else { continue }
+            guard entry.date < cutoff || (index > 0 && total > limit) else { continue }
             try? FileManager.default.removeItem(at: folder(for: entry.id, in: root))
             removed = true
         }
@@ -137,6 +138,8 @@ enum RecordingStore {
     static func poster(of movie: URL) async -> CGImage? {
         let generator = AVAssetImageGenerator(asset: AVURLAsset(url: movie))
         generator.appliesPreferredTrackTransform = true
+        // Plenty for the card and history; a 6K frame would hold 90 MB for nothing.
+        generator.maximumSize = CGSize(width: 1600, height: 1600)
         generator.requestedTimeToleranceBefore = .zero
         generator.requestedTimeToleranceAfter = CMTime(value: 1, timescale: 10)
         return try? await generator.image(at: .zero).image

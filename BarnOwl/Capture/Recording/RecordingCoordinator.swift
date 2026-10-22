@@ -386,7 +386,8 @@ final class RecordingCoordinator {
         }
         guard let host else { return }
         let poster = await RecordingStore.poster(of: take.master) ?? Self.blank
-        let scale = max(1, CGFloat(poster.width) / max(1, take.area.width)).rounded()
+        // Pixels per point of the poster, which is smaller than the movie: only its shape matters.
+        let scale = max(0.1, CGFloat(poster.width) / max(1, take.area.width))
         var capture = Capture(id: take.id, image: poster, scale: scale, kind: take.kind, date: take.date, appName: take.appName)
         capture.media = take.options.makesGIF ? .gif(duration: output.duration) : .video(duration: output.duration)
         movies[take.id] = take.master

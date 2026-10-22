@@ -61,6 +61,11 @@ struct RecordingSettingsSection: View {
         } footer: {
             Text("Record with R or G after selecting, or ⌃⌥⌘5; press it again to stop. Barn Owl's own controls never show up in a recording.")
         }
+        .task {
+            // Plugged in, or allowed in System Settings, since the pane was last open.
+            microphones = access.devices()
+            status = access.status
+        }
         .alert(MicrophoneExplanation.title, isPresented: Binding(get: { asking != nil }, set: { if !$0 { asking = nil } })) {
             Button("Continue") { request() }
             Button("Not Now", role: .cancel) { asking = nil }

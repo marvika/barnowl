@@ -141,7 +141,8 @@ final class RecordingWriter {
     }
 
     private func write(_ pixels: CVPixelBuffer, at time: CMTime, nudges: Bool) {
-        var time = time
+        // In the file's own ticks, so two frames never land on one: the writer would give up.
+        var time = CMTimeConvertScale(time, timescale: Self.timescale, method: .roundHalfAwayFromZero)
         if let last = lastFrameTime, time <= last {
             // Frames only go forward; a held frame is placed just after the last one.
             guard nudges else { return }
@@ -220,10 +221,11 @@ final class RecordingWriter {
             return completion(.failure(.noFrames))
         }
         let stop = pausedAt ?? (time.isValid ? time : start)
-        var end = stop - offset
+        var end = CMTimeConvertScale(stop - offset, timescale: Self.timescale, method: .roundHalfAwayFromZero)
         if let last = lastFrameTime, end < last { end = last }
         // The screen may not have changed since the last frame: it stays up until the end.
-        if let frame = lastFrame, let last = lastFrameTime, end > last {
+        let frameLength = CMTime(value: 1, timescale: CMTimeScale(max(1, settings.frameRate)))
+        if let frame = lastFrame, let last = lastFrameTime, end >= last + frameLength {
             write(frame, at: end, nudges: false)
         }
         writer.endSession(atSourceTime: end)
