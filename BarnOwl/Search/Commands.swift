@@ -19,6 +19,7 @@ enum AppCommand: Hashable, Sendable, Identifiable {
     case captureScreen
     case captureSameArea
     case editLastCapture
+    case captureHistory
     case settings(SettingsPaneID)
 
     var id: Self { self }
@@ -43,6 +44,7 @@ enum AppCommand: Hashable, Sendable, Identifiable {
         case .captureScreen: "Capture the whole screen"
         case .captureSameArea: "Capture the same area again"
         case .editLastCapture: "Edit the last capture"
+        case .captureHistory: "Capture history"
         case .settings(let pane): pane == .layout ? "Arrange menu bar icons" : "\(pane.title) settings"
         }
     }
@@ -65,6 +67,7 @@ enum AppCommand: Hashable, Sendable, Identifiable {
         case .captureScreen: "rectangle.dashed"
         case .captureSameArea: "arrow.counterclockwise.circle"
         case .editLastCapture: "pencil.tip.crop.circle"
+        case .captureHistory: "photo.stack"
         case .settings(let pane): pane == .layout ? "square.grid.3x1.below.line.grid.1x2" : "gearshape"
         }
     }
@@ -89,6 +92,7 @@ enum AppCommand: Hashable, Sendable, Identifiable {
         case .captureScreen: ["capture", "screenshot", "snap", "grab", "screen", "whole"]
         case .captureSameArea: ["capture", "screenshot", "same", "again", "repeat", "last"]
         case .editLastCapture: ["edit", "capture", "screenshot", "last", "markup", "annotate"]
+        case .captureHistory: ["capture", "history", "screenshots", "captures", "recent", "past", "find"]
         case .settings(let pane): ["settings", "preferences", pane.rawValue.lowercased()] + pane.extraKeywords
         }
     }
@@ -140,6 +144,7 @@ enum CommandParser {
                                      .hiddenFiles, .sleepDisplay, .clipboard, .barn, .showAllIcons]
         if Preferences.agentsEnabled { all.append(.roost) }
         if Preferences.captureEnabled { all += [.captureArea, .captureScreen, .captureSameArea, .editLastCapture] }
+        if Preferences.captureEnabled { all.append(.captureHistory) }
         all += SettingsPaneID.allCases.map(AppCommand.settings)
 
         var results: [AppCommand] = []

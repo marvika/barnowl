@@ -36,6 +36,8 @@ final class CaptureCoordinator {
     @ObservationIgnored private var lastKeepDays: Int?
     @ObservationIgnored private var targets: [WindowTarget] = []
     @ObservationIgnored private var lastAppleKeys: Bool?
+    /// Capture History's window, once it's been opened.
+    @ObservationIgnored private var history: CaptureHistoryWindowController?
     @ObservationIgnored private lazy var shutter = NSSound(
         contentsOfFile: "/System/Library/Components/CoreAudio.component/Contents/SharedSupport/SystemSounds/system/Screen Capture.aif",
         byReference: true)
@@ -51,6 +53,7 @@ final class CaptureCoordinator {
         KeyboardShortcuts.onKeyUp(for: .captureAreaApple) { [weak self] in self?.start(.area) }
         KeyboardShortcuts.onKeyUp(for: .captureScreenApple) { [weak self] in self?.captureScreen() }
         KeyboardShortcuts.onKeyUp(for: .editLastCapture) { [weak self] in self?.editLastCapture() }
+        KeyboardShortcuts.onKeyUp(for: .captureHistory) { [weak self] in self?.showHistory() }
         NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.didActivateApplicationNotification,
                                                           object: nil, queue: .main) { [weak self] note in
             let app = note.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication
@@ -68,7 +71,8 @@ final class CaptureCoordinator {
     /// Turns the shortcuts on or off with the setting, and takes ⇧⌘3 and ⇧⌘4
     /// only while you've asked for them and macOS's own are off.
     func applySettings() {
-        let names: [KeyboardShortcuts.Name] = [.captureArea, .captureScreen, .captureSameArea, .editLastCapture]
+        let names: [KeyboardShortcuts.Name] = [.captureArea, .captureScreen, .captureSameArea, .editLastCapture,
+                                               .captureHistory]
         if Preferences.captureEnabled { KeyboardShortcuts.enable(names) } else { KeyboardShortcuts.disable(names) }
         // At launch, and whenever you keep captures for less time.
         if CaptureLibrary.keepDays != lastKeepDays {
@@ -695,6 +699,31 @@ final class CaptureCoordinator {
         if NSApp.activationPolicy() != .regular { NSApp.setActivationPolicy(.regular) }
         editor.show()
     }
+
+    // MARK: History
+
+    /// Every kept capture, in a window of its own; Barn Owl is a real app while it's open.
+    func showHistory() {
+        overlay?.finish(.cancelled)
+        if editors.isEmpty, history?.isOpen != true { rememberFrontApp() }
+        let history = self.history ?? CaptureHistoryWindowController(host: self)
+        history.onClose = { [weak self] in self?.becomeAccessoryWhenDone() }
+        self.history = history
+        if NSApp.activationPolicy() != .regular { NSApp.setActivationPolicy(.regular) }
+        history.show()
+    }
+
+    /// A menu bar app again once no editor and no history window is open.
+    private func becomeAccessoryWhenDone() {
+        guard editors.isEmpty, history?.isOpen != true else { return }
+        // Once the window has really gone, or Barn Owl still counts it as open.
+        Task {
+            try? await Task.sleep(for: .milliseconds(150))
+            guard editors.isEmpty, history?.isOpen != true else { return }
+            NSApp.setActivationPolicy(.accessory)
+            giveFocusBack()
+        }
+    }
 }
 
 extension CaptureCoordinator: CaptureEditorHost {
@@ -778,13 +807,6 @@ extension CaptureCoordinator: CaptureEditorHost {
             savedDocuments[id] = nil
         }
         editors[ObjectIdentifier(editor)] = nil
-        guard editors.isEmpty else { return }
-        // Once the window has really gone, or Barn Owl still counts it as open.
-        Task {
-            try? await Task.sleep(for: .milliseconds(150))
-            guard editors.isEmpty else { return }
-            NSApp.setActivationPolicy(.accessory)
-            giveFocusBack()
-        }
+        becomeAccessoryWhenDone()
     }
 }
