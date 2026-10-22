@@ -2,9 +2,32 @@
   <img src="docs/images/hero.png" alt="Barn Owl, the owl that runs your menu bar: the owl beside the island at the notch asking a question from a coding agent, the quick panel keeping the Mac awake with owlets, plan limits and a healthy disk, and four pixel owlets on a branch at dusk" width="900">
 </p>
 
+<!--
+  IMAGE: the hero's tagline row still reads "Tidy menu bar · Keep awake · Disk
+  space · Coding agents". Redraw hero.png and social-preview.png with
+  Scripts/make-hero.sh so Capture is in it.
+-->
+
+<!--
+  CAPTURE-NEXT marks what describes Capture's phase 2 (screen recording, GIF,
+  the video editor, scrolling capture, the new Frame backgrounds and the
+  magnifier). It was written from the design's MUST items before they
+  shipped. A CAPTURE-NEXT ... /CAPTURE-NEXT pair wraps whole paragraphs or
+  sections; a single "CAPTURE-NEXT: ..." note names the phase 2 words in the
+  paragraph, list or table right below it. Check each against the build, trim
+  what didn't make it, then remove the markers. Everything else has shipped
+  (0.15.0 and the Unreleased changelog).
+-->
+
+<h3 align="center">A tidy menu bar, and the small tools you reach for all day.</h3>
+
+<!-- CAPTURE-NEXT: "screen recordings and GIFs" in the paragraph below is phase 2. -->
 <p align="center">
-  Tidy icons, a Mac that stays awake, room on your disk, and an eye on your coding agents.<br>
-  One friendly owl. Free and open source, for macOS 26 Tahoe and later.
+  Barn Owl hides the menu bar icons you rarely use, then takes on the jobs
+  you'd otherwise install several apps for: screenshots, screen recordings
+  and GIFs, a Mac that stays awake, room on your disk, clipboard history,
+  and your coding agents at a glance. One friendly owl. Free and open
+  source, for macOS 26 Tahoe and later.
 </p>
 
 <p align="center">
@@ -27,40 +50,41 @@ brew install --cask marvika/tap/barn-owl
   <a href="CHANGELOG.md">What's new</a>
 </p>
 
+## Why Barn Owl?
+
+- **One app instead of several.** Menu bar hiding, screen capture,
+  keep-awake, a disk cleaner, a clipboard and a home for your coding agents,
+  all behind one small owl.
+- **Native.** Written in Swift for macOS 26: Liquid Glass, notched MacBooks
+  and Apple silicon, from the ground up. Under 1% CPU at idle.
+- **Private.** Everything happens on your Mac. No account, no analytics, no
+  cloud. Even the words in your screenshots are read on your Mac. The only
+  network request is the update check.
+- **Only what you want.** Every feature can be switched off, and a feature
+  that's off does no work at all. Capture waits until you turn it on.
+- **Careful.** Clean-ups are locked to their own folders, go to the Trash
+  where they can, and ask before anything that can't be undone.
+- **Free and open source,** under the MIT license. Signed and notarized by
+  Apple.
+- **And it has an owl.** It wears shades while you present, gets coffee on
+  long sessions, and celebrates when you free up space.
+
 <p align="center">
   <img src="docs/images/demo.gif" alt="Barn Owl in action: hidden icons settle onto the Perch, then the quick panel starts keeping the Mac awake for an hour and the owl's eyes open" width="600">
 </p>
 
-## What it does
+## What's inside
+
+<!-- CAPTURE-NEXT: recordings, GIFs, the video editor and scrolling capture in the Capture row are phase 2. -->
 
 |  |  |
 |---|---|
-| 🦉 **Tidies your menu bar** | Hides the icons you rarely use and shows them on the **Perch** when you want them. Nothing gets lost behind the notch. [More](#a-tidy-menu-bar) |
-| ☕️ **Keeps your Mac awake** | For an hour, until a time, while an app runs, or by rules: during calls, on power at your desk, while an agent works. [More](#keep-awake) |
-| 🐣 **Watches your coding agents** | Claude Code, Codex and others as pixel owlets: who's working, who needs you, and what got done. [More](#your-coding-agents) |
-| 🧹 **Frees up disk space** | Finds caches, build files and forgotten installers, cleans the safe ones in one click, and maps your disk. [More](#the-barn-free-up-disk-space) |
-| 📸 **Captures and marks up screenshots** | Freeze the screen, select an area or a window, then add arrows, numbered steps, text, boxes and blur. Private keys and emails are spotted for you. [More](#screenshots-and-markup) |
-| ⚡️ **Gets things done** | Search every icon and run commands with ⌃⌥⌘M, quick toggles, clipboard history, and a Nest for files you're dragging around. [More](#and-the-everyday-tools) |
-
-## Why Barn Owl?
-
-- **Several apps' worth in one.** Menu bar hiding, keep-awake, a disk
-  cleaner, a clipboard, a file shelf and a home for your coding agents, all
-  behind one small owl.
-- **Made for macOS 26.** Liquid Glass, notched MacBooks and Apple silicon,
-  from the ground up.
-- **Only what you want.** Every feature can be switched off, and a feature
-  that's off does no work at all.
-- **Safe by design.** Clean-ups are locked to their own folders, go to the
-  Trash where they can, and ask before anything that can't be undone.
-- **Private.** No account, no analytics. Its only network request is the
-  update check.
-- **Light.** Under 1% CPU at idle. It only listens to the mouse, or looks at
-  your agents, when a feature needs it.
-- **Free and open source,** under the MIT license.
-- **And it has an owl.** It wears shades while you present, gets coffee on
-  long sessions, glances at its owlets when one needs you, and celebrates
-  when you free up space.
+| **[A tidy menu bar](#a-tidy-menu-bar)** | Hides the icons you rarely use and shows them on the **Perch** when you want them. Nothing gets lost behind the notch. |
+| **[Capture](#capture)** | Screenshots with markup, screen recordings with sound, GIFs, a video editor and scrolling capture. Find any screenshot again by the words in it. |
+| **[Keep awake](#keep-awake)** | For an hour, until a time, while an app runs, or by rules: during calls, at your desk, while an agent works. |
+| **[Coding agents](#your-coding-agents)** | Claude Code, Codex and others as pixel owlets: who's working, who needs you, and what got done. |
+| **[Disk space](#the-barn-free-up-disk-space)** | Finds caches, build files and forgotten installers, cleans the safe ones in one click, and maps your disk. |
+| **[Everyday tools](#and-the-everyday-tools)** | Search and commands, clipboard history, quick toggles, and a Nest for files you're dragging around. |
 
 ## A tidy menu bar
 
@@ -77,10 +101,133 @@ its menu opens as usual.
 - **Custom icons:** swap any app's icon for a symbol, an emoji or "VPN".
 - **Show when it changes:** a hidden icon pops into view when it changes,
   so a dropped VPN doesn't go unnoticed.
-- **Presenter mode:** share your screen and every icon hides, then comes
-  back when you stop.
+- **Presenter mode:** share your screen and every icon hides at once, then
+  comes back exactly where it was.
+- **A separate layout at your desk,** used while an external display is
+  connected.
+
+More in the [user guide](docs/user-guide.md#hiding-icons).
 
 <br clear="right">
+
+## Capture
+
+<!-- CAPTURE-NEXT (see the note at the top of this file) -->
+Screenshots and screen recordings, each with an editor of its own, plus
+GIFs and pages longer than your screen. Every capture stays editable, and
+you can find it again later.
+<!-- /CAPTURE-NEXT -->
+
+Capture is optional: turn it on in Settings → Capture or in the setup guide.
+Already happy with CleanShot X or Shottr? Leave it off, and Barn Owl stays
+out of their way.
+
+### Screenshots
+
+<!-- IMAGE: docs/images/capture-overlay.png (760 wide): the frozen screen with an adjustable selection, its handles, the loupe and the action bar. From the demo copy. -->
+
+Press **⌃⌥⌘4**. The screen freezes, so menus and hover states stay put while
+you choose:
+
+- **An area:** drag it. It stays adjustable, with handles, and a loupe shows
+  the exact pixels.
+- **A window:** click it. It's captured on its own, with its shadow.
+- **The whole screen:** press F, or ⌃⌥⌘3 from anywhere.
+
+Return copies and saves it, E opens the editor, P pins it above your
+windows, and T copies the text in it. Every capture leaves out other apps'
+menu bar icons and your desktop icons, without changing anything on screen.
+A small card shows what you caught: click it to mark it up, or drag it
+straight into Slack, Mail or any other app.
+
+### Mark it up
+
+<!-- IMAGE: docs/images/capture-editor.png (760 wide): the editor with a curved arrow, numbered steps, a callout, a magnifier and a Frame on a gradient. -->
+
+The editor has tapered, bendable arrows, numbered steps with labels, text in
+five styles and four typefaces, boxes and ovals, a highlighter that follows lines of
+text, a pen that steadies your hand, spotlight, crop, and redaction that
+pixelates, blurs or covers. Every tool has a single-letter key and remembers
+how you last used it, and every mark stays movable until you're done.
+
+<!--
+  CAPTURE-NEXT. If the new Frame doesn't ship, the shipped wording is:
+  **Frame** puts the capture on a gradient, a colour or your wallpaper, with
+  padding, rounded corners, a shadow and an aspect ratio, ready to share.
+-->
+**Magnify** (M) enlarges a detail in a loupe, from 1.5× to 4×. It magnifies
+your redactions along with the picture, so it never shows what you've
+hidden.
+
+**Frame** puts a capture on a background, ready to share. Choose one of nine
+gradients, one of four matched to the colours in your capture, a plain
+colour or your wallpaper, or make a gradient of your own in a few clicks;
+Barn Owl keeps it under **Yours**. Then set the padding, corners and shadow,
+and the shape for where it's going: 16:9, 1:1, 1.91:1 for link previews, 9:16
+for stories and more. Frame remembers your last look.
+<!-- /CAPTURE-NEXT -->
+
+Barn Owl reads the text in each capture **on your Mac** and offers to hide
+what looks private: API keys and tokens, passwords, card numbers, email
+addresses and phone numbers. It never hides anything without asking.
+
+<!-- CAPTURE-NEXT -->
+### Record the screen
+
+<!-- IMAGE: docs/images/capture-recording.png (760 wide): the record bar with the microphone menu, then the pill and border around an area being recorded. -->
+
+Press **⌃⌥⌘5**, or R after you select, to record an area, a window or the
+whole screen. A 3, 2, 1 countdown gives you a moment to get ready; press
+Return to skip it. A small pill beside the area lets you pause, carry on,
+stop or throw the take away, and the same shortcut or the menu bar stops it
+too. Barn Owl's own controls never appear in the video.
+
+- **Sound:** your Mac's own sound is one click away. The microphone stays
+  off until you pick one, and Barn Owl says why before macOS asks.
+- **GIFs:** press G instead of R to record straight to a GIF, or make one
+  from any recording later, from its card or in the editor. GIFs loop, at 15
+  frames a second and up to 800 pixels wide.
+- **Like any capture:** a recording gets a card, a place in Capture History
+  and a saved movie, with an option for smaller files.
+
+### Edit a recording
+
+<!-- IMAGE: docs/images/video-editor.png (760 wide): the video editor with the filmstrip timeline, a split clip, the Computer and Mic lanes, and the Export inspector. -->
+
+The video editor is the screenshot editor's sibling. Drag a clip's ends to
+trim it, split at the playhead with ⌘B, and delete a piece; the rest closes
+up. Your Mac's sound and your microphone each have their own volume, or
+mute either one. Export an MP4, a MOV or a GIF at the size and quality you
+need. Every step can be undone, and a recording stays editable from Capture
+History.
+
+### Scrolling capture
+
+<!-- IMAGE: docs/images/scrolling-capture.png (760 wide): a long page being captured, with the live preview growing beside it and the Scroll for Me button. -->
+
+For a page longer than your screen, press **⌃⌥⌘S**, or S after you select.
+Scroll down slowly, or click **Scroll for Me**, and watch the picture grow
+beside it. A header or footer that stays put appears once, not on every
+screenful. You get an ordinary capture, up to 30,000 pixels tall, to mark
+up, copy and search.
+<!-- /CAPTURE-NEXT -->
+
+### Find it again
+
+<!-- IMAGE: docs/images/capture-history.png (760 wide): Capture History with a search for one word and the screenshots that contain it. -->
+
+- **Capture History** keeps every capture in one window, newest first, by
+  day. Search finds a screenshot by the words in it. Open one with its marks
+  still movable, or copy, pin or drag it out. Search for "history", or open
+  it from Settings → Capture.
+- **Copy Text:** press T on a selection, or ⌃⌥⌘T from anywhere, and the
+  words in it go to the clipboard.
+- **⌃⌥⌘E** reopens the last capture, marks and all.
+- **Open With:** in Finder, open a PNG, JPEG or HEIC with Barn Owl. A
+  screenshot Barn Owl saved comes back with its marks still movable.
+
+Captures stay editable for 30 days, or 7, or not at all, as you choose in
+Settings → Capture.
 
 ## Keep awake
 
@@ -89,7 +236,8 @@ its menu opens as usual.
 Click the owl for the quick panel. Its eyes are open while your Mac is kept
 awake, and the time left counts down beside it.
 
-- **For a while,** until a time, while an app runs, or until downloads finish.
+- **For a while,** until a time, while an app runs, or until downloads
+  finish.
 - **Rules** that switch it on by themselves: on power with an external
   display, during calls, while a coding agent works, on weekdays
   08:00–17:00. Combine conditions as you like.
@@ -109,10 +257,11 @@ microphone, desktop icons, hidden files and sleeping the screen.
   <img src="docs/images/roost.gif" alt="An agent asks at the notch, the island opens to its question, the quick panel shows the owlets, then the Roost's Now view and its pixel tree" width="760">
 </p>
 
-Run Claude Code, Codex, Mistral Vibe, Copilot CLI, OpenCode or Gemini CLI, and each session
-gets a pixel **owlet** that shows what it's doing: typing, running a command,
-searching, thinking, napping, or holding up a sign when it needs you. Start
-ten at once and you still see, at a glance, which one is waiting on you.
+Run Claude Code, Codex, Mistral Vibe, Copilot CLI, OpenCode or Gemini CLI,
+and each session gets a pixel **owlet** that shows what it's doing: typing,
+running a command, searching, thinking, napping, or holding up a sign when it
+needs you. Start ten at once and you still see, at a glance, which one is
+waiting on you.
 
 <img src="docs/images/quick-panel-agents.png" alt="The quick panel's owlets: agents on a branch, one asking a question with an Answer button, and the plan limits as moons" width="340" align="right">
 
@@ -124,8 +273,8 @@ ten at once and you still see, at a glance, which one is waiting on you.
 - **Show** takes you to the exact Terminal or iTerm tab, or the exact chat in
   the Claude app.
 - **Your Mac stays awake** while an agent works, and for five minutes after.
-- **Teams and armies** of helpers stay readable: a few as hatchlings beside
-  their owlet, a brood as a quiet grid of squares.
+- **Teams of helpers** stay readable: a few as hatchlings beside their
+  owlet, a brood as a quiet grid of squares.
 
 <br clear="right">
 
@@ -199,38 +348,7 @@ what can go.
 
 <img src="docs/images/barn-explore.png" alt="Explore: a ring map of the disk with the biggest folders listed beside it" width="760">
 
-## Screenshots and markup
-
-Turn on **Capture** in Settings, or during setup, and press ⌃⌥⌘4. The screen
-freezes, so menus and hover states stay put while you choose:
-
-- **An area:** drag it. It stays adjustable, with handles; Return copies and
-  saves it, E opens it in the editor, and P pins it above your windows.
-- **A window:** click it. It's captured on its own, with its shadow.
-- **The whole screen:** press F, or ⌃⌥⌘3 from anywhere.
-
-Every capture leaves out other apps' menu bar icons and your desktop icons,
-without changing anything on screen. A small card shows what you caught.
-Click it to mark it up, or drag it into Slack, Mail or any other app.
-
-The **editor** has tapered, bendable arrows, numbered steps with labels,
-text in five styles and four typefaces, boxes, highlighter, pen, spotlight,
-crop, and redaction that covers, blurs or pixelates. Every tool has a single-letter
-key and remembers how you last used it. **Frame** puts the capture on a
-background, with padding, rounded corners and a shadow, ready to share.
-
-Barn Owl reads the text in each capture **on your Mac** and offers to hide
-what looks private: API keys and tokens, passwords, card numbers, email
-addresses and phone numbers. It never hides anything without asking. The
-same reading gives you **Copy Text**: press T on a selection, or ⌃⌥⌘T from
-anywhere, and the words go to the clipboard.
-
-Every capture stays editable. ⌃⌥⌘E reopens the last one with its marks still
-movable, **Capture History** finds older ones by the words in them, and
-Finder's Open With brings a saved screenshot back with its marks.
-
-Already use CleanShot X or Shottr? Leave Capture off and Barn Owl stays out
-of their way.
+More in the [user guide](docs/user-guide.md#the-barn-disk-space).
 
 ## And the everyday tools
 
@@ -259,6 +377,63 @@ covers its eyes when you copy a password, and says "Nom!" when you feed it a
 file. There are 40 owl moments to find. Pick its colours (Golden Barn, Ghost
 Owl, Ember or Moonlit Lilac) and its personality in Settings → Appearance.
 With Reduce Motion on, it keeps still.
+
+## Keyboard shortcuts
+
+<!-- CAPTURE-NEXT: the ⌃⌥⌘5 and ⌃⌥⌘S rows, and R, G and S in the overlay line below the table, are phase 2. -->
+
+| Menu bar and tools | | Capture | |
+|---|---|---|---|
+| Show or hide hidden icons | ⌃⌥⌘B | Capture an area or a window | ⌃⌥⌘4 |
+| Search and commands | ⌃⌥⌘M | Capture the whole screen | ⌃⌥⌘3 |
+| Clipboard history | ⌃⌥⌘V | Capture the same area again | ⌃⌥⌘R |
+| Show every icon | Option-click the arrow | Copy text from the screen | ⌃⌥⌘T |
+| Keep awake on or off | Option-click the owl | Edit the last capture | ⌃⌥⌘E |
+| | | Start or stop a recording | ⌃⌥⌘5 |
+| | | Scrolling capture | ⌃⌥⌘S |
+
+While you capture: **F** the whole screen, **L** the last area, **Return**
+copy and save, **E** edit, **P** pin, **T** copy text, **R** record, **G**
+GIF, **S** scrolling capture, and **?** for every key.
+
+Set your own in Settings → Shortcuts and Settings → Capture, where Barn Owl
+can also take over ⇧⌘4 and ⇧⌘3 once macOS's own shortcuts are off.
+
+## Automation
+
+Shortcuts actions, a `barnowl` command for the Terminal (`barnowl awake 90`,
+`barnowl open vpn`, `barnowl present on`) and `barnowl://` links for Raycast,
+Alfred and scripts, such as `barnowl://roost` for the Roost or
+`barnowl://capture` to capture an area. See the
+[user guide](docs/user-guide.md#automation).
+
+## Privacy
+
+Barn Owl works entirely on your Mac. It has no accounts and no analytics.
+Its only network request is checking GitHub for new versions, which sends
+nothing about you or your Mac.
+
+<!-- CAPTURE-NEXT: the Recordings item is phase 2. -->
+
+- **Captures** stay on your Mac. Their text is read on your Mac, with
+  Apple's Vision, to offer hiding private details, for Copy Text and for
+  searching Capture History. To keep captures editable, Barn Owl stores the
+  originals (unredacted) for 30 days (or 7, or not at all) in
+  `~/Library/Application Support/Barn Owl/Captures`.
+- **Recordings** stay on your Mac too. The microphone is off until you pick
+  one, and Barn Owl hears it only while you record. Your Mac's own sound is
+  recorded only when you turn it on.
+- **Clipboard history** skips password managers and anything marked
+  private, and never saves images to disk.
+- **Coding agents:** Barn Owl reads the agents' session files in
+  `~/.claude`, `~/.codex` and `~/.vibe`, and the Claude app's session
+  records and usage history. It shows what an agent is waiting on you for
+  while it waits, never keeps your prompts or replies, and never reads a
+  login. It changes Claude Code's settings only if you turn on answering
+  from the island or Claude's reset times, after showing you the exact
+  change and saving a backup.
+
+The details are in [SECURITY.md](SECURITY.md).
 
 ## Install
 
@@ -289,16 +464,21 @@ your PATH. Open **Barn Owl** from Applications or Spotlight.
   <img src="docs/images/setup-done.png" alt="Setup: the owl celebrating in a party hat" width="200">
 </p>
 
+<!-- IMAGE: the setup guide's Capture step has no picture here. Add docs/images/setup-capture.png (200 wide) to this row. -->
+
 ### First launch
 
 The setup guide walks you through where hidden icons appear, which icons
-stay visible, your shortcuts, opening at login and the coding agents. macOS
-asks for permissions only as each feature needs them:
+stay visible, your shortcuts, opening at login, Capture and the coding
+agents. macOS asks for permissions only as each feature needs them:
+
+<!-- CAPTURE-NEXT: the Microphone row is phase 2. -->
 
 | Permission | What it's for | Needed? |
 |---|---|---|
 | **Accessibility** | Listing, moving and opening menu bar icons | For hiding and arranging icons |
-| **Screen Recording** | Real pictures of hidden icons on the Perch | Optional: without it you see app icons |
+| **Screen Recording** | Real pictures of hidden icons on the Perch, and Capture | For Capture. Otherwise optional: without it you see app icons |
+| **Microphone** | Your voice in a screen recording | Only if you pick a microphone |
 | **Automation** | Bringing an agent's Terminal or iTerm tab to the front; switching dark mode | Asked the first time you use it |
 | **Notifications** | Telling you when an agent needs you and the island can't, or a session ends | Optional |
 | **Full Disk Access** | Letting the Barn look in the Trash, Mail and Safari caches, and iPhone backups | Optional |
@@ -327,48 +507,6 @@ or quit Barn Owl and drag it from Applications to the Trash. Its settings
 live in `~/Library/Preferences/io.github.marvika.BarnOwl.plist` and its
 data in `~/Library/Application Support/Barn Owl`.
 
-## Keyboard shortcuts
-
-| | |
-|---|---|
-| Show or hide hidden icons | ⌃⌥⌘B |
-| Search the menu bar, run a command | ⌃⌥⌘M |
-| Clipboard history | ⌃⌥⌘V |
-| Capture an area or a window (with Capture on) | ⌃⌥⌘4 |
-| Capture the whole screen | ⌃⌥⌘3 |
-| Edit the last capture | ⌃⌥⌘E |
-| Show every icon | Option-click the arrow |
-| Keep awake on or off | Option-click the owl |
-
-Set your own in Settings → Shortcuts.
-
-## Automation
-
-Shortcuts actions, a `barnowl` command for the Terminal (`barnowl awake 90`,
-`barnowl open vpn`, `barnowl present on`) and `barnowl://` links for Raycast,
-Alfred and scripts, such as `barnowl://roost` for the Roost. See the
-[user guide](docs/user-guide.md#automation).
-
-## Privacy
-
-Barn Owl works entirely on your Mac. It has no accounts and no analytics. Its
-only network request is checking GitHub for new versions, which sends
-nothing about you or your Mac. Clipboard history stays on your Mac and never
-saves images to disk.
-
-Captures stay on your Mac. Their text is read on your Mac, with Apple's
-Vision, only to offer hiding private details. To keep captures editable,
-Barn Owl stores the originals (unredacted) for 30 days in
-`~/Library/Application Support/Barn Owl/Captures`.
-
-For coding agents, Barn Owl reads the agents' session files in `~/.claude`,
-`~/.codex` and `~/.vibe`, and the Claude app's session records and usage history. It
-shows what an agent is waiting on you for while it waits, never keeps your
-prompts or replies, and never reads a login. It changes Claude Code's
-settings only if you turn on answering from the island or Claude's reset
-times, after showing you the exact change and saving a backup. The details
-are in [SECURITY.md](SECURITY.md).
-
 ## Building from source
 
 Requires Xcode 26 or later and [XcodeGen](https://github.com/yonaskolb/XcodeGen).
@@ -381,6 +519,8 @@ Scripts/install.sh
 This builds a Release copy, installs it in /Applications and starts it. For
 development, tests, the demo copy used for screenshots and the release
 process, see [CONTRIBUTING.md](CONTRIBUTING.md).
+[docs/how-it-works.md](docs/how-it-works.md) explains how hiding, moving and
+opening icons work.
 
 ## Contributing
 
@@ -390,6 +530,8 @@ privately, as [SECURITY.md](SECURITY.md) describes.
 
 ## Credits
 
+<!-- CAPTURE-NEXT: the macshot sentence is phase 2. Keep it only if recording and scrolling capture did take ideas from it. -->
+
 Barn Owl learned from [Hidden Bar](https://github.com/dwarvesf/hidden) and
 [Frost](https://github.com/frostbar/frost), both MIT; see
 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md). It also learned from reading
@@ -398,6 +540,8 @@ Barn Owl learned from [Hidden Bar](https://github.com/dwarvesf/hidden) and
 The Barn's approach to safe cleaning was inspired by
 [Mole](https://github.com/tw93/mole) (GPL-3), and its map by
 [DaisyDisk](https://daisydiskapp.com); no code was copied.
+Capture's recording and scrolling capture took ideas from
+[macshot](https://github.com/sw33tlie/macshot) (GPL-3); no code was copied.
 Hotkeys use [KeyboardShortcuts](https://github.com/sindresorhus/KeyboardShortcuts),
 and updates use [Sparkle](https://sparkle-project.org).
 
