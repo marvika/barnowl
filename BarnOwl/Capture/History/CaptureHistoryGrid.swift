@@ -320,6 +320,9 @@ final class HistoryTileItem: NSCollectionViewItem {
         host.rootView = HistoryTileView(item: item, thumbnail: thumbnail, selected: isSelected, focused: focused)
         guard let item else { return }
         var words = [item.date.formatted(date: .omitted, time: .shortened), item.subtitle]
+        if let duration = item.media.duration {
+            words.append("\(item.media.isGIF ? "GIF" : "recording"), \(RecordingTime.text(duration))")
+        }
         if item.isEdited { words.append("marked up") }
         if item.isSaved, let file = item.entry.fileURL { words.append("saved in \(file.deletingLastPathComponent().lastPathComponent)") }
         view.setAccessibilityLabel(words.joined(separator: ", "))

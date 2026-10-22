@@ -57,6 +57,9 @@ struct HistoryTileView: View {
                             RoundedRectangle(cornerRadius: 3).strokeBorder(.primary.opacity(0.1), lineWidth: 0.5)
                         }
                     }
+                    .overlay(alignment: .bottomTrailing) {
+                        if let media = item?.media, media.isMovie { MovieBadge(media: media, compact: true).padding(5) }
+                    }
                     .padding(window ? 6 : 12)
                     .transition(.opacity)
             }

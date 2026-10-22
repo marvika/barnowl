@@ -445,9 +445,12 @@ final class CaptureHistoryWindowController: NSWindowController, NSWindowDelegate
         if items.contains(where: \.isSaved) {
             menu.addItem(ClosureMenuItem("Show in Finder") { [weak self] in self?.showInFinder(nil) })
         }
-        menu.addItem(ClosureMenuItem(single ? "Pin to Screen" : "Pin \(items.count) to Screen") { [weak self] in
-            for id in ids.prefix(Self.most) { self?.host?.pin(id) }
-        })
+        // Recordings don't pin.
+        if items.contains(where: { !$0.media.isMovie }) {
+            menu.addItem(ClosureMenuItem(single ? "Pin to Screen" : "Pin \(items.count) to Screen") { [weak self] in
+                for id in ids.prefix(Self.most) { self?.host?.pin(id) }
+            })
+        }
         menu.addItem(.separator())
         let remove = ClosureMenuItem(single ? "Remove from History" : "Remove \(items.count) from History") { [weak self] in
             self?.remove(ids)

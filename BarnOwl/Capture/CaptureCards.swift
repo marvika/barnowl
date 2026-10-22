@@ -10,6 +10,8 @@ final class CaptureCards {
     struct Card: Identifiable {
         let id: UUID
         var thumbnail: NSImage
+        /// A picture, or a recording with its length.
+        var media = CaptureMedia.image
         var status: String
         /// Whether it's kept somewhere (copied or saved); otherwise the card is all there is.
         var kept: Bool
@@ -17,6 +19,13 @@ final class CaptureCards {
         var secrets = 0
         var secretTitle = ""
         var undo: (() -> Void)?
+        /// A second choice beside the status, like Keep as Video while a GIF is made.
+        var link: CardLink?
+    }
+
+    struct CardLink {
+        let title: String
+        let action: () -> Void
     }
 
     /// Newest last, at the bottom of the stack.
@@ -42,7 +51,7 @@ final class CaptureCards {
         let thumbnail = NSImage(cgImage: small, size: capture.pointSize)
         let kept = kept ?? (status != coordinator?.status(copied: false, saved: false))
         withAnimation(.spring(response: 0.4, dampingFraction: 0.85)) {
-            cards.append(Card(id: capture.id, thumbnail: thumbnail, status: status, kept: kept))
+            cards.append(Card(id: capture.id, thumbnail: thumbnail, media: capture.media, status: status, kept: kept))
         }
         while cards.count > Self.shown { remove(cards[0].id) }
         showPanel()
@@ -59,6 +68,11 @@ final class CaptureCards {
     }
 
     func has(_ id: UUID) -> Bool { cards.contains { $0.id == id } }
+
+    func update(_ id: UUID, link: CardLink?) {
+        guard let index = cards.firstIndex(where: { $0.id == id }) else { return }
+        cards[index].link = link
+    }
 
     /// A new picture (after hiding secrets), with an Undo for a few seconds.
     func update(_ id: UUID, image: CGImage, status: String, undo: (() -> Void)?) {
@@ -111,6 +125,7 @@ final class CaptureCards {
         remove(id)
     }
     func hide(_ id: UUID) { coordinator?.hideSecrets(id) }
+    func makeGIF(_ id: UUID) { coordinator?.makeGIF(id) }
     func copyText(_ id: UUID) { coordinator?.copyText(id) }
     func hasText(_ id: UUID) -> Bool { coordinator?.hasText(id) ?? false }
     func file(_ id: UUID) -> URL? { coordinator?.fileForDragging(id) }
@@ -205,10 +220,17 @@ private struct CardStack: View {
     }
 }
 
-private struct CaptureCardView: View {
+struct CaptureCardView: View {
     let card: CaptureCards.Card
     let cards: CaptureCards
-    @State private var hovering = false
+    @State private var hovering: Bool
+
+    /// `hovering`: drawn as if pointed at, for previews.
+    init(card: CaptureCards.Card, cards: CaptureCards, hovering: Bool = false) {
+        self.card = card
+        self.cards = cards
+        _hovering = State(initialValue: hovering)
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -247,7 +269,7 @@ private struct CaptureCardView: View {
             cards.hovered = inside ? card.id : (cards.hovered == card.id ? nil : cards.hovered)
         }
         .accessibilityElement(children: .contain)
-        .accessibilityLabel("Capture. \(card.status)")
+        .accessibilityLabel("\(card.media.isMovie ? "Recording" : "Capture"). \(card.status)")
         .accessibilityAction(named: "Edit") { cards.edit(card.id) }
         .accessibilityAction(named: "Copy") { cards.copy(card.id) }
     }
@@ -269,6 +291,9 @@ private struct CaptureCardView: View {
                 CardDragArea(url: { cards.file(card.id) }, image: card.thumbnail,
                              click: { cards.edit(card.id) }, dropped: { cards.remove(card.id) })
             }
+            .overlay(alignment: .topTrailing) {
+                if card.media.isMovie && !hovering { MovieBadge(media: card.media).padding(6).transition(.opacity) }
+            }
             .overlay(alignment: .bottom) {
                 if hovering { actions.transition(.opacity) }
             }
@@ -277,6 +302,23 @@ private struct CaptureCardView: View {
 
     private var actions: some View {
         HStack(spacing: 8) {
+            if card.media.isMovie { movieActions } else { pictureActions }
+        }
+        .padding(.bottom, 8)
+    }
+
+    /// A recording: copy or save the file, make a GIF of it, or edit it.
+    @ViewBuilder private var movieActions: some View {
+        IconButton(symbol: "doc.on.doc", label: "Copy") { cards.copy(card.id) }
+        IconButton(symbol: cards.isSaved(card.id) ? "folder" : "square.and.arrow.down",
+                   label: cards.isSaved(card.id) ? "Show in Finder" : "Save") { cards.save(card.id) }
+        if !card.media.isGIF {
+            IconButton(symbol: "photo.stack", label: "Make GIF") { cards.makeGIF(card.id) }
+        }
+        IconButton(symbol: "pencil", label: "Edit", prominent: true) { cards.edit(card.id) }
+    }
+
+    @ViewBuilder private var pictureActions: some View {
             IconButton(symbol: "doc.on.doc", label: "Copy") { cards.copy(card.id) }
             if cards.hasText(card.id) {
                 IconButton(symbol: "text.viewfinder", label: "Copy Text") { cards.copyText(card.id) }
@@ -285,20 +327,26 @@ private struct CaptureCardView: View {
                        label: cards.isSaved(card.id) ? "Show in Finder" : "Save") { cards.save(card.id) }
             IconButton(symbol: "pin", label: "Pin") { cards.pin(card.id) }
             IconButton(symbol: "pencil", label: "Edit", prominent: true) { cards.edit(card.id) }
-        }
-        .padding(.bottom, 8)
     }
 
     private var statusRow: some View {
         HStack(spacing: 6) {
-            Image(systemName: card.kept ? "checkmark.circle.fill" : "exclamationmark.circle.fill")
-                .foregroundStyle(card.kept ? Color.green : Color.orange)
-                .font(.system(size: 11))
+            if card.status.hasSuffix("…") {
+                // Still working: saving, making a GIF, reading the text.
+                ProgressView().controlSize(.mini).frame(width: 11, height: 11)
+            } else {
+                Image(systemName: card.kept ? "checkmark.circle.fill" : "exclamationmark.circle.fill")
+                    .foregroundStyle(card.kept ? Color.green : Color.orange)
+                    .font(.system(size: 11))
+            }
             Text(card.status).font(.system(size: 11, weight: .medium)).foregroundStyle(.secondary)
                 .lineLimit(1)
             Spacer(minLength: 4)
             if let undo = card.undo {
                 Button("Undo", action: undo).buttonStyle(.link).font(.caption.weight(.semibold))
+            }
+            if let link = card.link {
+                Button(link.title, action: link.action).buttonStyle(.link).font(.caption.weight(.semibold))
             }
         }
         .padding(.horizontal, 4)

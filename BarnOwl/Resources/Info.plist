@@ -66,6 +66,8 @@
 	<string>The Barn looks through your Documents to show what takes up space, and the Roost looks for the project an agent is working in there. Nothing is changed unless you choose to.</string>
 	<key>NSDownloadsFolderUsageDescription</key>
 	<string>The Barn looks through your Downloads to show what takes up space and to find old installers. Nothing is changed unless you choose to.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Barn Owl records your microphone only while you record the screen, and only when you choose a microphone for it.</string>
 	<key>NSHumanReadableCopyright</key>
 	<string>Copyright © 2026 Marius Vika. MIT License.</string>
 	<key>SUEnableSystemProfiling</key>

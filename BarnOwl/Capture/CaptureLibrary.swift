@@ -4,7 +4,8 @@ import ImageIO
 /// Keeps every capture editable: the original pixels, the markup document and
 /// a little about it, in Application Support/Barn Owl/Captures/<id>/. Saved
 /// files are tagged with the id, so reopening one brings its marks back.
-/// Kept for 30 days (at most 200 captures). Originals are never redacted here.
+/// Kept for 30 days (at most 200 captures; recordings for 7 days and 2 GB). Originals are
+/// never redacted here.
 enum CaptureLibrary {
     struct Entry: Codable, Equatable, Sendable {
         let id: UUID
@@ -21,6 +22,8 @@ enum CaptureLibrary {
         /// The saved file's size and date when Barn Owl last wrote it, so a file changed or
         /// copied since is never taken for this capture's own.
         var fileStamp: FileStamp?
+        /// A recording's length in seconds; its kind is "video" or "gif".
+        var duration: Double?
     }
 
     struct FileStamp: Codable, Equatable, Sendable {
@@ -206,6 +209,7 @@ enum CaptureLibrary {
             removed = true
         }
         if removed { changed(nil) }
+        pruneMovies(now: now, days: days, in: root)
     }
 
     /// Lets go of every kept capture now.

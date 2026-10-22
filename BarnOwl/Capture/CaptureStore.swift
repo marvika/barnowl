@@ -42,7 +42,7 @@ enum CaptureThen: String, CaseIterable, Identifiable {
     }
 }
 
-/// One screenshot, as it was caught.
+/// One screenshot or recording, as it was caught.
 struct Capture: Identifiable {
     enum Kind: String {
         // macOS's own words for kMDItemScreenCaptureType.
@@ -63,6 +63,8 @@ struct Capture: Identifiable {
     var unsavedEdits = false
     /// The name of a picture you opened with Barn Owl, which is never saved over.
     var openedFrom: String?
+    /// A picture, or a recording: then `image` is its first frame and `fileURL` the movie or GIF.
+    var media = CaptureMedia.image
 
     /// Its size on screen, in points.
     var pointSize: CGSize { CGSize(width: CGFloat(image.width) / scale, height: CGFloat(image.height) / scale) }
