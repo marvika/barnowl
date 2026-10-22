@@ -82,7 +82,7 @@ struct HistoryTileView: View {
                     .truncationMode(.tail)
                     .layoutPriority(-1)
                 Spacer(minLength: 2)
-                if item.isEdited { HistoryBadge(symbol: "pencil.tip.crop.circle", label: "Marked up") }
+                if item.isEdited { HistoryBadge(symbol: "pencil", label: "Marked up") }
                 if item.isSaved { HistoryBadge(symbol: "folder", label: "Saved") }
             }
         }
@@ -103,6 +103,113 @@ struct HistoryBadge: View {
             .frame(width: 16, height: 16)
             .accessibilityLabel(label)
     }
+}
+
+/// A line at the foot of history after Copy or Copy Text, or when something can't be done,
+/// gone again in a moment. VoiceOver says it too.
+@MainActor
+@Observable
+final class HistoryNotice {
+    enum Tone: Equatable {
+        /// Done, with a lavender tick.
+        case done
+        /// Under way, with a spinner; stays until something replaces it.
+        case working
+        /// Nothing went wrong, but nothing happened either.
+        case info
+        /// Something failed, in amber.
+        case warning
+    }
+
+    struct Note: Equatable {
+        let text: String
+        let tone: Tone
+        var symbol: String?
+        /// The same words again still count as new, so they show again.
+        let serial: Int
+    }
+
+    private(set) var note: Note?
+    @ObservationIgnored private var serial = 0
+    @ObservationIgnored private var hiding: Task<Void, Never>?
+
+    func show(_ text: String, tone: Tone = .done, symbol: String? = nil) {
+        serial += 1
+        note = Note(text: text, tone: tone, symbol: symbol, serial: serial)
+        hiding?.cancel()
+        guard tone != .working else { return }
+        NSAccessibility.post(element: NSApp as Any, notification: .announcementRequested,
+                             userInfo: [.announcement: text, .priority: NSAccessibilityPriorityLevel.high.rawValue])
+        hiding = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(tone == .done ? 1.6 : 2.8))
+            guard !Task.isCancelled else { return }
+            self?.note = nil
+        }
+    }
+
+    func hide() {
+        hiding?.cancel()
+        note = nil
+    }
+}
+
+/// The notice, in a glass capsule at the bottom centre of the window.
+struct HistoryNoticeView: View {
+    let notice: HistoryNotice
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    /// The strip it sits in, along the bottom of the window.
+    static let height: CGFloat = 72
+
+    var body: some View {
+        ZStack {
+            if let note = notice.note {
+                HStack(spacing: 7) {
+                    icon(note)
+                    Text(note.text)
+                        .font(.system(size: 13, weight: .medium))
+                        .lineLimit(1)
+                }
+                .padding(.leading, 12)
+                .padding(.trailing, 15)
+                .frame(height: 34)
+                .glassEffect(.regular, in: .capsule)
+                .transition(reduceMotion ? .opacity : .opacity.combined(with: .offset(y: 8)))
+                .id(note.serial)
+                .accessibilityElement(children: .combine)
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
+        .padding(.bottom, 22)
+        .animation(reduceMotion ? nil : .smooth(duration: 0.22), value: notice.note)
+    }
+
+    @ViewBuilder
+    private func icon(_ note: HistoryNotice.Note) -> some View {
+        switch note.tone {
+        case .working:
+            ProgressView().controlSize(.small).frame(width: 16, height: 16)
+        case .done:
+            symbol(note.symbol ?? "checkmark.circle.fill", colour: Brand.lavender)
+        case .info:
+            symbol(note.symbol ?? "info.circle", colour: .secondary)
+        case .warning:
+            symbol(note.symbol ?? "exclamationmark.triangle.fill", colour: Brand.amber)
+        }
+    }
+
+    private func symbol(_ name: String, colour: Color) -> some View {
+        Image(systemName: name)
+            .font(.system(size: 14, weight: .semibold))
+            .foregroundStyle(colour)
+            .frame(width: 16, height: 16)
+            .accessibilityHidden(true)
+    }
+}
+
+/// Shows the notice over the grid without taking any of its clicks.
+final class HistoryNoticeHost: NSHostingView<HistoryNoticeView> {
+    override func hitTest(_ point: NSPoint) -> NSView? { nil }
 }
 
 /// Above each day: its name and how many captures it has.
@@ -147,7 +254,8 @@ struct HistoryEmptyState: View {
         message(owl: WatchingOwl(snores: false, talks: false),
                 title: "No captures yet",
                 detail: "Captures you take show up here for \(Self.days(model.keepDays)), ready to copy, drag or mark up again.") {
-            if let shortcut = KeyboardShortcuts.getShortcut(for: .captureArea) {
+            // Only while Capture is on: otherwise the shortcut does nothing.
+            if model.captureEnabled, let shortcut = KeyboardShortcuts.getShortcut(for: .captureArea) {
                 HStack(spacing: 10) {
                     KeyCaps(shortcut.description)
                     Text("Capture an area or a window").font(.callout).foregroundStyle(.secondary)
