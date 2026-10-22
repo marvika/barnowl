@@ -199,7 +199,7 @@ final class AnnotationRenderer: Sendable {
             case .spotlight:
                 guard !spotlightsDrawn else { continue }
                 spotlightsDrawn = true
-                drawSpotlights(spotlights, area: dimmed, in: context)
+                drawSpotlights(spotlights, area: dimmed, effects: underneath, in: context)
             default:
                 withOpacity(mark.style.opacity, context) {
                     drawObject(mark, number: numbers[mark.id] ?? 1, editing: mark.id == editingText, in: context)
@@ -364,10 +364,33 @@ final class AnnotationRenderer: Sendable {
     }
 
     /// Dims everything outside the spotlights, once for all of them so they can overlap.
-    private func drawSpotlights(_ marks: [Mark], area: CGRect, in context: CGContext) {
-        let dim: Double = marks.last?.style.dim ?? 0.5
+    /// Blurring draws the image anew round the spotlights, so the highlights and redactions on it
+    /// (`underneath`) are drawn again over the blur: nothing hidden comes back.
+    private func drawSpotlights(_ marks: [Mark], area: CGRect, effects underneath: [Mark], in context: CGContext) {
+        let style = marks.last?.style ?? MarkStyle()
+        let blurs = style.spotlightEffect == .blur
+        // Blurred, it only needs a little darkening to step back.
+        let dim: Double = blurs ? style.dim * 0.45 : style.dim
         context.saveGState()
         context.beginTransparencyLayer(auxiliaryInfo: nil)
+        if blurs {
+            let bounds = CGRect(x: 0, y: 0, width: image.width, height: image.height)
+            let radius = max(2, Int((RedactStrength.medium.radius * scale).rounded()))
+            context.saveGState()
+            context.clip(to: area)
+            if let blurred = effects.blurred(radius: radius) {
+                context.interpolationQuality = .high
+                drawImage(blurred, in: bounds, context)
+            }
+            for effect in underneath {
+                if effect.kind == .redact {
+                    drawRedaction(effect, in: context)
+                } else {
+                    drawHighlight(effect, imageUnderneath: true, in: context)
+                }
+            }
+            context.restoreGState()
+        }
         context.setFillColor(CGColor(gray: 0, alpha: CGFloat(dim)))
         context.fill(area)
         context.setBlendMode(.clear)

@@ -679,6 +679,15 @@ private struct SpotlightSection: View {
             .pickerStyle(.segmented)
             .labelsHidden()
             .fixedSize()
+            Picker("Around it", selection: Binding(get: { style.spotlightEffect }, set: { effect in
+                model.updateStyle { $0.spotlightEffect = effect }
+            })) {
+                ForEach(SpotlightEffect.allCases, id: \.self) { Text($0.title).tag($0) }
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            .fixedSize()
+            .help("Dim or blur everything around the spotlight")
             HStack(spacing: 6) {
                 Text("Dim").font(.system(size: 12)).foregroundStyle(.secondary)
                 Slider(value: Binding(get: { style.dim }, set: { value in

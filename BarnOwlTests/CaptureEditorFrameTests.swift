@@ -376,6 +376,29 @@ struct CaptureEditorFrameTests {
         #expect(Self.near(Self.pixel(image, 45, 150), .ink))
     }
 
+    // MARK: Spotlight
+
+    @Test func aBlurredSpotlightSoftensTheRestButNeverWhatsHidden() throws {
+        let renderer = AnnotationRenderer(image: Self.checkerboard(cell: 4), scale: 1)
+        var document = EditorDocument(imageSize: CGSize(width: 200, height: 200), scale: 1)
+        var spotlight = CaptureEditorTests.mark(.spotlight, CGPoint(x: 100, y: 100), CGPoint(x: 190, y: 190))
+        spotlight.style.spotlightEffect = .blur
+        var bar = CaptureEditorTests.mark(.redact, CGPoint(x: 10, y: 10), CGPoint(x: 60, y: 40), colour: .red)
+        bar.style.redact = .solid
+        document.marks = [spotlight, bar]
+        let image = try #require(renderer.render(document))
+        // Outside, the 4 px checks blur to an even grey.
+        let a = Self.pixel(image, 30, 70)
+        let b = Self.pixel(image, 34, 70)
+        #expect(abs(a.red - b.red) < 0.12)
+        // Inside, they stay crisp.
+        #expect(abs(Self.pixel(image, 141, 141).red - Self.pixel(image, 145, 141).red) > 0.8)
+        // The redaction outside stays a solid bar over the blur.
+        #expect(Self.near(Self.pixel(image, 35, 25), MarkColour.red.mixed(with: .ink, 0.45 * 0.5), within: 12.0 / 255))
+        // Decoding without the field keeps dimming.
+        #expect(MarkStyle().spotlightEffect == .dim)
+    }
+
     // MARK: Balance
 
     @Test func balancingCropsEveryMarginToTheSmallest() {

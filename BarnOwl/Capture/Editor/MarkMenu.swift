@@ -130,7 +130,18 @@ struct MarkMenu {
             return RedactStyle.allCases.map { option in
                 ClosureMenuItem(option.title, checked: style.redact == option) { model.updateStyle { $0.redact = option } }
             }
-        case .spotlight, .magnifier:
+        case .spotlight:
+            var items: [NSMenuItem] = SpotlightShape.allCases.map { shape in
+                ClosureMenuItem(shape.title, checked: style.spotlight == shape) { model.updateStyle { $0.spotlight = shape } }
+            }
+            items.append(.separator())
+            items += SpotlightEffect.allCases.map { effect in
+                ClosureMenuItem(effect.title, checked: style.spotlightEffect == effect) {
+                    model.updateStyle { $0.spotlightEffect = effect }
+                }
+            }
+            return items
+        case .magnifier:
             return SpotlightShape.allCases.map { shape in
                 ClosureMenuItem(shape.title, checked: style.spotlight == shape) { model.updateStyle { $0.spotlight = shape } }
             }

@@ -349,6 +349,21 @@ enum SpotlightShape: String, Codable, CaseIterable, Sendable {
     }
 }
 
+/// What a spotlight does to everything around it.
+enum SpotlightEffect: String, Codable, CaseIterable, Sendable {
+    /// Darkens it.
+    case dim
+    /// Softens it out of focus, and darkens it a little.
+    case blur
+
+    var title: String {
+        switch self {
+        case .dim: "Dim"
+        case .blur: "Blur"
+        }
+    }
+}
+
 /// How a mark looks, apart from its colour. Lengths are in points; marks multiply them by
 /// the capture's scale. Every kind reads only the fields it uses.
 struct MarkStyle: Codable, Equatable, Sendable {
@@ -373,6 +388,7 @@ struct MarkStyle: Codable, Equatable, Sendable {
     var smoothing = PenSmoothing.medium
     /// How dark a spotlight makes everything around it, from 0 to 1.
     var dim: Double = 0.5
+    var spotlightEffect = SpotlightEffect.dim
     /// How much a magnifier enlarges.
     var zoom: Double = 2
 
@@ -399,6 +415,7 @@ struct MarkStyle: Codable, Equatable, Sendable {
         smoothing = try c.decodeIfPresent(PenSmoothing.self, forKey: .smoothing) ?? base.smoothing
         dim = try c.decodeIfPresent(Double.self, forKey: .dim) ?? base.dim
         zoom = (try? c.decodeIfPresent(Double.self, forKey: .zoom)) ?? base.zoom
+        spotlightEffect = (try? c.decodeIfPresent(SpotlightEffect.self, forKey: .spotlightEffect)) ?? base.spotlightEffect
     }
 }
 
