@@ -5,11 +5,23 @@ import SwiftUI
 @MainActor
 protocol CaptureHistoryHost: AnyObject {
     func openEditor(_ id: UUID)
-    func copy(_ id: UUID)
+    /// Copies it as it looks now; false if it can't be found.
+    func copy(_ id: UUID) -> Bool
     func pin(_ id: UUID)
     func fileForDragging(_ id: UUID) -> URL?
-    /// The words you can see in it: not what's cropped away or hidden.
-    func copyText(_ id: UUID)
+    /// Gets a drag's file ready off the main thread, before the drag asks for it.
+    func prepareDragFile(_ id: UUID)
+    /// The words you can see in it, read again: not what's cropped away or hidden. Empty if
+    /// there are none, nil if they couldn't be read.
+    func readVisibleText(_ id: UUID) async -> String?
+    /// Whether there's text worth copying, as far as is known yet.
+    func hasText(_ id: UUID) -> Bool
+    /// Captures open in the editor: history keeps them while they are.
+    var editingCaptures: Set<UUID> { get }
+}
+
+extension CaptureHistoryHost {
+    func isEditing(_ id: UUID) -> Bool { editingCaptures.contains(id) }
 }
 
 extension CaptureCoordinator: CaptureHistoryHost {}
@@ -48,18 +60,26 @@ final class CaptureHistoryWindowController: NSWindowController, NSWindowDelegate
     NSSearchFieldDelegate, NSMenuItemValidation {
     let model: CaptureHistoryModel
     let grid: CaptureHistoryGrid
+    /// What Copy and Copy Text say at the foot of the window.
+    let notice = HistoryNotice()
+    /// Where Copy Text puts the words; tests use one of their own.
+    var pasteboard = NSPasteboard.general
     /// Called once the window has closed.
     var onClose: (() -> Void)?
     private(set) var isOpen = false
     private weak var host: CaptureHistoryHost?
     private let empty: NSHostingView<HistoryEmptyState>
+    private let noticeView: HistoryNoticeHost
     /// Undo for removing from history; the window's own.
     private let removals = UndoManager()
     private var searchItem: NSSearchToolbarItem?
     private var observers: [NSObjectProtocol] = []
     private var quitObserver: NSObjectProtocol?
+    private var activation: NSObjectProtocol?
     private var changedIDs: Set<UUID> = []
     private var changeTask: Task<Void, Never>?
+    private var reading: Task<Void, Never>?
+    private var backfilling: Task<Void, Never>?
 
     static let frameName = "BarnOwlCaptureHistory"
     private static let searchID = NSToolbarItem.Identifier("captureHistory.search")
@@ -70,6 +90,7 @@ final class CaptureHistoryWindowController: NSWindowController, NSWindowDelegate
         model = CaptureHistoryModel(root: root)
         grid = CaptureHistoryGrid(model: model)
         empty = NSHostingView(rootView: HistoryEmptyState(model: model))
+        noticeView = HistoryNoticeHost(rootView: HistoryNoticeView(notice: notice))
         let window = CaptureHistoryWindow(contentRect: NSRect(x: 0, y: 0, width: 940, height: 660),
                                           styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
                                           backing: .buffered, defer: true)
@@ -98,6 +119,10 @@ final class CaptureHistoryWindowController: NSWindowController, NSWindowDelegate
         empty.sizingOptions = []
         empty.isHidden = true
         content.addSubview(empty)
+        noticeView.frame = NSRect(x: 0, y: 0, width: content.bounds.width, height: HistoryNoticeView.height)
+        noticeView.autoresizingMask = [.width, .maxYMargin]
+        noticeView.sizingOptions = []
+        content.addSubview(noticeView)
         window.contentView = content
         window.initialFirstResponder = grid.collectionView
         if !window.setFrameUsingName(Self.frameName) { window.center() }
@@ -112,6 +137,7 @@ final class CaptureHistoryWindowController: NSWindowController, NSWindowDelegate
         empty.rootView = HistoryEmptyState(model: model) { [weak self] in self?.keepCaptures() }
         model.onChange = { [weak self] in self?.modelChanged() }
         grid.fileForDragging = { [weak self] id in self?.host?.fileForDragging(id) }
+        grid.prepareForDragging = { [weak self] id in self?.host?.prepareDragFile(id) }
         let captures = grid.collectionView
         captures.onOpen = { [weak self] in self?.openSelection(nil) }
         captures.onRemove = { [weak self] in self?.removeFromHistory(nil) }
@@ -140,9 +166,11 @@ final class CaptureHistoryWindowController: NSWindowController, NSWindowDelegate
         // Anything still waiting from before Barn Owl last quit.
         CaptureLibrary.forgetRemoved(in: model.root)
         model.keepDays = CaptureLibrary.keepDays
+        model.captureEnabled = Preferences.captureEnabled
         startObserving()
-        // Opens with its captures in place, not an empty window that fills a moment later.
-        model.reload { [weak self, weak window] in
+        // Opens with its captures in place, not an empty window that fills a moment later;
+        // those past their time go first, but never one open in the editor.
+        model.reload(pruning: host?.editingCaptures ?? []) { [weak self, weak window] in
             guard let self, let window, self.isOpen, !window.isVisible else { return }
             self.present(window)
         }
@@ -151,18 +179,55 @@ final class CaptureHistoryWindowController: NSWindowController, NSWindowDelegate
             guard let self, let window, self.isOpen, !window.isVisible else { return }
             self.present(window)
         }
+        fillInOldCaptures()
     }
 
+    /// In front and taking the keyboard, back from the Dock if it was minimized. macOS
+    /// activates apps cooperatively: if Barn Owl isn't active yet, the window takes the
+    /// keyboard the moment it is, as the editor does.
     private func present(_ window: NSWindow) {
         CaptureHistoryMenu.install()
         OpenPanel.shared.closeAll()
+        if window.isMiniaturized { window.deminiaturize(nil) }
         NSApp.activate()
         window.makeKeyAndOrderFront(nil)
+        window.orderFrontRegardless()
+        guard !NSApp.isActive, activation == nil else { return }
+        activation = NotificationCenter.default.addObserver(forName: NSApplication.didBecomeActiveNotification, object: nil,
+                                                            queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.becameActive() }
+        }
+    }
+
+    private func becameActive() {
+        stopWaitingForActivation()
+        guard isOpen, let window else { return }
+        window.makeKeyAndOrderFront(nil)
+    }
+
+    private func stopWaitingForActivation() {
+        if let activation { NotificationCenter.default.removeObserver(activation) }
+        activation = nil
+    }
+
+    /// Captures kept before Barn Owl read their words for history (0.15.0) get them now, and
+    /// their thumbnails, one at a time in the background. Once at a time.
+    private func fillInOldCaptures() {
+        guard backfilling == nil, model.keepDays > 0 else { return }
+        let root = model.root
+        backfilling = Task { [weak self] in
+            await Task.detached(priority: .background) { await CaptureLibrary.backfill(in: root) }.value
+            self?.backfilling = nil
+        }
     }
 
     func windowWillClose(_ notification: Notification) {
         isOpen = false
         stopObserving()
+        stopWaitingForActivation()
+        reading?.cancel()
+        reading = nil
+        notice.hide()
         removals.removeAllActions()
         CaptureLibrary.forgetRemoved(in: model.root)
         searchItem?.searchField.stringValue = ""
@@ -232,6 +297,8 @@ final class CaptureHistoryWindowController: NSWindowController, NSWindowDelegate
     }
 
     private func settingsChanged() {
+        let enabled = Preferences.captureEnabled
+        if enabled != model.captureEnabled { model.captureEnabled = enabled }
         let days = CaptureLibrary.keepDays
         guard days != model.keepDays else { return }
         model.keepDays = days
@@ -281,7 +348,13 @@ final class CaptureHistoryWindowController: NSWindowController, NSWindowDelegate
         model.query = ""
     }
 
-    /// Esc clears a search first, then closes.
+    /// Esc in an empty search field leaves it for the captures; ⌘W closes the window.
+    private func leaveSearch() {
+        searchItem?.endSearchInteraction()
+        window?.makeFirstResponder(model.state == .grid ? grid.collectionView : nil)
+    }
+
+    /// Esc in the grid clears a search first, then closes.
     private func escape() {
         if model.isSearching {
             clearSearch()
@@ -299,7 +372,7 @@ final class CaptureHistoryWindowController: NSWindowController, NSWindowDelegate
         model.query = field.stringValue
     }
 
-    /// ↓ or Return go to the results; Esc clears the search, then closes.
+    /// ↓ or Return go to the results; Esc clears the search, then leaves the field.
     func control(_ control: NSControl, textView: NSTextView, doCommandBy selector: Selector) -> Bool {
         switch selector {
         case #selector(NSResponder.moveDown(_:)), #selector(NSResponder.insertNewline(_:)):
@@ -308,7 +381,7 @@ final class CaptureHistoryWindowController: NSWindowController, NSWindowDelegate
             return true
         case #selector(NSResponder.cancelOperation(_:)):
             if textView.string.isEmpty {
-                window?.performClose(nil)
+                leaveSearch()
             } else {
                 clearSearch()
             }
@@ -355,16 +428,73 @@ final class CaptureHistoryWindowController: NSWindowController, NSWindowDelegate
 
     @objc func copy(_ sender: Any?) {
         guard let item = selection.first, selection.count == 1 else { return NSSound.beep() }
-        host?.copy(item.id)
+        copyPicture(item.id)
+    }
+
+    private func copyPicture(_ id: UUID) {
+        guard host?.copy(id) == true else { return NSSound.beep() }
+        notice.show("Copied")
     }
 
     @objc func copyText(_ sender: Any?) {
-        // One capture: only what you can see in it, as the card copies it.
-        if selection.count == 1, let item = selection.first, item.text != nil { return host?.copyText(item.id) ?? () }
-        let texts = selection.compactMap(\.text)
-        guard !texts.isEmpty else { return NSSound.beep() }
-        NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(texts.joined(separator: "\n\n"), forType: .string)
+        copyText(of: selection.map(\.id))
+    }
+
+    /// Puts the words you can see in each on the clipboard, as the card does for one: read
+    /// again, with what's cropped away or hidden left out. A blank line between captures.
+    func copyText(of ids: [UUID]) {
+        guard let host, !ids.isEmpty else { return NSSound.beep() }
+        reading?.cancel()
+        // Only said if reading takes a moment.
+        let notice = notice
+        let slow = Task {
+            try? await Task.sleep(for: .milliseconds(400))
+            if !Task.isCancelled { notice.show("Reading the text…", tone: .working) }
+        }
+        reading = Task { [weak self] in
+            var texts: [String] = []
+            var unread = 0
+            for id in ids where !Task.isCancelled {
+                guard let words = await host.readVisibleText(id) else {
+                    unread += 1
+                    continue
+                }
+                if !words.isEmpty { texts.append(words) }
+            }
+            slow.cancel()
+            guard let self, !Task.isCancelled else { return }
+            self.reading = nil
+            self.copied(texts, unread: unread)
+        }
+    }
+
+    private func copied(_ texts: [String], unread: Int) {
+        guard !texts.isEmpty else {
+            NSSound.beep()
+            if unread > 0 {
+                notice.show("Couldn't read the text", tone: .warning)
+            } else {
+                notice.show("No text found", tone: .info)
+            }
+            return
+        }
+        let words = texts.joined(separator: "\n\n")
+        pasteboard.clearContents()
+        pasteboard.setString(words, forType: .string)
+        notice.show(Self.textCopied(words))
+    }
+
+    /// "Text copied", or "Text copied · 12 lines".
+    nonisolated static func textCopied(_ words: String) -> String {
+        let lines = words.split(whereSeparator: \.isNewline).count
+        return lines <= 1 ? "Text copied" : "Text copied · \(lines) lines"
+    }
+
+    /// Copy Text is offered while there may be words: as the host knows them, or not read yet
+    /// (they're read when you choose it).
+    private func mightHaveText(_ item: CaptureHistory.Item) -> Bool {
+        if item.text == nil, item.entry.textWasRead != true { return true }
+        return host?.hasText(item.id) ?? (item.text != nil)
     }
 
     @objc func showInFinder(_ sender: Any?) {
@@ -382,14 +512,28 @@ final class CaptureHistoryWindowController: NSWindowController, NSWindowDelegate
     }
 
     /// Takes them out of history in one step, the next one selected; Undo brings them back.
+    /// One open in the editor stays, and stays selected, and the window says why.
     func remove(_ ids: [UUID]) {
         guard !ids.isEmpty else { return }
+        let editing = ids.filter { host?.isEditing($0) == true }
+        guard editing.count < ids.count else {
+            NSSound.beep()
+            notice.show(editing.count == 1 ? "Close its editor first to remove it" : "Close their editors first to remove them",
+                        tone: .info, symbol: "pencil")
+            return
+        }
         let order = model.days.flatMap { $0.items.map(\.id) }
         let next = CaptureHistory.selection(afterRemoving: Set(ids), from: order)
-        let removed = CaptureLibrary.remove(ids, in: model.root)
+        let removed = CaptureLibrary.remove(ids.filter { !editing.contains($0) }, in: model.root)
         guard !removed.isEmpty else { return NSSound.beep() }
         model.drop(Set(removed))
-        grid.select(next.map { [$0] } ?? [], scroll: true)
+        if editing.isEmpty {
+            grid.select(next.map { [$0] } ?? [], scroll: true)
+        } else {
+            grid.select(editing, scroll: true)
+            notice.show(editing.count == 1 ? "Kept 1 that's open in the editor" : "Kept \(editing.count) that are open in the editor",
+                        tone: .info, symbol: "pencil")
+        }
         removals.registerUndo(withTarget: self) { controller in
             MainActor.assumeIsolated { controller.restore(removed) }
         }
@@ -416,7 +560,7 @@ final class CaptureHistoryWindowController: NSWindowController, NSWindowDelegate
             menuItem.title = removals.redoMenuItemTitle
             return removals.canRedo
         case #selector(copy(_:)): return items.count == 1
-        case #selector(copyText(_:)): return items.contains { $0.text != nil }
+        case #selector(copyText(_:)): return items.contains { mightHaveText($0) }
         case #selector(showInFinder(_:)): return items.contains(where: \.isSaved)
         case #selector(openSelection(_:)), #selector(pinSelection(_:)): return !items.isEmpty
         // Only from the grid: ⌘⌫ in the search field deletes text there.
@@ -437,10 +581,10 @@ final class CaptureHistoryWindowController: NSWindowController, NSWindowDelegate
         })
         menu.addItem(.separator())
         if single {
-            menu.addItem(ClosureMenuItem("Copy") { [weak self] in self?.host?.copy(first.id) })
+            menu.addItem(ClosureMenuItem("Copy") { [weak self] in self?.copyPicture(first.id) })
         }
-        if items.contains(where: { $0.text != nil }) {
-            menu.addItem(ClosureMenuItem("Copy Text") { [weak self] in self?.copyText(nil) })
+        if items.contains(where: { mightHaveText($0) }) {
+            menu.addItem(ClosureMenuItem("Copy Text") { [weak self] in self?.copyText(of: ids) })
         }
         if items.contains(where: \.isSaved) {
             menu.addItem(ClosureMenuItem("Show in Finder") { [weak self] in self?.showInFinder(nil) })

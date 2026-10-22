@@ -303,10 +303,11 @@ struct CaptureHistoryModelTests {
 /// The window itself, offscreen: the keys, Remove from History and Undo.
 @MainActor
 struct CaptureHistoryWindowTests {
-    private func key(_ code: UInt16, _ characters: String, in window: NSWindow) -> NSEvent {
-        NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [], timestamp: 0, windowNumber: window.windowNumber,
-                         context: nil, characters: characters, charactersIgnoringModifiers: characters, isARepeat: false,
-                         keyCode: code)!
+    private func key(_ code: UInt16, _ characters: String, _ modifiers: NSEvent.ModifierFlags = [],
+                     in window: NSWindow) -> NSEvent {
+        NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: modifiers, timestamp: 0,
+                         windowNumber: window.windowNumber, context: nil, characters: characters,
+                         charactersIgnoringModifiers: characters, isARepeat: false, keyCode: code)!
     }
 
     private func waitUntil(_ condition: () -> Bool) async throws {
@@ -339,10 +340,10 @@ struct CaptureHistoryWindowTests {
         window.makeFirstResponder(grid.collectionView)
         grid.select([ids[0]], scroll: false)
 
-        // → moves on; Delete removes it in one step and selects the next.
+        // → moves on; ⌘⌫ removes it in one step and selects the next.
         grid.collectionView.keyDown(with: key(124, "\u{F703}", in: window))
         #expect(grid.selectedIDs == [ids[1]])
-        grid.collectionView.keyDown(with: key(51, "\u{7F}", in: window))
+        grid.collectionView.keyDown(with: key(51, "\u{7F}", .command, in: window))
         #expect(controller.model.item(ids[1]) == nil)
         #expect(CaptureLibrary.entry(ids[1], in: root) == nil)
         #expect(grid.selectedIDs == [ids[2]])
@@ -369,5 +370,332 @@ struct CaptureHistoryWindowTests {
         controller.windowWillClose(Notification(name: NSWindow.willCloseNotification))
         #expect(!FileManager.default.fileExists(atPath: CaptureLibrary.removedFolder(in: root).path))
         #expect(CaptureLibrary.entries(in: root).count == 2)
+    }
+}
+
+/// Stands in for the coordinator: which captures are open in the editor, and what words
+/// each has once cropping and hiding are taken into account.
+@MainActor
+final class FakeHistoryHost: CaptureHistoryHost {
+    var editingCaptures: Set<UUID> = []
+    /// The words you can see in each; those missing have none.
+    var visible: [UUID: String] = [:]
+    /// Ones Vision couldn't read.
+    var unreadable: Set<UUID> = []
+    private(set) var read: [UUID] = []
+    private(set) var copied: [UUID] = []
+
+    func openEditor(_ id: UUID) {}
+    func copy(_ id: UUID) -> Bool {
+        copied.append(id)
+        return true
+    }
+    func pin(_ id: UUID) {}
+    func fileForDragging(_ id: UUID) -> URL? { nil }
+    func prepareDragFile(_ id: UUID) {}
+    func readVisibleText(_ id: UUID) async -> String? {
+        read.append(id)
+        return unreadable.contains(id) ? nil : visible[id] ?? ""
+    }
+    func hasText(_ id: UUID) -> Bool { visible[id]?.isEmpty == false }
+}
+
+/// The fixes from reviewing history: what stays while it's edited, what Copy Text copies,
+/// tidying the library, old captures catching up, and Edit Last Capture.
+@MainActor
+struct CaptureHistoryReviewTests {
+    private func makeRoot() throws -> URL {
+        let root = FileManager.default.temporaryDirectory.appending(path: "capture-history-review-\(UUID())")
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        return root
+    }
+
+    /// Kept captures an hour apart, newest first, each with `text` as read when it was taken.
+    private func store(_ count: Int, in root: URL, text: String? = nil, ago: TimeInterval = 0,
+                       width: Int = 64, height: Int = 40) throws -> [UUID] {
+        let image = try #require(CaptureStoreTests.image(width: width, height: height))
+        return try (0..<count).map { index in
+            var entry = CaptureLibrary.Entry(id: UUID(), date: Date().addingTimeInterval(-ago - Double(index) * 3600),
+                                             scale: 2, kind: "selection", appName: "Notes", fileURL: nil, edited: false)
+            entry.text = text
+            try CaptureLibrary.store(image, entry: entry, in: root)
+            return entry.id
+        }
+    }
+
+    private func waitUntil(_ condition: () -> Bool) async throws {
+        for _ in 0..<60 where !condition() { try await Task.sleep(for: .milliseconds(50)) }
+    }
+
+    private func window(host: FakeHistoryHost?, root: URL, count: Int) async throws -> CaptureHistoryWindowController {
+        let controller = CaptureHistoryWindowController(host: host, root: root)
+        let window = try #require(controller.window)
+        // Tests share the app's defaults: never remember this window's frame.
+        window.setFrameAutosaveName("")
+        window.setFrame(NSRect(x: 0, y: 0, width: 900, height: 600), display: false)
+        controller.model.keepDays = 30
+        controller.model.reload()
+        try await waitUntil { controller.model.all.count == count }
+        return controller
+    }
+
+    // MARK: Open in the editor
+
+    @Test func keepsWhatsOpenInTheEditor() async throws {
+        let root = try makeRoot()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let ids = try store(3, in: root)
+        let host = FakeHistoryHost()
+        host.editingCaptures = [ids[0]]
+        let controller = try await window(host: host, root: root, count: 3)
+        let grid = controller.grid
+
+        // Removing two, one of them open: the other goes, the open one stays selected.
+        grid.select([ids[0], ids[1]], scroll: false)
+        controller.removeFromHistory(nil)
+        #expect(CaptureLibrary.entry(ids[0], in: root) != nil)
+        #expect(CaptureLibrary.entry(ids[1], in: root) == nil)
+        #expect(grid.selectedIDs == [ids[0]])
+        #expect(controller.notice.note?.text == "Kept 1 that's open in the editor")
+
+        // Only the open one: nothing goes, and the window says why.
+        controller.removeFromHistory(nil)
+        #expect(CaptureLibrary.entry(ids[0], in: root) != nil)
+        #expect(controller.notice.note?.text == "Close its editor first to remove it")
+        #expect(host.isEditing(ids[0]) && !host.isEditing(ids[2]))
+
+        // Clear Now and pruning leave it too.
+        CaptureLibrary.clear(in: root, keeping: [ids[0]])
+        #expect(CaptureLibrary.entries(in: root).map(\.id) == [ids[0]])
+        let later = Date().addingTimeInterval(90 * 86_400)
+        CaptureLibrary.prune(now: later, days: 30, in: root, keeping: [ids[0]])
+        #expect(CaptureLibrary.entries(in: root).map(\.id) == [ids[0]])
+        CaptureLibrary.prune(now: later, days: 30, in: root)
+        #expect(CaptureLibrary.entries(in: root).isEmpty)
+    }
+
+    // MARK: Copy Text
+
+    @Test func copyTextCopiesOnlyWhatsVisible() async throws {
+        let root = try makeRoot()
+        defer { try? FileManager.default.removeItem(at: root) }
+        // Read when they were taken, before anything was cropped or hidden.
+        let ids = try store(4, in: root, text: "Password hunter2")
+        let host = FakeHistoryHost()
+        host.visible = [ids[0]: "Quarterly plan", ids[2]: "Lunch menu\nSoup"]
+        host.unreadable = [ids[3]]
+        let controller = try await window(host: host, root: root, count: 4)
+        let pasteboard = NSPasteboard(name: NSPasteboard.Name("barnowl-tests-\(UUID())"))
+        defer { pasteboard.releaseGlobally() }
+        controller.pasteboard = pasteboard
+
+        // Three at once: what the host says is visible, in grid order; nothing hidden.
+        controller.grid.select([ids[0], ids[1], ids[2]], scroll: false)
+        controller.copyText(nil)
+        try await waitUntil { pasteboard.string(forType: .string) != nil }
+        #expect(pasteboard.string(forType: .string) == "Quarterly plan\n\nLunch menu\nSoup")
+        #expect(host.read == [ids[0], ids[1], ids[2]])
+        #expect(controller.notice.note?.text == "Text copied · 3 lines")
+
+        // None with words: nothing copied, and it says so.
+        pasteboard.clearContents()
+        controller.grid.select([ids[1]], scroll: false)
+        controller.copyText(nil)
+        try await waitUntil { controller.notice.note?.text == "No text found" }
+        #expect(controller.notice.note?.text == "No text found")
+        #expect(pasteboard.string(forType: .string) == nil)
+
+        controller.grid.select([ids[3]], scroll: false)
+        controller.copyText(nil)
+        try await waitUntil { controller.notice.note?.text == "Couldn't read the text" }
+        #expect(controller.notice.note?.tone == .warning)
+        #expect(pasteboard.string(forType: .string) == nil)
+
+        // Copy says so too.
+        controller.grid.select([ids[0]], scroll: false)
+        controller.copy(nil)
+        #expect(host.copied == [ids[0]])
+        #expect(controller.notice.note?.text == "Copied")
+    }
+
+    @Test func saysHowMuchTextWasCopied() {
+        #expect(CaptureHistoryWindowController.textCopied("Hello") == "Text copied")
+        #expect(CaptureHistoryWindowController.textCopied("One\nTwo\n\nThree") == "Text copied · 3 lines")
+    }
+
+    @Test func offersCopyTextUntilItsKnownThereIsNone() async throws {
+        let root = try makeRoot()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let unread = try store(1, in: root)[0]
+        let none = try store(1, in: root, ago: 7200)[0]
+        CaptureLibrary.update(none, in: root) { $0.textWasRead = true }
+        let host = FakeHistoryHost()
+        let controller = try await window(host: host, root: root, count: 2)
+        let item = NSMenuItem(title: "Copy Text", action: #selector(CaptureHistoryWindowController.copyText(_:)),
+                              keyEquivalent: "")
+        // Not read yet: offered, and read when chosen.
+        controller.grid.select([unread], scroll: false)
+        #expect(controller.validateMenuItem(item))
+        // Read, with no words: not offered, unless the host knows better.
+        controller.grid.select([none], scroll: false)
+        #expect(!controller.validateMenuItem(item))
+        host.visible[none] = "Found later"
+        #expect(controller.validateMenuItem(item))
+    }
+
+    // MARK: Tidying
+
+    @Test func clearLetsGoOfEverything() throws {
+        let root = try makeRoot()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let ids = try store(2, in: root)
+        CaptureLibrary.remove([ids[1]], in: root)
+        // Half-written: its picture, but no entry.
+        let half = root.appending(path: UUID().uuidString)
+        try FileManager.default.createDirectory(at: half, withIntermediateDirectories: true)
+        try Data([1]).write(to: half.appending(path: "original.png"))
+        let other = root.appending(path: "Notes.txt")
+        try Data([1]).write(to: other)
+
+        CaptureLibrary.clear(in: root)
+        #expect(CaptureLibrary.entries(in: root).isEmpty)
+        #expect(!FileManager.default.fileExists(atPath: CaptureLibrary.removedFolder(in: root).path))
+        #expect(!FileManager.default.fileExists(atPath: half.path))
+        #expect(CaptureLibrary.restore([ids[1]], in: root).isEmpty)
+        // Only Barn Owl's own folders.
+        #expect(FileManager.default.fileExists(atPath: other.path))
+    }
+
+    @Test func loadsEachCaptureOnce() throws {
+        let root = try makeRoot()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let id = try store(1, in: root)[0]
+        try FileManager.default.copyItem(at: CaptureLibrary.folder(for: id, in: root),
+                                         to: root.appending(path: UUID().uuidString))
+        #expect(CaptureLibrary.entries(in: root).count == 2)
+        #expect(CaptureHistory.load(in: root, now: Date()).map(\.id) == [id])
+    }
+
+    // MARK: Captures from 0.15.0
+
+    @Test func makesTheThumbnailsOldCapturesNeverGot() throws {
+        let root = try makeRoot()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let wide = try store(1, in: root, width: 1600, height: 900)[0]
+        let small = try store(1, in: root, width: 300, height: 200)[0]
+        let thumbnail = CaptureLibrary.folder(for: wide, in: root).appending(path: "thumbnail.png")
+        #expect(!FileManager.default.fileExists(atPath: thumbnail.path))
+
+        // Showing it from the original makes the thumbnail, the size Barn Owl makes them.
+        let picture = try #require(CaptureLibrary.smallPicture(wide, pixels: 400, in: root))
+        #expect(max(picture.width, picture.height) == 400)
+        let made = try #require(CaptureLibrary.thumbnail(wide, in: root))
+        #expect(made.width == 520 && (292...293).contains(made.height))
+        #expect(!CaptureLibrary.storeMissingThumbnail(wide, in: root))
+        // Never bigger than the original.
+        #expect(CaptureLibrary.storeMissingThumbnail(small, in: root))
+        #expect(CaptureLibrary.thumbnail(small, in: root)?.width == 300)
+
+        // Marked up: drawn with its marks, unless its frame wants the desktop picture.
+        let marked = try store(1, in: root, width: 800, height: 600)[0]
+        var document = EditorDocument(imageSize: CGSize(width: 800, height: 600))
+        try CaptureLibrary.storeDocument(JSONEncoder().encode(document), for: marked, in: root)
+        #expect(CaptureLibrary.storeMissingThumbnail(marked, in: root))
+        #expect(CaptureLibrary.thumbnail(marked, in: root)?.width == 520)
+        let desktop = try store(1, in: root)[0]
+        document.frame.background = .desktop
+        try CaptureLibrary.storeDocument(JSONEncoder().encode(document), for: desktop, in: root)
+        #expect(!CaptureLibrary.storeMissingThumbnail(desktop, in: root))
+    }
+
+    @Test func readsTheWordsOfOldCapturesOnce() async throws {
+        let root = try makeRoot()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let read = try store(1, in: root, text: "Already read")[0]
+        let words = try store(1, in: root, ago: 3600)[0]
+        let empty = try store(1, in: root, ago: 7200)[0]
+        let failing = try store(1, in: root, ago: 10800)[0]
+        final class Reader: @unchecked Sendable {
+            var calls = 0
+            var answers: [String?] = []
+        }
+        struct Failed: Error {}
+        // Newest first: words, none, then Vision fails.
+        let reader = Reader()
+        reader.answers = ["Invoice 42", "", nil]
+        let stub: @Sendable (CGImage) async throws -> String = { _ in
+            defer { reader.calls += 1 }
+            guard reader.calls < reader.answers.count, let answer = reader.answers[reader.calls] else { throw Failed() }
+            return answer
+        }
+        await CaptureLibrary.backfill(in: root, read: stub)
+        #expect(reader.calls == 3)
+        #expect(CaptureLibrary.entry(read, in: root)?.text == "Already read")
+        #expect(CaptureLibrary.entry(words, in: root)?.text == "Invoice 42")
+        #expect(CaptureLibrary.entry(words, in: root)?.textWasRead == true)
+        #expect(CaptureLibrary.entry(empty, in: root)?.text == nil)
+        #expect(CaptureLibrary.entry(empty, in: root)?.textWasRead == true)
+        #expect(CaptureLibrary.entry(failing, in: root)?.textWasRead == nil)
+        // Thumbnails for all of them along the way.
+        for id in [read, words, empty, failing] { #expect(CaptureLibrary.thumbnail(id, in: root)?.width == 64) }
+        // Again: only the one Vision couldn't read is tried.
+        reader.answers = []
+        reader.calls = 0
+        await CaptureLibrary.backfill(in: root, read: stub)
+        #expect(reader.calls == 1)
+        // Search finds the words now.
+        let items = CaptureHistory.load(in: root, now: Date())
+        #expect(CaptureHistory.filter(items, query: "invoice").map(\.id) == [words])
+    }
+
+    // MARK: Edit Last Capture
+
+    @Test func editLastCaptureSkipsOnesLetGo() throws {
+        let root = try makeRoot()
+        defer { try? FileManager.default.removeItem(at: root) }
+        #expect(CaptureCoordinator.lastCapture(nil, onlyInMemory: false, in: root) == nil)
+        let ids = try store(2, in: root)
+        #expect(CaptureCoordinator.lastCapture(ids[1], onlyInMemory: false, in: root) == ids[1])
+        #expect(CaptureCoordinator.lastCapture(nil, onlyInMemory: false, in: root) == ids[0])
+        // Removed from history: the newest one kept instead.
+        CaptureLibrary.remove([ids[1]], in: root)
+        #expect(CaptureCoordinator.lastCapture(ids[1], onlyInMemory: false, in: root) == ids[0])
+        // Only in memory (still being written, or nothing kept): still there to edit.
+        let fresh = UUID()
+        #expect(CaptureCoordinator.lastCapture(fresh, onlyInMemory: true, in: root) == fresh)
+    }
+
+    // MARK: Keys
+
+    @Test func onlyCommandDeleteRemoves() async throws {
+        let root = try makeRoot()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let ids = try store(2, in: root)
+        let controller = try await window(host: FakeHistoryHost(), root: root, count: 2)
+        let window = try #require(controller.window)
+        let grid = controller.grid
+        window.makeFirstResponder(grid.collectionView)
+        grid.select([ids[0]], scroll: false)
+        func delete(_ modifiers: NSEvent.ModifierFlags) -> NSEvent {
+            NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: modifiers, timestamp: 0,
+                             windowNumber: window.windowNumber, context: nil, characters: "\u{7F}",
+                             charactersIgnoringModifiers: "\u{7F}", isARepeat: false, keyCode: 51)!
+        }
+        grid.collectionView.keyDown(with: delete([]))
+        #expect(controller.model.item(ids[0]) != nil)
+        grid.collectionView.keyDown(with: delete(.command))
+        #expect(controller.model.item(ids[0]) == nil)
+
+        // Esc in the search field clears it, then leaves it; it never closes the window.
+        let field = NSSearchField()
+        let editor = NSTextView()
+        controller.model.query = "lunch"
+        editor.string = "lunch"
+        let escape = #selector(NSResponder.cancelOperation(_:))
+        #expect(controller.control(field, textView: editor, doCommandBy: escape))
+        #expect(controller.model.query.isEmpty)
+        editor.string = ""
+        #expect(controller.control(field, textView: editor, doCommandBy: escape))
+        #expect(controller.model.isLoaded)
     }
 }

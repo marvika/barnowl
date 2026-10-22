@@ -140,11 +140,14 @@ enum CaptureHistory {
 
     // MARK: Loading
 
-    /// Every kept capture, newest first. Reads files, so it runs off the main thread.
+    /// Every kept capture, newest first, each once (a folder copied by hand repeats its id).
+    /// Reads files, so it runs off the main thread.
     static func load(in root: URL, now: Date, calendar: Calendar = .autoupdatingCurrent,
                      locale: Locale = .autoupdatingCurrent) -> [Item] {
         let namer = DayNamer(now: now, calendar: calendar, locale: locale)
-        return CaptureLibrary.entries(in: root).map { entry in
+        var seen: Set<UUID> = []
+        return CaptureLibrary.entries(in: root).compactMap { entry in
+            guard seen.insert(entry.id).inserted else { return nil }
             let saved = entry.fileURL.map { FileManager.default.fileExists(atPath: $0.path) } ?? false
             return Item(entry: entry, isSaved: saved, searchKey: searchKey(for: entry, namer: namer))
         }
@@ -208,19 +211,90 @@ extension CaptureLibrary {
     }
 
     /// The capture as it looks now, at most `pixels` on its longer side: the thumbnail, or the
-    /// original while there's none yet. Decoded here, off the main thread.
+    /// original while there's none yet, and then the thumbnail is made from it for next time.
+    /// Decoded here, off the main thread.
     static func smallPicture(_ id: UUID, pixels: Int, in root: URL = folder) -> CGImage? {
+        let dir = folder(for: id, in: root)
+        if let picture = downsampled(dir.appending(path: "thumbnail.png"), longest: pixels) { return picture }
+        guard let picture = downsampled(dir.appending(path: "original.png"), longest: pixels) else { return nil }
+        storeMissingThumbnail(id, in: root)
+        return picture
+    }
+
+    /// A picture file decoded at most `longest` pixels on its longer side, the right way up.
+    private static func downsampled(_ url: URL, longest: Int) -> CGImage? {
         let options: [CFString: Any] = [kCGImageSourceCreateThumbnailFromImageAlways: true,
-                                        kCGImageSourceThumbnailMaxPixelSize: pixels,
+                                        kCGImageSourceThumbnailMaxPixelSize: longest,
                                         kCGImageSourceCreateThumbnailWithTransform: true,
                                         kCGImageSourceShouldCacheImmediately: true]
+        guard let source = CGImageSourceCreateWithURL(url as CFURL, nil), CGImageSourceGetCount(source) > 0 else { return nil }
+        return CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary)
+    }
+
+    /// Makes the thumbnail a capture kept before history drew them (0.15.0) never got, the
+    /// size `storeThumbnail` makes. With marks, they're drawn on, unless the frame wants the
+    /// desktop picture: that one waits for the editor. Off the main thread. Returns whether
+    /// it made one.
+    @discardableResult
+    static func storeMissingThumbnail(_ id: UUID, in root: URL = folder) -> Bool {
         let dir = folder(for: id, in: root)
-        for name in ["thumbnail.png", "original.png"] {
-            guard let source = CGImageSourceCreateWithURL(dir.appending(path: name) as CFURL, nil),
-                  CGImageSourceGetCount(source) > 0,
-                  let image = CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary) else { continue }
-            return image
+        let url = dir.appending(path: "thumbnail.png")
+        guard !FileManager.default.fileExists(atPath: url.path), let entry = entry(id, in: root) else { return false }
+        let small: CGImage
+        if entry.edited, let data = document(id, in: root), !data.isEmpty {
+            guard let document = try? JSONDecoder().decode(EditorDocument.self, from: data),
+                  document.frame.background != .desktop, let original = original(id, in: root),
+                  let drawn = AnnotationRenderer(image: original, scale: entry.scale).render(document) else { return false }
+            small = CaptureStore.thumbnail(drawn, width: thumbnailWidth)
+        } else {
+            guard let source = CGImageSourceCreateWithURL(dir.appending(path: "original.png") as CFURL, nil),
+                  let size = pixelSize(of: source) else { return false }
+            // As wide as `thumbnailWidth` at most, decoded straight to that size.
+            let width = min(size.width, Int(thumbnailWidth))
+            let height = Int((Double(width) * Double(size.height) / Double(size.width)).rounded())
+            let options: [CFString: Any] = [kCGImageSourceCreateThumbnailFromImageAlways: true,
+                                            kCGImageSourceThumbnailMaxPixelSize: max(width, height, 1),
+                                            kCGImageSourceCreateThumbnailWithTransform: true]
+            guard let image = CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary) else { return false }
+            small = image
         }
-        return nil
+        // Whole, and never over one Barn Owl wrote meanwhile with newer marks.
+        let unfinished = dir.appending(path: ".thumbnail-\(UUID().uuidString).png")
+        guard let png = try? CaptureStore.encode(small, scale: 1, as: .png, atOneX: false),
+              (try? png.write(to: unfinished)) != nil else { return false }
+        defer { try? FileManager.default.removeItem(at: unfinished) }
+        guard (try? FileManager.default.linkItem(at: unfinished, to: url)) != nil else { return false }
+        // Only marks change how it looks; the original already showed as it is.
+        if entry.edited { changed(id) }
+        return true
+    }
+
+    private static func pixelSize(of source: CGImageSource) -> (width: Int, height: Int)? {
+        guard let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any],
+              let width = properties[kCGImagePropertyPixelWidth] as? Int,
+              let height = properties[kCGImagePropertyPixelHeight] as? Int, width > 0, height > 0 else { return nil }
+        return (width, height)
+    }
+
+    /// Reads the words in captures kept before Barn Owl read them for history (0.15.0), one at
+    /// a time, and makes the thumbnails they never got. Each is read once: one without words
+    /// is marked so it isn't read again; one Vision couldn't read is tried another time.
+    /// `read` gives a picture's words. Stops when its task is cancelled. Off the main thread.
+    static func backfill(in root: URL = folder, read: @Sendable (CGImage) async throws -> String = words(in:)) async {
+        for entry in entries(in: root) {
+            guard !Task.isCancelled else { return }
+            storeMissingThumbnail(entry.id, in: root)
+            guard entry.text == nil, entry.textWasRead != true, let image = original(entry.id, in: root),
+                  let words = try? await read(image) else { continue }
+            update(entry.id, in: root) { kept in
+                if kept.text == nil, !words.isEmpty { kept.text = words }
+                kept.textWasRead = true
+            }
+        }
+    }
+
+    /// A picture's words as a new capture's are kept: read as they are, not corrected.
+    @Sendable static func words(in image: CGImage) async throws -> String {
+        try await SensitiveTextFinder.scan(image).plainText()
     }
 }

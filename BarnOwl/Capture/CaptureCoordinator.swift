@@ -33,6 +33,10 @@ final class CaptureCoordinator {
     @ObservationIgnored private var onClipboard: (id: UUID, changeCount: Int)?
     /// Copies made ahead of a drag, so pulling a card out never waits on an encode.
     @ObservationIgnored private var dragFiles: [UUID: (image: CGImage, url: URL)] = [:]
+    /// Kept captures being drawn for a drag from history.
+    @ObservationIgnored private var loadingForDrag: Set<UUID> = []
+    /// Captures written to the library this run, so one missing from it now was let go.
+    @ObservationIgnored private var everKept: Set<UUID> = []
     /// Pictures opened with Barn Owl, so opening one again finds its editor.
     @ObservationIgnored private var openedFiles: [URL: UUID] = [:]
     /// What each editor's Save last wrote, so closing right after doesn't count as unsaved.
@@ -69,8 +73,16 @@ final class CaptureCoordinator {
                 self?.lastOtherApp = app
             }
         }
+        // Captures past their time go at midnight too, not only when Barn Owl starts.
+        NotificationCenter.default.addObserver(forName: .NSCalendarDayChanged, object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.pruneKept() }
+        }
         applySettings()
-        Task.detached(priority: .background) { CaptureStore.tidyTemporaryFiles() }
+        Task.detached(priority: .background) {
+            CaptureStore.tidyTemporaryFiles()
+            // Removed from history but not let go of, if Barn Owl didn't get to quit.
+            CaptureLibrary.forgetRemoved()
+        }
     }
 
     /// Turns the shortcuts on or off with the setting, and takes ⇧⌘3 and ⇧⌘4
@@ -82,8 +94,7 @@ final class CaptureCoordinator {
         // At launch, and whenever you keep captures for less time.
         if CaptureLibrary.keepDays != lastKeepDays {
             lastKeepDays = CaptureLibrary.keepDays
-            let days = CaptureLibrary.keepDays
-            Task.detached(priority: .background) { CaptureLibrary.prune(days: days) }
+            pruneKept()
         }
         let apple = Preferences.captureEnabled && Preferences.captureAppleKeys && !SystemScreenshotShortcuts.anyEnabled
         // Setting a shortcut writes to the defaults, which calls this again: only on a change.
@@ -98,6 +109,15 @@ final class CaptureCoordinator {
             KeyboardShortcuts.setShortcut(apple ? screen : nil, for: .captureScreenApple)
         }
     }
+
+    /// Lets go of captures past their time, in the background; never one open in the editor.
+    func pruneKept() {
+        let days = CaptureLibrary.keepDays, keeping = editingCaptures
+        Task.detached(priority: .background) { CaptureLibrary.prune(days: days, keeping: keeping) }
+    }
+
+    /// Captures open in the editor: history and Clear Now leave them be while they are.
+    var editingCaptures: Set<UUID> { Set(editors.values.map(\.captureID)) }
 
     // MARK: Capturing
 
@@ -326,6 +346,8 @@ final class CaptureCoordinator {
                     return false
                 }
             }.value
+            // In the library now: missing from it later means it was let go.
+            if CaptureLibrary.isOn { everKept.insert(id) }
             if fileURL != nil, !saved {
                 Log.app.error("Saving a capture failed")
                 captures[id]?.fileURL = nil
@@ -429,9 +451,16 @@ final class CaptureCoordinator {
             guard !Task.isCancelled else { return }
             insights[id] = insight
             scans[id] = nil
-            // Kept with the capture, for searching history and Copy Text later.
+            // Kept with the capture, for searching history and Copy Text later; read once.
             let words = insight.text.plainText()
-            if !words.isEmpty { inOrder(id) { CaptureLibrary.update(id) { $0.text = words } } }
+            if insight.textWasRead {
+                inOrder(id) {
+                    CaptureLibrary.update(id) { entry in
+                        if !words.isEmpty { entry.text = words }
+                        entry.textWasRead = true
+                    }
+                }
+            }
             editors.values.first { $0.captureID == id }?.editor.update(insight: insight)
             // Only secrets interrupt; once offered, Hide covers everything private.
             // Secrets named first, as the editor's banner does.
@@ -572,16 +601,30 @@ final class CaptureCoordinator {
         return CaptureLibrary.entry(id)?.text?.isEmpty == false
     }
 
+    /// The words you can see in a capture, in reading order: read again carefully, with words
+    /// corrected, from the original when it's kept, leaving out what's cropped away or hidden.
+    /// Empty when there are none; nil when they couldn't be read.
+    func readVisibleText(_ id: UUID) async -> String? {
+        guard let image = pictureToRead(id) else { return nil }
+        let read = try? await Task.detached(priority: .userInitiated) {
+            try await SensitiveTextFinder.scan(image, forReading: true)
+        }.value
+        return read.map { visibleText($0, of: id) }
+    }
+
+    /// The picture whose words `visibleText` places: the original, if it has marks or isn't
+    /// in memory; otherwise the one in memory. Never draws marks just to read past them.
+    private func pictureToRead(_ id: UUID) -> CGImage? {
+        if let capture = captures[id], storedDocument(id) == nil { return capture.image }
+        return CaptureLibrary.original(id) ?? captures[id]?.image
+    }
+
     /// Puts the capture's words on the clipboard, in reading order, and says how it went.
-    /// Read again carefully, with words corrected, from the original when it's kept.
     func copyText(_ id: UUID) {
-        guard let capture = capture(id) else { return NSSound.beep() }
-        let image = storedDocument(id) != nil ? (CaptureLibrary.original(id) ?? capture.image) : capture.image
+        guard pictureToRead(id) != nil else { return NSSound.beep() }
         Task {
-            let read = try? await Task.detached(priority: .userInitiated) {
-                try await SensitiveTextFinder.scan(image, forReading: true)
-            }.value
-            let words = read.map { visibleText($0, of: id) } ?? ""
+            let read = await readVisibleText(id)
+            let words = read ?? ""
             let status: String
             if read == nil {
                 status = "Couldn't read the text"
@@ -607,13 +650,16 @@ final class CaptureCoordinator {
 
     // MARK: What cards and pins ask for
 
-    func copy(_ id: UUID) {
-        guard let capture = capture(id) else { return }
+    /// Copies the capture as it looks now. False if it's nowhere to be found.
+    @discardableResult
+    func copy(_ id: UUID) -> Bool {
+        guard let capture = capture(id) else { return false }
         let copying = copyInOrder(id, image: capture.image, scale: capture.scale)
         Task {
             await copying.value
             cards.update(id, status: status(copied: true, saved: isSaved(id)), kept: true)
         }
+        return true
     }
 
     /// Saves it, or shows it in Finder if it's saved already.
@@ -643,14 +689,43 @@ final class CaptureCoordinator {
         return CaptureStore.temporaryFile(for: capture)
     }
 
-    /// Makes the copy a drag would need, off the main thread, while you point at the card.
+    /// Makes the copy a drag would need, off the main thread, while you point at the card or
+    /// at a tile in history.
     func prepareDragFile(_ id: UUID) {
+        guard captures[id] != nil else { return loadForDragging(id) }
         guard !isSaved(id), let capture = capture(id), dragFiles[id]?.image !== capture.image else { return }
         let image = capture.image
         Task {
             let url = await Task.detached(priority: .userInitiated) { CaptureStore.temporaryFile(for: capture) }.value
             guard let url, self.captures[id]?.image === image else { return }
             dragFiles[id] = (image, url)
+        }
+    }
+
+    /// A kept capture pointed at in history: its marks drawn and its drag file written off the
+    /// main thread, then held in memory like any other, so the drag never waits for either.
+    private func loadForDragging(_ id: UUID) {
+        guard !loadingForDrag.contains(id), let kept = keptCapture(id, rendered: false) else { return }
+        let document = storedDocument(id)
+        let renderer = document.map { renderer(for: kept.image, scale: kept.scale, document: $0) }
+        let saved = !kept.unsavedEdits && kept.fileURL.map { FileManager.default.fileExists(atPath: $0.path) } == true
+        loadingForDrag.insert(id)
+        Task {
+            let made = await Task.detached(priority: .userInitiated) { () -> (image: CGImage, url: URL?) in
+                var capture = kept
+                if let document, let drawn = renderer?.render(document) { capture.image = drawn }
+                return (capture.image, saved ? nil : CaptureStore.temporaryFile(for: capture))
+            }.value
+            loadingForDrag.remove(id)
+            // Loaded another way meanwhile (a drag that couldn't wait), or let go of: not needed.
+            guard captures[id] == nil, CaptureLibrary.entry(id) != nil else {
+                if let url = made.url { try? FileManager.default.removeItem(at: url) }
+                return
+            }
+            var capture = kept
+            capture.image = made.image
+            remember(capture)
+            if let url = made.url { dragFiles[id] = (made.image, url) }
         }
     }
 
@@ -774,11 +849,14 @@ final class CaptureCoordinator {
         return inOrder(id) {}
     }
 
-    /// Quitting: every open editor's marks are kept straight away.
+    /// Quitting: every open editor's marks are kept straight away, and history's picture of it.
     func keepOpenEditors() {
         for (editor, id) in editors.values where editor.model.isEdited {
             guard let data = try? JSONEncoder().encode(editor.model.document) else { continue }
             try? CaptureLibrary.storeDocument(data, for: id)
+            if let image = editor.model.renderer.render(editor.model.document) {
+                CaptureLibrary.storeThumbnail(image, for: id)
+            }
         }
     }
 
@@ -789,8 +867,17 @@ final class CaptureCoordinator {
         // Never under a frozen screen.
         overlay?.finish(.cancelled)
         rememberFrontApp()
-        guard let id = lastCaptureID ?? CaptureLibrary.latest()?.id else { return NSSound.beep() }
+        let inMemory = lastCaptureID.map { captures[$0] != nil && !everKept.contains($0) } ?? false
+        guard let id = Self.lastCapture(lastCaptureID, onlyInMemory: inMemory) else { return NSSound.beep() }
         openEditor(id)
+    }
+
+    /// The capture Edit Last Capture opens: the last one taken, unless history, Clear Now or
+    /// time has let it go since; then the newest one kept. `onlyInMemory`: it's in memory and
+    /// was never kept (not yet written, or nothing is kept), so it's still there to edit.
+    static func lastCapture(_ last: UUID?, onlyInMemory: Bool, in root: URL = CaptureLibrary.folder) -> UUID? {
+        if let last, onlyInMemory || CaptureLibrary.entry(last, in: root) != nil { return last }
+        return CaptureLibrary.latest(in: root)?.id
     }
 
     /// Opens a picture in the editor. One Barn Owl saved, unchanged since, comes back with
@@ -851,6 +938,7 @@ final class CaptureCoordinator {
 
     func openEditor(_ id: UUID) {
         // The editor draws the marks itself: no need to render them here.
+        let inMemory = captures[id] != nil
         guard let capture = captures[id] ?? keptCapture(id, rendered: false) else { return }
         if editors.isEmpty { rememberFrontApp() }
         cards.remove(id)
@@ -866,6 +954,9 @@ final class CaptureCoordinator {
         let editor = CaptureEditor(image: image, scale: capture.scale, title: title, document: document,
                                    insight: insights[id], host: self)
         editors[ObjectIdentifier(editor)] = (editor, id)
+        // Held in memory while it's open, so Done and closing still work if history or Clear
+        // Now lets it go meanwhile.
+        if !inMemory { holdWhileEditing(capture, document: document) }
         // Reopened after Barn Owl restarted: read its text again, so private info is still
         // offered and Done still asks about a key.
         if insights[id] == nil, scans[id] == nil {
@@ -879,10 +970,27 @@ final class CaptureCoordinator {
         editor.show()
     }
 
+    /// Keeps a capture from the library in memory while its editor is open. Until its marks
+    /// are drawn on, off the main thread, it holds the original, as the editor does.
+    private func holdWhileEditing(_ capture: Capture, document: EditorDocument?) {
+        remember(capture)
+        guard let document else { return }
+        let original = capture.image, id = capture.id
+        let renderer = renderer(for: original, scale: capture.scale, document: document)
+        Task {
+            let drawn = await Task.detached(priority: .userInitiated) { renderer.render(document) }.value
+            // Unless something newer took its place meanwhile (Done, closing).
+            guard let drawn, var held = captures[id], held.image === original else { return }
+            held.image = drawn
+            captures[id] = held
+        }
+    }
+
     // MARK: History
 
     /// Every kept capture, in a window of its own; Barn Owl is a real app while it's open.
     func showHistory() {
+        guard Preferences.captureEnabled else { return }
         overlay?.finish(.cancelled)
         if editors.isEmpty, history?.isOpen != true { rememberFrontApp() }
         let history = self.history ?? CaptureHistoryWindowController(host: self)

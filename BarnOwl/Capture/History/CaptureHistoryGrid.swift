@@ -2,7 +2,7 @@ import AppKit
 import SwiftUI
 
 /// History's grid: tiles under day headers that stay at the top as you scroll. Arrow keys and
-/// clicks select (⌘ and ⇧ for more), Return or a double-click edits, Delete removes, and a
+/// clicks select (⌘ and ⇧ for more), Return or a double-click edits, ⌘⌫ removes, and a
 /// tile drags out as its file.
 @MainActor
 final class CaptureHistoryGrid: NSView, NSCollectionViewDelegate, NSCollectionViewDelegateFlowLayout {
@@ -11,9 +11,12 @@ final class CaptureHistoryGrid: NSView, NSCollectionViewDelegate, NSCollectionVi
     let collectionView = HistoryCollectionView()
     let scrollView = NSScrollView()
     private var dataSource: NSCollectionViewDiffableDataSource<Date, UUID>?
+    private var resting: Task<Void, Never>?
 
     /// The file to drag out for a capture.
     var fileForDragging: ((UUID) -> URL?)?
+    /// A drag may follow (the pointer rests on a tile, or presses one): have its file ready.
+    var prepareForDragging: ((UUID) -> Void)?
 
     init(model: CaptureHistoryModel) {
         self.model = model
@@ -46,6 +49,7 @@ final class CaptureHistoryGrid: NSView, NSCollectionViewDelegate, NSCollectionVi
         collectionView.setDraggingSourceOperationMask(.copy, forLocal: false)
         collectionView.setDraggingSourceOperationMask([], forLocal: true)
         collectionView.onFocus = { [weak self] in self?.refreshVisible() }
+        collectionView.onPoint = { [weak self] path, pressed in self?.pointed(at: path, pressed: pressed) }
         collectionView.setAccessibilityLabel("Captures")
 
         scrollView.documentView = collectionView
@@ -144,7 +148,42 @@ final class CaptureHistoryGrid: NSView, NSCollectionViewDelegate, NSCollectionVi
     private func configure(_ tile: HistoryTileItem?, id: UUID) {
         guard let tile else { return }
         tile.show(model.item(id), thumbnail: thumbnails.image(id), focused: isFocused)
+        tile.onPress = { [weak self] in self?.press(id) }
+        tile.onShowMenu = { [weak self, weak tile] in
+            guard let self, let tile else { return }
+            self.showMenu(for: id, at: tile.view)
+        }
         thumbnails.want(id)
+    }
+
+    /// VoiceOver's press: selects the capture and edits it.
+    private func press(_ id: UUID) {
+        select([id], scroll: false)
+        collectionView.onOpen?()
+    }
+
+    /// VoiceOver's show menu: selects the capture, unless it's selected already, and shows
+    /// what can be done with the selection, as a right-click does.
+    private func showMenu(for id: UUID, at view: NSView) {
+        if !selectedIDs.contains(id) { select([id], scroll: false) }
+        guard let menu = collectionView.menuProvider?() else { return }
+        menu.popUp(positioning: nil, at: NSPoint(x: view.bounds.midX, y: view.bounds.midY), in: view)
+    }
+
+    /// The pointer came to a tile, or pressed one: a drag may follow. Pressed, its file is
+    /// made now; pointed at, once the pointer rests there, not for every tile it crosses.
+    private func pointed(at path: IndexPath?, pressed: Bool) {
+        resting?.cancel()
+        guard let path, let id = dataSource?.itemIdentifier(for: path) else { return }
+        guard !pressed else {
+            prepareForDragging?(id)
+            return
+        }
+        resting = Task { [weak self] in
+            try? await Task.sleep(for: .milliseconds(150))
+            guard !Task.isCancelled else { return }
+            self?.prepareForDragging?(id)
+        }
     }
 
     private func configure(_ header: HistoryHeaderView?, section: Int) {
@@ -208,8 +247,8 @@ final class HistoryGridLayout: NSCollectionViewFlowLayout {
     }
 }
 
-/// The grid's own keys: Return edits, Delete removes, Esc clears the search or closes, and
-/// typing a word starts searching for it.
+/// The grid's own keys: Return edits, ⌘⌫ removes (a plain Delete never does, as in Finder),
+/// Esc clears the search or closes, and typing a word starts searching for it.
 final class HistoryCollectionView: NSCollectionView {
     var onOpen: (() -> Void)?
     var onRemove: (() -> Void)?
@@ -218,6 +257,10 @@ final class HistoryCollectionView: NSCollectionView {
     /// The grid took or gave up the keyboard.
     var onFocus: (() -> Void)?
     var menuProvider: (() -> NSMenu?)?
+    /// The pointer moved onto a tile (or off them all), or pressed one.
+    var onPoint: ((IndexPath?, _ pressed: Bool) -> Void)?
+    private var pointing: IndexPath?
+    private var tracking: NSTrackingArea?
 
     override var acceptsFirstResponder: Bool { true }
 
@@ -226,7 +269,7 @@ final class HistoryCollectionView: NSCollectionView {
         let code = Int(event.keyCode)
         if (code == 36 || code == 76), modifiers.isEmpty {
             onOpen?()
-        } else if (code == 51 || code == 117), modifiers.isEmpty || modifiers == .command {
+        } else if (code == 51 || code == 117), modifiers == .command {
             onRemove?()
         } else if code == 53 {
             onEscape?()
@@ -244,8 +287,34 @@ final class HistoryCollectionView: NSCollectionView {
     }
 
     override func mouseDown(with event: NSEvent) {
+        let path = indexPathForItem(at: convert(event.locationInWindow, from: nil))
+        // Before the drag starts, inside super.
+        if let path, event.clickCount == 1 { onPoint?(path, true) }
         super.mouseDown(with: event)
-        if event.clickCount == 2, indexPathForItem(at: convert(event.locationInWindow, from: nil)) != nil { onOpen?() }
+        if event.clickCount == 2, path != nil { onOpen?() }
+    }
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        if let tracking { removeTrackingArea(tracking) }
+        let area = NSTrackingArea(rect: .zero, options: [.mouseMoved, .mouseEnteredAndExited, .activeInKeyWindow, .inVisibleRect],
+                                  owner: self, userInfo: nil)
+        addTrackingArea(area)
+        tracking = area
+    }
+
+    override func mouseMoved(with event: NSEvent) {
+        super.mouseMoved(with: event)
+        let path = indexPathForItem(at: convert(event.locationInWindow, from: nil))
+        guard path != pointing else { return }
+        pointing = path
+        onPoint?(path, false)
+    }
+
+    override func mouseExited(with event: NSEvent) {
+        super.mouseExited(with: event)
+        pointing = nil
+        onPoint?(nil, false)
     }
 
     /// Right-clicking a tile outside the selection selects it first, as Finder does.
@@ -278,6 +347,15 @@ final class HistoryTileItem: NSCollectionViewItem {
     private var focused = true
     /// Reused for another capture, and not drawn for it yet.
     private var reused = true
+    /// VoiceOver's press and show menu, for the capture it shows now.
+    var onPress: (() -> Void)? {
+        get { (view as? PassThroughView)?.onPress }
+        set { (view as? PassThroughView)?.onPress = newValue }
+    }
+    var onShowMenu: (() -> Void)? {
+        get { (view as? PassThroughView)?.onShowMenu }
+        set { (view as? PassThroughView)?.onShowMenu = newValue }
+    }
 
     override func loadView() {
         let root = PassThroughView()
@@ -318,6 +396,7 @@ final class HistoryTileItem: NSCollectionViewItem {
 
     private func render() {
         host.rootView = HistoryTileView(item: item, thumbnail: thumbnail, selected: isSelected, focused: focused)
+        view.setAccessibilitySelected(isSelected)
         guard let item else { return }
         var words = [item.date.formatted(date: .omitted, time: .shortened), item.subtitle]
         if item.isEdited { words.append("marked up") }
@@ -380,9 +459,12 @@ final class HistoryHeaderView: NSView, NSCollectionViewElement {
     }
 }
 
-/// Holds a SwiftUI view, but leaves every click to the grid underneath.
+/// Holds a SwiftUI view, but leaves every click to the grid underneath; VoiceOver can still
+/// press it (edit) or ask for its menu.
 private final class PassThroughView: NSView {
     weak var content: NSView?
+    var onPress: (() -> Void)?
+    var onShowMenu: (() -> Void)?
 
     override func layout() {
         super.layout()
@@ -390,4 +472,16 @@ private final class PassThroughView: NSView {
     }
 
     override func hitTest(_ point: NSPoint) -> NSView? { nil }
+
+    override func accessibilityPerformPress() -> Bool {
+        guard let onPress else { return false }
+        onPress()
+        return true
+    }
+
+    override func accessibilityPerformShowMenu() -> Bool {
+        guard let onShowMenu else { return false }
+        onShowMenu()
+        return true
+    }
 }
