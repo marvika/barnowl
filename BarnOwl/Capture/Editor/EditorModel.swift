@@ -103,6 +103,11 @@ final class EditorModel {
     /// The document before a slider started moving, so the whole slide is one undo step.
     @ObservationIgnored private var liveBase: EditorDocument?
 
+    /// The style book as the editor last kept it, or the one out of the box.
+    nonisolated static func savedStyleBook(in defaults: UserDefaults = .standard) -> StyleBook {
+        defaults.data(forKey: Keys.styleBook).flatMap { try? JSONDecoder().decode(StyleBook.self, from: $0) } ?? StyleBook()
+    }
+
     enum Keys {
         static let lastTool = "captureEditor.lastTool"
         static let styleBook = "captureEditor.styleBook"
@@ -125,8 +130,7 @@ final class EditorModel {
             if opened.crop.isNull || opened.crop.width < 1 { opened.crop = CGRect(origin: .zero, size: size) }
         }
         self.document = opened
-        let book = defaults.data(forKey: Keys.styleBook).flatMap { try? JSONDecoder().decode(StyleBook.self, from: $0) }
-        styleBook = book ?? StyleBook()
+        styleBook = Self.savedStyleBook(in: defaults)
         tool = Self.openingTool(defaults: defaults)
         self.insight = insight
         undoManager.groupsByEvent = false

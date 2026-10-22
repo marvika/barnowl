@@ -139,7 +139,7 @@ struct SecretBanner: View {
                 .lineLimit(1)
             Button(model.hidePrivateTitle) { model.hidePrivate() }
                 .buttonStyle(AmberButtonStyle())
-                .help(model.privateCount == 1 ? "Cover it with a solid bar" : "Cover them with solid bars")
+                .help(model.privateCount == 1 ? "Hide it, as the Redact tool would" : "Hide them, as the Redact tool would")
             Button("Review") { model.beginReview() }
                 .help("See everything private before hiding it (⇧B)")
             Button {

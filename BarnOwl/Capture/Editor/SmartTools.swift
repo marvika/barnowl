@@ -200,7 +200,7 @@ extension EditorModel {
 
     /// The banner's Hide: every visible secret and personal detail, at once.
     func hidePrivate() {
-        // The bars quiet the banner and Done; undo them and both speak up again.
+        // The redactions quiet the banner and Done; undo them and both speak up again.
         hide(visiblePrivate, name: "Hide Private Info")
     }
 
@@ -213,13 +213,14 @@ extension EditorModel {
         return ImageSampler.plainRedaction(onLightness: renderer.luminance?.mean(in: rect) ?? 1)
     }
 
-    /// Solid bars in the colour of the text under them, so they read as hidden text.
+    /// Redactions over each finding, styled like the Redact tool's marks.
     func hide(_ findings: [SensitiveTextFinder.Finding], name: String) {
         let marks: [Mark] = findings.map { finding in
+            // Hidden the way the Redact tool hides, a light blur out of the box; solid bars
+            // take the colour of the text under them.
             var mark = newMark(.redact, at: finding.rect.origin)
             mark.end = CGPoint(x: finding.rect.maxX, y: finding.rect.maxY)
-            mark.style.redact = .solid
-            mark.colour = redactionColour(over: finding.rect)
+            if mark.style.redact == .solid { mark.colour = redactionColour(over: finding.rect) }
             mark.origin = MarkOrigin(source: .privateInfo, category: finding.kind.rawValue)
             return mark
         }

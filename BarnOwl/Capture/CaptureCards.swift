@@ -309,7 +309,7 @@ private struct CaptureCardView: View {
                     .background(Brand.amber, in: .capsule)
             }
             .buttonStyle(PressableStyle())
-            .help("Cover them with solid bars, in the copy and the saved file")
+            .help("Hide them in the copy and the saved file")
         }
         .padding(.horizontal, 4)
         .transition(.opacity.combined(with: .move(edge: .top)))

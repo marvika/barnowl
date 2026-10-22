@@ -540,8 +540,8 @@ final class CaptureCoordinator {
         pin.show()
     }
 
-    /// Covers what looks secret with solid bars, in the clipboard and the file.
-    /// The bars are ordinary redaction marks, so the editor can take them off
+    /// Hides what looks secret, in the clipboard and the file, the way the Redact tool
+    /// does (a light blur unless you chose otherwise). They're ordinary redaction marks, so the editor can take them off
     /// again; the library keeps the original.
     func hideSecrets(_ id: UUID) {
         guard let capture = capture(id), let insight = insights[id] else { return }
@@ -550,10 +550,12 @@ final class CaptureCoordinator {
         var document = storedDocument(id) ?? EditorDocument(imageSize: CGSize(width: capture.image.width, height: capture.image.height),
                                                              scale: capture.scale)
         let original = capture.image
+        let book = EditorModel.savedStyleBook()
+        let style = book.style(for: .redact)
         for finding in findings {
-            var style = MarkStyle()
-            style.redact = .solid
-            var mark = Mark(kind: .redact, colour: ImageSampler.redactionColour(in: original, rect: finding.rect), style: style,
+            let solid = style.redact == .solid && !book.redactColourChosen
+            let colour = solid ? ImageSampler.redactionColour(in: original, rect: finding.rect) : book.redactColour
+            var mark = Mark(kind: .redact, colour: colour, style: style,
                             start: finding.rect.origin, end: CGPoint(x: finding.rect.maxX, y: finding.rect.maxY))
             mark.origin = MarkOrigin(source: .privateInfo, category: finding.kind.rawValue)
             document.marks.append(mark)

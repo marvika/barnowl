@@ -133,7 +133,7 @@ struct StyleBook: Codable, Equatable, Sendable {
     var penColour = MarkColour.red
     var highlighterColour = MarkColour.yellow
     var redactColour = MarkColour.ink
-    /// You chose the redaction's colour; until then solid bars take theirs from the capture.
+    /// You chose the redaction's colour; until then solid redactions take theirs from the capture.
     var redactColourChosen = false
     /// Keyed by `Mark.Kind`'s raw value.
     var styles: [String: MarkStyle] = [:]
@@ -162,7 +162,11 @@ struct StyleBook: Codable, Equatable, Sendable {
         case .rectangle, .ellipse, .pen: style.weight = 4
         case .counter: style.weight = 28
         case .text: style.fontSize = 20
-        case .highlighter, .redact, .spotlight, .image: break
+        case .redact:
+            // A light blur looks like what it is, hidden text, and still keeps it unreadable.
+            style.redact = .blur
+            style.strength = .light
+        case .highlighter, .spotlight, .image: break
         }
         return style
     }

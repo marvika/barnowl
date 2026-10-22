@@ -171,20 +171,24 @@ struct CaptureEditorPrivacyTests {
             == ImageSampler.darkRedaction)
         #expect(ImageSampler.redactionColour(in: Self.plain(lightness: 0.95), rect: CGRect(x: 0, y: 0, width: 80, height: 40)) == .ink)
 
+        // Solid bars, chosen in the options bar (out of the box it's a light blur).
         let dark = Self.canvas(image: Self.plain(lightness: 0.12))
         dark.model.choose(.redact)
+        dark.model.updateStyle { $0.redact = .solid }
         Self.drag(dark.canvas, from: CGPoint(x: 100, y: 100), to: CGPoint(x: 300, y: 160))
         #expect(dark.model.document.marks.first?.colour == ImageSampler.darkRedaction)
         #expect(dark.model.changeCount == 1)
 
         let light = Self.canvas(image: Self.plain(lightness: 0.95))
         light.model.choose(.redact)
+        light.model.updateStyle { $0.redact = .solid }
         Self.drag(light.canvas, from: CGPoint(x: 100, y: 100), to: CGPoint(x: 300, y: 160))
         #expect(light.model.document.marks.first?.colour == .ink)
 
         // A colour you pick is kept, on dark captures too.
         let picked = Self.canvas(image: Self.plain(lightness: 0.12))
         picked.model.choose(.redact)
+        picked.model.updateStyle { $0.redact = .solid }
         picked.model.setColour(.red)
         Self.drag(picked.canvas, from: CGPoint(x: 100, y: 100), to: CGPoint(x: 300, y: 160))
         #expect(picked.model.document.marks.first?.colour == .red)
@@ -206,6 +210,7 @@ struct CaptureEditorPrivacyTests {
         let glyphs = made.glyphs["4f9a2c"]!
         let controller = Self.canvas(image: made.image)
         controller.model.choose(.redact)
+        controller.model.updateStyle { $0.redact = .solid }
         Self.drag(controller.canvas, from: CGPoint(x: glyphs.minX - 4, y: glyphs.minY - 4),
                   to: CGPoint(x: glyphs.maxX + 4, y: glyphs.maxY + 4))
         #expect((controller.model.document.marks.first?.colour.lightness ?? 0) > 0.8)

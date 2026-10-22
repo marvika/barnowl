@@ -537,7 +537,7 @@ struct CaptureEditorTests {
         #expect(SmartFit.highlights(from: CGPoint(x: 300, y: 150), to: CGPoint(x: 60, y: 70), insight: insight) == nil)
     }
 
-    @Test func hidePrivateInfoMakesSolidMarksInOneStep() {
+    @Test func hidePrivateInfoBlursLightlyInOneStep() {
         let model = Self.model(insight: Self.insight())
         #expect(model.visibleSecrets.count == 1)
         #expect(model.privateCount == 2)
@@ -554,7 +554,8 @@ struct CaptureEditorTests {
         #expect(model.review == nil)
         let hidden = model.document.marks
         #expect(hidden.count == 2)
-        #expect(hidden.allSatisfy { $0.kind == .redact && $0.style.redact == .solid })
+        // The Redact tool's own style: a light blur out of the box.
+        #expect(hidden.allSatisfy { $0.kind == .redact && $0.style.redact == .blur && $0.style.strength == .light })
         #expect(Set(hidden.compactMap(\.origin?.category)) == ["key", "email"])
         #expect(hidden.allSatisfy { $0.origin?.source == .privateInfo })
         #expect(model.visibleSecrets.isEmpty)
