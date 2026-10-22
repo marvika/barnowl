@@ -48,6 +48,8 @@ before 1.0, a minor version can change behaviour.
       asks once if a key is still showing.
     - Done (⌘Return) copies it and saves over its file. Close without Done
       and your marks are kept; the card offers to copy or save them.
+    - ⌘C and ⌘V copy marks from one capture to another, and Revert to
+      Original starts over in one undoable step.
   - **Files:** saved like macOS's own screenshots (same folder, name and
     tags) unless you choose otherwise. Captures stay editable for 30 days, or
     7, or not at all, as you choose in Settings › Capture.
