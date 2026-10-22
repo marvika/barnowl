@@ -21,6 +21,8 @@ enum CaptureLibrary {
         /// The saved file's size and date when Barn Owl last wrote it, so a file changed or
         /// copied since is never taken for this capture's own.
         var fileStamp: FileStamp?
+        /// Its words have been looked for, found or not, so one without any isn't read again.
+        var textWasRead: Bool?
     }
 
     struct FileStamp: Codable, Equatable, Sendable {
@@ -197,20 +199,28 @@ enum CaptureLibrary {
 
     // MARK: Tidying
 
-    /// Lets go of captures older than the setting allows, and of any beyond 200.
-    static func prune(now: Date = Date(), days: Int = keepDays, in root: URL = folder) {
+    /// Lets go of captures older than the setting allows, and of any beyond 200, but never
+    /// of those in `keeping` (open in the editor).
+    static func prune(now: Date = Date(), days: Int = keepDays, in root: URL = folder, keeping: Set<UUID> = []) {
         let cutoff = now.addingTimeInterval(-Double(days) * 86_400)
         var removed = false
         for (index, entry) in entries(in: root).enumerated() where entry.date < cutoff || index >= keepCount {
+            guard !keeping.contains(entry.id) else { continue }
             try? FileManager.default.removeItem(at: folder(for: entry.id, in: root))
             removed = true
         }
         if removed { changed(nil) }
     }
 
-    /// Lets go of every kept capture now.
-    static func clear(in root: URL = folder) {
-        for entry in entries(in: root) { try? FileManager.default.removeItem(at: folder(for: entry.id, in: root)) }
+    /// Lets go of every kept capture now, those waiting for Undo and any half-written too,
+    /// but never of those in `keeping` (open in the editor).
+    static func clear(in root: URL = folder, keeping: Set<UUID> = []) {
+        let names = (try? FileManager.default.contentsOfDirectory(atPath: root.path)) ?? []
+        for name in names {
+            guard let id = UUID(uuidString: name), !keeping.contains(id) else { continue }
+            try? FileManager.default.removeItem(at: root.appending(path: name))
+        }
+        forgetRemoved(in: root)
         changed(nil)
     }
 }

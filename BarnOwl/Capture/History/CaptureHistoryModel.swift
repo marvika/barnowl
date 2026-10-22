@@ -16,6 +16,8 @@ final class CaptureHistoryModel {
     private(set) var days: [CaptureHistory.Day<CaptureHistory.Item>] = []
     private(set) var isLoaded = false
     var keepDays: Int
+    /// Capture is on in Settings, so its shortcut is worth showing.
+    var captureEnabled = true
     var query = "" {
         didSet { if query != oldValue { regroup() } }
     }
@@ -64,14 +66,16 @@ final class CaptureHistoryModel {
 
     func item(_ id: UUID) -> CaptureHistory.Item? { byID[id] }
 
-    /// Reads the library again, then calls `done`.
-    func reload(then done: (() -> Void)? = nil) {
+    /// Reads the library again, then calls `done`. `pruning`: first lets go of captures past
+    /// their time, all but those (open in the editor).
+    func reload(pruning keeping: Set<UUID>? = nil, then done: (() -> Void)? = nil) {
         if let done { afterLoading.append(done) }
         loading?.cancel()
-        let root = root, now = now(), calendar = calendar, locale = locale
+        let root = root, now = now(), calendar = calendar, locale = locale, days = keepDays
         loading = Task { [weak self] in
             let items = await Task.detached(priority: .userInitiated) {
-                CaptureHistory.load(in: root, now: now, calendar: calendar, locale: locale)
+                if let keeping { CaptureLibrary.prune(now: now, days: days, in: root, keeping: keeping) }
+                return CaptureHistory.load(in: root, now: now, calendar: calendar, locale: locale)
             }.value
             guard let self, !Task.isCancelled else { return }
             self.loading = nil
