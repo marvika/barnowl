@@ -242,7 +242,7 @@ final class CaptureCoordinator {
         if copies { copied.insert(capture.id) }
         remember(capture)
         lastCaptureID = capture.id
-        writeInBackground(capture, copies: copies, saves: saves)
+        writeInBackground(capture, copies: copies, saves: saves, windows: windows)
         scanInBackground(capture, windows: windows)
 
         switch action {
@@ -267,10 +267,11 @@ final class CaptureCoordinator {
     }
 
     /// One PNG, made off the main thread, for the clipboard, the file and the library.
-    private func writeInBackground(_ capture: Capture, copies: Bool, saves: Bool) {
+    private func writeInBackground(_ capture: Capture, copies: Bool, saves: Bool, windows: [CGRect]) {
         let image = capture.image, scale = capture.scale, id = capture.id
         let entry = CaptureLibrary.Entry(id: id, date: capture.date, scale: Double(scale), kind: capture.kind.rawValue,
-                                         appName: capture.appName, fileURL: saves ? capture.fileURL : nil, edited: false)
+                                         appName: capture.appName, fileURL: saves ? capture.fileURL : nil, edited: false,
+                                         windows: windows)
         let fileURL = saves ? capture.fileURL : nil
         let atOneX = Preferences.captureAtOneX
         let kind = capture.kind
@@ -284,7 +285,10 @@ final class CaptureCoordinator {
             }
             // The file first, since the card already offers it; then the library.
             let saved: Bool = await Task.detached(priority: .userInitiated) {
-                defer { try? CaptureLibrary.store(image, png: png, entry: entry) }
+                defer {
+                    try? CaptureLibrary.store(image, png: png, entry: entry)
+                    CaptureLibrary.storeThumbnail(image, for: id)
+                }
                 guard let fileURL else { return false }
                 defer { CaptureStore.release(fileURL) }
                 do {
@@ -319,6 +323,13 @@ final class CaptureCoordinator {
             cards.add(capture, status: "Couldn't save · drag or copy it", kept: kept)
         } else {
             NSSound.beep()
+        }
+    }
+
+    /// Keeps history's thumbnail in step with how the capture looks now.
+    private func storeThumbnail(_ image: CGImage, for id: UUID) {
+        inOrder(id) {
+            await Task.detached(priority: .utility) { CaptureLibrary.storeThumbnail(image, for: id) }.value
         }
     }
 
@@ -396,6 +407,9 @@ final class CaptureCoordinator {
             guard !Task.isCancelled else { return }
             insights[id] = insight
             scans[id] = nil
+            // Kept with the capture, for searching history and Copy Text later.
+            let words = insight.text.plainText()
+            if !words.isEmpty { inOrder(id) { CaptureLibrary.update(id) { $0.text = words } } }
             editors.values.first { $0.captureID == id }?.editor.update(insight: insight)
             // Only secrets interrupt; once offered, Hide covers everything private.
             // Secrets named first, as the editor's banner does.
@@ -572,6 +586,7 @@ final class CaptureCoordinator {
             capture.image = covered
             capture.unsavedEdits = capture.fileURL != nil
             captures[id] = capture
+            storeThumbnail(covered, for: id)
             cards.update(id, image: covered, status: "Hiding…", undo: nil)
             // "Hidden" only once the file and the clipboard are covered too.
             await rewrite(capture).value
@@ -582,6 +597,7 @@ final class CaptureCoordinator {
                 restored.image = original
                 restored.unsavedEdits = restored.fileURL != nil
                 self.captures[id] = restored
+                self.storeThumbnail(original, for: id)
                 let data = before ?? Data()
                 self.inOrder(id) { try? CaptureLibrary.storeDocument(data, for: id) }
                 let restoring = self.rewrite(restored)
@@ -672,7 +688,7 @@ final class CaptureCoordinator {
         if insights[id] == nil, scans[id] == nil {
             var original = capture
             original.image = image
-            scanInBackground(original, windows: [])
+            scanInBackground(original, windows: CaptureLibrary.entry(id)?.windows ?? [])
         }
         // A real app while you edit: in the Dock and ⌘Tab, with its menus, so
         // the editor never gets lost behind other windows.
@@ -712,6 +728,7 @@ extension CaptureCoordinator: CaptureEditorHost {
         capture.image = image
         capture.unsavedEdits = capture.fileURL != nil
         captures[id] = capture
+        storeThumbnail(image, for: id)
         let showsCard = Preferences.captureThen != .nothing
         if showsCard { cards.add(capture, status: saves ? "Edited · copied, saving…" : "Edited · copied") }
         guard saves else { return }
@@ -744,6 +761,7 @@ extension CaptureCoordinator: CaptureEditorHost {
                 // copying or saving uses the new one.
                 capture.unsavedEdits = capture.fileURL != nil && !savedAsIs
                 self.captures[id] = capture
+                self.storeThumbnail(image, for: id)
                 self.copied.remove(id)
                 self.cards.add(capture, status: savedAsIs ? "Edited · saved, not copied yet" : "Edited · not copied yet",
                                kept: savedAsIs)

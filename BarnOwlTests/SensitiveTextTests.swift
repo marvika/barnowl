@@ -94,6 +94,18 @@ struct SensitiveTextTests {
         #expect(blocks.contains(CGRect(x: 10, y: 10, width: 200, height: 44)))
     }
 
+    @Test func readsTextInReadingOrder() {
+        func line(_ text: String, x: CGFloat, y: CGFloat) -> CaptureText.Line {
+            CaptureText.Line(rect: CGRect(x: x, y: y, width: 100, height: 20), text: text, words: [])
+        }
+        var text = CaptureText()
+        // Out of order, with a label and its value side by side on one row.
+        text.lines = [line("Second", x: 10, y: 52), line("Value", x: 300, y: 12), line("Label", x: 10, y: 10),
+                      line("Third", x: 10, y: 90)]
+        #expect(text.plainText() == "Label\tValue\nSecond\nThird")
+        #expect(text.plainText(within: CGRect(x: 0, y: 40, width: 200, height: 40)) == "Second")
+    }
+
     @Test func padsToTheWholeLine() {
         let word = CGRect(x: 100, y: 12, width: 40, height: 14)
         let line = CGRect(x: 0, y: 10, width: 300, height: 20)

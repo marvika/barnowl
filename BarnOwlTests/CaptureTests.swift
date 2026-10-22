@@ -179,6 +179,25 @@ struct CaptureLibraryTests {
         #expect(CaptureLibrary.latest(in: root)?.id == entry.id)
     }
 
+    @Test func keepsTextWindowsAndAThumbnail() throws {
+        let root = try root()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let image = try #require(CaptureStoreTests.image(width: 1200, height: 600))
+        let entry = CaptureLibrary.Entry(id: UUID(), date: Date(), scale: 2, kind: "selection", appName: nil, fileURL: nil,
+                                         edited: false, windows: [CGRect(x: 0, y: 0, width: 100, height: 50)])
+        try CaptureLibrary.store(image, entry: entry, in: root)
+        CaptureLibrary.update(entry.id, in: root) { $0.text = "Release checklist" }
+        #expect(CaptureLibrary.entry(entry.id, in: root)?.text == "Release checklist")
+        #expect(CaptureLibrary.entry(entry.id, in: root)?.windows == [CGRect(x: 0, y: 0, width: 100, height: 50)])
+        // Before a thumbnail is made, history shows the original.
+        #expect(CaptureLibrary.thumbnail(entry.id, in: root)?.width == 1200)
+        CaptureLibrary.storeThumbnail(image, for: entry.id, in: root)
+        #expect(CaptureLibrary.thumbnail(entry.id, in: root)?.width == Int(CaptureLibrary.thumbnailWidth))
+        // Entries from 0.15.0 have neither, and still read.
+        let old = Data(#"{"id":"\#(UUID().uuidString)","date":0,"scale":2,"kind":"display","edited":false}"#.utf8)
+        #expect(try JSONDecoder().decode(CaptureLibrary.Entry.self, from: old).text == nil)
+    }
+
     @Test func neverKeepsMarksWithoutTheirPicture() throws {
         let root = try root()
         defer { try? FileManager.default.removeItem(at: root) }

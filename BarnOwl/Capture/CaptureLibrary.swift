@@ -14,6 +14,10 @@ enum CaptureLibrary {
         let appName: String?
         var fileURL: URL?
         var edited: Bool
+        /// Windows inside the capture, in image pixels from the top left, for smart marks.
+        var windows: [CGRect]?
+        /// The words in it, as read on the Mac: for searching history and Copy Text.
+        var text: String?
     }
 
     static let attribute = "io.github.marvika.barnowl.capture"
@@ -67,6 +71,25 @@ enum CaptureLibrary {
         try? write(entry, in: root)
     }
 
+    /// Changes a kept capture's entry, if it's kept.
+    static func update(_ id: UUID, in root: URL = folder, _ change: (inout Entry) -> Void) {
+        guard var entry = entry(id, in: root) else { return }
+        let before = entry
+        change(&entry)
+        if entry != before { try? write(entry, in: root) }
+    }
+
+    /// A small picture of the capture as it looks now, marks included, for history.
+    static func storeThumbnail(_ image: CGImage, for id: UUID, in root: URL = folder) {
+        let dir = folder(for: id, in: root)
+        guard FileManager.default.fileExists(atPath: dir.appending(path: "entry.json").path) else { return }
+        let small = CaptureStore.thumbnail(image, width: thumbnailWidth)
+        guard let png = try? CaptureStore.encode(small, scale: 1, as: .png, atOneX: false) else { return }
+        try? png.write(to: dir.appending(path: "thumbnail.png"), options: .atomic)
+    }
+
+    static let thumbnailWidth: CGFloat = 520
+
     static func tag(_ url: URL, id: UUID) {
         let value = Array(id.uuidString.utf8)
         _ = value.withUnsafeBytes { setxattr(url.path, attribute, $0.baseAddress, value.count, 0, 0) }
@@ -83,6 +106,15 @@ enum CaptureLibrary {
         let url = folder(for: id, in: root).appending(path: "original.png") as CFURL
         guard let source = CGImageSourceCreateWithURL(url, nil) else { return nil }
         return CGImageSourceCreateImageAtIndex(source, 0, nil)
+    }
+
+    /// The thumbnail, or failing that the original.
+    static func thumbnail(_ id: UUID, in root: URL = folder) -> CGImage? {
+        let url = folder(for: id, in: root).appending(path: "thumbnail.png") as CFURL
+        if let source = CGImageSourceCreateWithURL(url, nil), let image = CGImageSourceCreateImageAtIndex(source, 0, nil) {
+            return image
+        }
+        return original(id, in: root)
     }
 
     static func document(_ id: UUID, in root: URL = folder) -> Data? {

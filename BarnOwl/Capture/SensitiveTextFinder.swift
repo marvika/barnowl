@@ -23,6 +23,30 @@ struct CaptureText: Sendable, Equatable {
     var findings: [SensitiveTextFinder.Finding] = []
 
     static let empty = CaptureText()
+
+    /// The text as you'd read it: top to bottom, and left to right along a row, with lines
+    /// side by side (columns, a label and its value) joined by a tab. `within` keeps only
+    /// lines mostly inside it, in the same pixels as the lines.
+    func plainText(within area: CGRect? = nil) -> String {
+        let kept = lines.filter { line in
+            guard let area else { return true }
+            let inside = line.rect.intersection(area)
+            return !inside.isNull && inside.width * inside.height >= line.rect.width * line.rect.height * 0.5
+        }
+        var rows: [[Line]] = []
+        for line in kept.sorted(by: { $0.rect.midY < $1.rect.midY }) {
+            // Same row when their middles are within half a line of each other.
+            if let last = rows.last?.last, abs(last.rect.midY - line.rect.midY) < min(last.rect.height, line.rect.height) / 2 {
+                rows[rows.count - 1].append(line)
+            } else {
+                rows.append([line])
+            }
+        }
+        let texts: [String] = rows.map { row in
+            row.sorted { $0.rect.minX < $1.rect.minX }.map(\.text).joined(separator: "\t")
+        }
+        return texts.joined(separator: "\n")
+    }
 }
 
 /// Reads text with Vision and decides what's private. Nothing leaves the Mac.
