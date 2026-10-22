@@ -34,7 +34,8 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSTool
     private var recentTask: Task<Void, Never>?
     private var shortcutsSheet: NSWindow?
 
-    static let minimumSize = NSSize(width: 760, height: 480)
+    /// Wide enough for every toolbar item, Done included, without the overflow menu.
+    static let minimumSize = NSSize(width: 940, height: 480)
     static let sizeKey = "captureEditor.windowSize"
 
     private enum Item {
@@ -302,6 +303,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSTool
             return item
         case Item.copy:
             let item = button(identifier, symbol: "doc.on.doc", label: "Copy", tooltip: "Copy Image (⇧⌘C)", action: #selector(copyPressed))
+            item.visibilityPriority = .high
             copyItem = item
             return item
         case Item.done:
@@ -314,6 +316,8 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSTool
             item.backgroundTintColor = EditorCanvas.accentFill
             item.target = self
             item.action = #selector(donePressed)
+            // The last thing to go if the window is ever too narrow.
+            item.visibilityPriority = .user
             return item
         default:
             return nil
