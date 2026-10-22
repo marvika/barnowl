@@ -665,6 +665,13 @@ final class CaptureCoordinator {
         let editor = CaptureEditor(image: image, scale: capture.scale, title: title, document: document,
                                    insight: insights[id], host: self)
         editors[ObjectIdentifier(editor)] = (editor, id)
+        // Reopened after Barn Owl restarted: read its text again, so private info is still
+        // offered and Done still asks about a key.
+        if insights[id] == nil, scans[id] == nil {
+            var original = capture
+            original.image = image
+            scanInBackground(original, windows: [])
+        }
         // A real app while you edit: in the Dock and ⌘Tab, with its menus, so
         // the editor never gets lost behind other windows.
         if NSApp.activationPolicy() != .regular { NSApp.setActivationPolicy(.regular) }
