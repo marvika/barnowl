@@ -49,6 +49,17 @@ enum CaptureLibrary {
     static func write(_ entry: Entry, in root: URL = folder) throws {
         let data = try JSONEncoder().encode(entry)
         try data.write(to: folder(for: entry.id, in: root).appending(path: "entry.json"), options: .atomic)
+        changed(entry.id)
+    }
+
+    /// Posted on the main thread when a capture is kept, changes, gets a new thumbnail or is
+    /// let go; `userInfo["id"]` is its id when it's about one. History keeps in step with it.
+    static let didChange = Notification.Name("CaptureLibrary.didChange")
+
+    static func changed(_ id: UUID?) {
+        Task { @MainActor in
+            NotificationCenter.default.post(name: didChange, object: nil, userInfo: id.map { ["id": $0] })
+        }
     }
 
     /// The markup, as the editor's document encodes it.
@@ -86,6 +97,7 @@ enum CaptureLibrary {
         let small = CaptureStore.thumbnail(image, width: thumbnailWidth)
         guard let png = try? CaptureStore.encode(small, scale: 1, as: .png, atOneX: false) else { return }
         try? png.write(to: dir.appending(path: "thumbnail.png"), options: .atomic)
+        changed(id)
     }
 
     static let thumbnailWidth: CGFloat = 520
@@ -142,13 +154,17 @@ enum CaptureLibrary {
     /// Lets go of captures older than the setting allows, and of any beyond 200.
     static func prune(now: Date = Date(), days: Int = keepDays, in root: URL = folder) {
         let cutoff = now.addingTimeInterval(-Double(days) * 86_400)
+        var removed = false
         for (index, entry) in entries(in: root).enumerated() where entry.date < cutoff || index >= keepCount {
             try? FileManager.default.removeItem(at: folder(for: entry.id, in: root))
+            removed = true
         }
+        if removed { changed(nil) }
     }
 
     /// Lets go of every kept capture now.
     static func clear(in root: URL = folder) {
         for entry in entries(in: root) { try? FileManager.default.removeItem(at: folder(for: entry.id, in: root)) }
+        changed(nil)
     }
 }
