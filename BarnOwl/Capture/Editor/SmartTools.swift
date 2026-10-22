@@ -200,8 +200,8 @@ extension EditorModel {
 
     /// The banner's Hide: every visible secret and personal detail, at once.
     func hidePrivate() {
+        // The bars quiet the banner and Done; undo them and both speak up again.
         hide(visiblePrivate, name: "Hide Private Info")
-        secretBannerDismissed = true
     }
 
     /// A solid redaction's colour over `rect`: the one you chose, or else the text's own colour,
@@ -219,7 +219,7 @@ extension EditorModel {
             var mark = newMark(.redact, at: finding.rect.origin)
             mark.end = CGPoint(x: finding.rect.maxX, y: finding.rect.maxY)
             mark.style.redact = .solid
-            mark.colour = ImageSampler.redactionColour(in: image, rect: finding.rect)
+            mark.colour = redactionColour(over: finding.rect)
             mark.origin = MarkOrigin(source: .privateInfo, category: finding.kind.rawValue)
             return mark
         }

@@ -181,6 +181,8 @@ final class EditorCanvas: NSView, NSTextViewDelegate, NSMenuItemValidation {
     }
 
     func documentChanged(from old: EditorDocument, to new: EditorDocument) {
+        // A counter undone, deleted or reverted away can't take a label any more.
+        if let armed = labelArmed, new[armed] == nil { labelArmed = nil }
         if old.crop != new.crop || old.frame != new.frame || old.imageSize != new.imageSize {
             relayout()
             return

@@ -640,7 +640,8 @@ final class EditorModel {
             choose(.select)
             return .choseSelect
         }
-        guard isEdited else { return .close }
+        // Reverted to the bare capture counts as nothing to lose.
+        guard isEdited, document != original else { return .close }
         showHint("Return finishes · ⌘W closes and keeps your changes")
         return .explained
     }

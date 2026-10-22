@@ -789,9 +789,17 @@ extension EditorCanvas {
             } else {
                 pasteRun = (pasteboard.changeCount, 1)
             }
-            let offset: CGFloat = 12 * scale * CGFloat(pasteRun.count)
+            var dx: CGFloat = 12 * scale * CGFloat(pasteRun.count)
+            var dy: CGFloat = dx
+            // From a bigger capture they could land outside this one: centre them instead.
+            let bounds = marks.map { MarkGeometry.bounds($0, scale: scale) }.reduce(CGRect.null) { $0.union($1) }
+            if !bounds.offsetBy(dx: dx, dy: dy).intersects(model.document.crop) {
+                let visible = visibleImageRect
+                dx = (visible.midX - bounds.midX).rounded()
+                dy = (visible.midY - bounds.midY).rounded()
+            }
             let copies: [Mark] = marks.map { mark in
-                var copy = MarkGeometry.moved(mark, by: offset, offset)
+                var copy = MarkGeometry.moved(mark, by: dx, dy)
                 copy.id = UUID()
                 return copy
             }

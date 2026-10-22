@@ -117,6 +117,9 @@ struct CaptureEditorPrivacyTests {
         #expect(model.uncoveredFindings(minimum: .info).map(\.kind) == [.ipAddress])
         model.undo()
         #expect(model.document.marks.isEmpty)
+        // Undone, the key shows again, and so do the banner and Done's question.
+        #expect(model.showsSecretBanner)
+        #expect(model.asksAboutSecretsOnDone)
     }
 
     @Test func theBannerSaysWhatItSees() {

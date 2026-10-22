@@ -30,6 +30,8 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSTool
     private var toolGroup: NSToolbarItemGroup?
     private var modeGroup: NSToolbarItemGroup?
     private var copyItem: NSToolbarItem?
+    /// Whether the shared colour panel was last opened for this editor.
+    private var ownsColourPanel = false
     private var copyReset: Task<Void, Never>?
     private var recentTask: Task<Void, Never>?
     private var shortcutsSheet: NSWindow?
@@ -248,7 +250,8 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSTool
             cropAspect: { [weak self] aspect in self?.canvas.applyCropAspect(aspect) },
             focusCanvas: { [weak self] in
                 guard let self else { return }
-                self.window?.makeFirstResponder(self.canvas)
+                // Back to the text being typed, if there is one.
+                self.window?.makeFirstResponder(self.canvas.textView ?? self.canvas)
             }
         )
     }
@@ -588,6 +591,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSTool
     private func showColourPanel() {
         let panel = NSColorPanel.shared
         panel.showsAlpha = false
+        ownsColourPanel = true
         panel.setTarget(self)
         panel.setAction(#selector(colourPanelChanged(_:)))
         panel.color = NSColor(cgColor: model.shownColour.cgColor()) ?? .systemRed
@@ -647,7 +651,9 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSTool
     /// The colour and font panels are shared by the whole app: once this window goes, they
     /// mustn't send their changes here, or keep it alive.
     private func releaseSharedPanels() {
-        if NSColorPanel.sharedColorPanelExists {
+        // Only if this editor last used it: another editor or Settings may have it now.
+        if ownsColourPanel, NSColorPanel.sharedColorPanelExists {
+            ownsColourPanel = false
             let panel = NSColorPanel.shared
             if panel.isVisible { panel.close() }
             panel.setTarget(nil)
