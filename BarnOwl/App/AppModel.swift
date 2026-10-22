@@ -101,6 +101,7 @@ final class AppModel {
         case .captureText: capture.captureText()
         case .captureHistory: capture.showHistory()
         case .recordScreen: capture.startRecording()
+        case .captureScrolling: capture.scrollingCapture()
         case .settings(let pane): showSettings(SettingsPane(rawValue: pane.rawValue))
         }
     }

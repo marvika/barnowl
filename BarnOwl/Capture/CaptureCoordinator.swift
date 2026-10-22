@@ -14,6 +14,8 @@ final class CaptureCoordinator {
     @ObservationIgnored lazy var cards = CaptureCards(coordinator: self)
     /// Screen recordings, from the countdown to the file.
     @ObservationIgnored lazy var recording = RecordingCoordinator(host: self)
+    /// The scrolling capture under way, from the moment it's chosen until it's delivered.
+    @ObservationIgnored var scrollingSession: ScrollingCaptureSession?
     /// Opens Settings › Capture.
     @ObservationIgnored var showCaptureSettings: () -> Void = {}
     @ObservationIgnored private var editors: [ObjectIdentifier: (editor: CaptureEditor, captureID: UUID)] = [:]
@@ -68,6 +70,7 @@ final class CaptureCoordinator {
         KeyboardShortcuts.onKeyUp(for: .captureText) { [weak self] in self?.captureText() }
         KeyboardShortcuts.onKeyUp(for: .captureHistory) { [weak self] in self?.showHistory() }
         KeyboardShortcuts.onKeyUp(for: .recordScreen) { [weak self] in self?.recording.shortcutPressed() }
+        KeyboardShortcuts.onKeyUp(for: .captureScrolling) { [weak self] in self?.scrollingCapture() }
         NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.didActivateApplicationNotification,
                                                           object: nil, queue: .main) { [weak self] note in
             let app = note.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication
@@ -94,7 +97,7 @@ final class CaptureCoordinator {
     /// only while you've asked for them and macOS's own are off.
     func applySettings() {
         let names: [KeyboardShortcuts.Name] = [.captureArea, .captureScreen, .captureSameArea, .editLastCapture,
-                                               .captureText, .captureHistory, .recordScreen]
+                                               .captureText, .captureHistory, .recordScreen, .captureScrolling]
         if Preferences.captureEnabled { KeyboardShortcuts.enable(names) } else { KeyboardShortcuts.disable(names) }
         // At launch, and whenever you keep captures for less time.
         if CaptureLibrary.keepDays != lastKeepDays {
@@ -128,9 +131,12 @@ final class CaptureCoordinator {
 
     /// Freezes the screens and lets you pick an area, a window or a screen.
     /// `copiesText`: Return copies the words in what you select instead of the picture.
-    /// `recording`: Return records what you select.
-    func start(_ mode: CaptureMode = .area, copiesText: Bool = false, recording setup: RecordingSetup? = nil) {
-        guard Preferences.captureEnabled, !isCapturing, setup == nil || !recording.isActive, Self.hasPermission() else { return }
+    /// `recording`: Return records what you select. `scrolls`: Return starts a scrolling capture.
+    func start(_ mode: CaptureMode = .area, copiesText: Bool = false, recording setup: RecordingSetup? = nil,
+               scrolls: Bool = false) {
+        guard Preferences.captureEnabled, !isCapturing else { return }
+        guard activity.canSelect(records: setup != nil, scrolls: scrolls) else { return NSSound.beep() }
+        guard Self.hasPermission() else { return }
         isCapturing = true
         rememberFrontApp()
         let appName = previousApp?.localizedName
@@ -141,7 +147,7 @@ final class CaptureCoordinator {
                 guard !snapshots.isEmpty else { isCapturing = false; return NSSound.beep() }
                 targets = WindowLocator.onScreenWindows()
                 let overlay = SelectionOverlay(snapshots: snapshots, targets: targets, mode: mode,
-                                               copiesText: copiesText, recording: setup) { [weak self] result in
+                                               copiesText: copiesText, recording: setup, scrolls: scrolls) { [weak self] result in
                     guard let self else { return }
                     self.overlay = nil
                     Task { await self.finish(result, appName: appName) }
@@ -232,7 +238,7 @@ final class CaptureCoordinator {
             // The keyboard goes back to your app once the countdown is done.
             return recording.begin(target, makesGIF: action == .recordGIF, appName: appName)
         }
-        if action == .scroll { return startScrollingCapture(rect: target.rect, snapshot: target.snapshot) }
+        if action == .scroll { return startScrollingCapture(target, appName: appName) }
         switch target {
         case .area(let rect, let snapshot):
             guard let image = snapshot.crop(rect) else {
@@ -273,7 +279,7 @@ final class CaptureCoordinator {
     }
 
     /// Saves, copies and shows a capture, as the action and Settings › Capture say.
-    private func deliver(_ capture: Capture, action: CaptureAction, windows: [CGRect]) {
+    func deliver(_ capture: Capture, action: CaptureAction, windows: [CGRect]) {
         var capture = capture
         let copies: Bool, saves: Bool
         switch action {

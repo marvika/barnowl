@@ -1,6 +1,6 @@
 import AppKit
 
-/// Recording, GIFs and scrolling capture, as Capture starts and hands them on.
+/// Recording and GIFs, as Capture starts and hands them on.
 extension CaptureCoordinator {
     /// ⌃⌥⌘5, search and barnowl://capture?mode=record: select an area, a window or a screen to record.
     func startRecording(gif: Bool = false) {
@@ -39,13 +39,5 @@ extension CaptureCoordinator {
     func makeGIF(from movie: URL, for id: UUID) async -> URL? {
         // GIFMaker isn't here yet.
         nil
-    }
-
-    /// S in the overlay, or ⌃⌥⌘S: a capture taller than the screen, scrolled through `rect`
-    /// (AppKit screen points) on `snapshot`'s display.
-    func startScrollingCapture(rect: CGRect, snapshot: DisplaySnapshot) {
-        // The scrolling engine isn't here yet.
-        NSSound.beep()
-        giveFocusBack()
     }
 }

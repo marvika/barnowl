@@ -41,6 +41,14 @@ enum CaptureMode: String, CaseIterable, Identifiable {
         case .screen: "Click a screen to record"
         }
     }
+    /// The hint while selecting something for a scrolling capture.
+    var scrollHint: String {
+        switch self {
+        case .area: "Drag over the part that scrolls · L for the last area"
+        case .window: "Click a window to scroll through · Space to drag an area"
+        case .screen: "Click a screen to scroll through"
+        }
+    }
 }
 
 /// What to do with what you've selected.
@@ -57,6 +65,14 @@ enum CaptureAction {
 
     /// Records or scrolls: needs more than a sliver to work with.
     var needsRoom: Bool { self == .record || self == .recordGIF || self == .scroll }
+
+    /// What Return does, as the overlay was started: copy the words, record, scroll, or
+    /// copy and save as usual.
+    static func onReturn(copiesText: Bool = false, recording: RecordingSetup? = nil, scrolls: Bool = false) -> Self {
+        if copiesText { return .copyText }
+        if let recording { return recording.makesGIF ? .recordGIF : .record }
+        return scrolls ? .scroll : .primary
+    }
 }
 
 /// What the record bar offers, when the overlay is up to record.
@@ -97,8 +113,9 @@ final class SelectionOverlay {
 
     /// `copiesText`: started to copy text, so Return copies the words in the selection.
     /// `recording`: started to record, so the selection gets the record bar and Return records.
+    /// `scrolls`: started for a scrolling capture, so Return starts one.
     init(snapshots: [DisplaySnapshot], targets: [WindowTarget], mode: CaptureMode, copiesText: Bool = false,
-         recording: RecordingSetup? = nil, completion: @escaping (SelectionResult) -> Void) {
+         recording: RecordingSetup? = nil, scrolls: Bool = false, completion: @escaping (SelectionResult) -> Void) {
         self.mode = mode
         self.completion = completion
         let hints = Preferences.captureHintCount < 10
@@ -106,6 +123,7 @@ final class SelectionOverlay {
             let window = OverlayWindow(snapshot: snapshot, targets: targets, mode: mode, showsHints: hints)
             window.selection.copiesText = copiesText
             window.selection.recording = recording
+            window.selection.scrolls = scrolls
             window.selection.onResult = { [weak self] in self?.finish($0) }
             window.selection.onMode = { [weak self] in self?.setMode($0) }
             window.selection.onSelect = { [weak self, weak window] in self?.selectionStarted(in: window) }
@@ -291,6 +309,10 @@ final class SelectionView: NSView {
     var recording: RecordingSetup? {
         didSet { modeBar?.rootView = modeBarView }
     }
+    /// Started for a scrolling capture: Return starts one.
+    var scrolls = false {
+        didSet { modeBar?.rootView = modeBarView }
+    }
 
     init(snapshot: DisplaySnapshot, targets: [WindowTarget], mode: CaptureMode, showsHints: Bool) {
         self.snapshot = snapshot
@@ -369,6 +391,7 @@ final class SelectionView: NSView {
 
     private var modeBarView: CaptureModeBar {
         CaptureModeBar(mode: mode, showsHints: showsHints, copiesText: copiesText, records: recording != nil,
+                       scrolls: scrolls,
                        select: { [weak self] in self?.onMode?($0) },
                        options: { [weak self] in self?.onOptions?() },
                        cancel: { [weak self] in self?.onResult?(.cancelled) })
@@ -676,8 +699,8 @@ final class SelectionView: NSView {
 
     private func act(_ action: CaptureAction) {
         guard let selection else { return }
-        var action = copiesText && action == .primary ? .copyText : action
-        if action == .primary, let recording { action = recording.makesGIF ? .recordGIF : .record }
+        var action = action
+        if action == .primary { action = .onReturn(copiesText: copiesText, recording: recording, scrolls: scrolls) }
         guard selection.width >= 1, selection.height >= 1 else { return NSSound.beep() }
         // A recording or a scroll needs something to see.
         if action.needsRoom, selection.width < 32 || selection.height < 32 { return NSSound.beep() }
@@ -853,8 +876,8 @@ final class SelectionView: NSView {
     }
 
     private var actionBarView: CaptureActionBar {
-        CaptureActionBar(primary: copiesText ? "Copy Text" : Self.primaryTitle, copiesText: copiesText,
-                         showsHint: showsHints) { [weak self] action in
+        CaptureActionBar(primary: copiesText ? "Copy Text" : scrolls ? "Start Capture" : Self.primaryTitle,
+                         copiesText: copiesText, scrolls: scrolls, showsHint: showsHints) { [weak self] action in
             if let action { self?.act(action) } else { self?.clearSelection() }
         }
     }
@@ -989,6 +1012,8 @@ struct CaptureModeBar: View {
     var copiesText = false
     /// Selecting something to record.
     var records = false
+    /// Selecting something for a scrolling capture.
+    var scrolls = false
     let select: (CaptureMode) -> Void
     let options: () -> Void
     let cancel: () -> Void
@@ -1003,6 +1028,15 @@ struct CaptureModeBar: View {
                     HStack(spacing: 6) {
                         Circle().fill(Color(red: 1, green: 0.27, blue: 0.23)).frame(width: 8, height: 8)
                         Text("Record").font(.system(size: 13, weight: .semibold))
+                    }
+                    .foregroundStyle(.white)
+                    .padding(.leading, 10).padding(.trailing, 6)
+                    .accessibilityElement(children: .combine)
+                    Divider().frame(height: 18).padding(.horizontal, 4)
+                } else if scrolls {
+                    HStack(spacing: 6) {
+                        Image(systemName: "rectangle.expand.vertical").font(.system(size: 13, weight: .medium))
+                        Text("Scrolling Capture").font(.system(size: 13, weight: .semibold))
                     }
                     .foregroundStyle(.white)
                     .padding(.leading, 10).padding(.trailing, 6)
@@ -1051,9 +1085,9 @@ struct CaptureModeBar: View {
                 .help("Cancel (Esc)")
                 .accessibilityLabel("Cancel")
             }
-            if showsHints || copiesText || records {
+            if showsHints || copiesText || records || scrolls {
                 Text(copiesText ? "Drag over text to copy it · click a window for all of its text"
-                                : records ? mode.recordHint : mode.hint)
+                                : records ? mode.recordHint : scrolls ? mode.scrollHint : mode.hint)
                     .font(.system(size: 11))
                     .foregroundStyle(.white.opacity(0.7))
                     .padding(.bottom, 2)
@@ -1076,6 +1110,8 @@ struct CaptureActionBar: View {
     let primary: String
     /// Copying text: the main action copies the words, so there's no separate Text button.
     var copiesText = false
+    /// For a scrolling capture: the main action starts it, and nothing else is offered.
+    var scrolls = false
     let showsHint: Bool
     /// nil closes the selection.
     let act: (CaptureAction?) -> Void
@@ -1083,9 +1119,11 @@ struct CaptureActionBar: View {
     var body: some View {
         VStack(spacing: 5) {
             HStack(spacing: 4) {
-                BarButton(title: "Edit", symbol: "pencil", key: "E") { act(.edit) }
-                BarButton(title: "Pin", symbol: "pin", key: "P") { act(.pin) }
-                if !copiesText {
+                if !scrolls {
+                    BarButton(title: "Edit", symbol: "pencil", key: "E") { act(.edit) }
+                    BarButton(title: "Pin", symbol: "pin", key: "P") { act(.pin) }
+                }
+                if !copiesText && !scrolls {
                     BarButton(title: "Text", symbol: "text.viewfinder", key: "T") { act(.copyText) }
                     Divider().frame(height: 18).padding(.horizontal, 2)
                     BarButton(title: "Record", symbol: "record.circle", key: "R", compact: true) { act(.record) }
@@ -1094,8 +1132,7 @@ struct CaptureActionBar: View {
                               compact: true) { act(.scroll) }
                     Divider().frame(height: 18).padding(.horizontal, 2)
                 }
-                BarButton(title: primary, symbol: copiesText ? "text.viewfinder" : "arrow.down.doc", key: "↩",
-                          prominent: true) { act(.primary) }
+                BarButton(title: primary, symbol: primarySymbol, key: "↩", prominent: true) { act(.primary) }
                 Button { act(nil) } label: {
                     Image(systemName: "xmark").font(.system(size: 11, weight: .bold))
                         .foregroundStyle(.white.opacity(0.75))
@@ -1116,6 +1153,10 @@ struct CaptureActionBar: View {
         .glassEffect(.regular.tint(Brand.indigoDeep.opacity(0.5)), in: .rect(cornerRadius: 18))
         .environment(\.colorScheme, .dark)
         .fixedSize()
+    }
+
+    private var primarySymbol: String {
+        copiesText ? "text.viewfinder" : scrolls ? "rectangle.expand.vertical" : "arrow.down.doc"
     }
 
     struct BarButton: View {

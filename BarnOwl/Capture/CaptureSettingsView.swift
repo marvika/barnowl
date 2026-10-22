@@ -114,6 +114,7 @@ struct CapturePane: View {
             LabeledContent("Copy text from the screen") { KeyboardShortcuts.Recorder(for: .captureText) }
             LabeledContent("Show capture history") { KeyboardShortcuts.Recorder(for: .captureHistory) }
             LabeledContent("Record the screen") { KeyboardShortcuts.Recorder(for: .recordScreen) }
+            LabeledContent("Take a scrolling capture") { KeyboardShortcuts.Recorder(for: .captureScrolling) }
             Toggle(isOn: $appleKeys) {
                 Text("Also answer ⇧⌘4 and ⇧⌘3")
                 Text(systemKeysOn
