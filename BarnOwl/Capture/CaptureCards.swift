@@ -21,7 +21,10 @@ final class CaptureCards {
 
     /// Newest last, at the bottom of the stack.
     private(set) var cards: [Card] = []
-    var hovered: UUID?
+    var hovered: UUID? {
+        // Pointing at a card may lead to a drag: have its file ready.
+        didSet { if let hovered, hovered != oldValue { coordinator?.prepareDragFile(hovered) } }
+    }
     @ObservationIgnored private weak var coordinator: CaptureCoordinator?
     @ObservationIgnored private var panel: CardPanel?
     @ObservationIgnored private var timers: [UUID: Task<Void, Never>] = [:]

@@ -31,6 +31,8 @@ final class CaptureCoordinator {
     @ObservationIgnored private var writes: [UUID: Task<Void, Never>] = [:]
     /// The capture Barn Owl last put on the clipboard, and the clipboard's count right after.
     @ObservationIgnored private var onClipboard: (id: UUID, changeCount: Int)?
+    /// Copies made ahead of a drag, so pulling a card out never waits on an encode.
+    @ObservationIgnored private var dragFiles: [UUID: (image: CGImage, url: URL)] = [:]
     /// What each editor's Save last wrote, so closing right after doesn't count as unsaved.
     @ObservationIgnored private var savedDocuments: [UUID: EditorDocument] = [:]
     @ObservationIgnored private var lastKeepDays: Int?
@@ -438,6 +440,7 @@ final class CaptureCoordinator {
         while order.count > 3, let oldest = order.first(where: { !open.contains($0) && !cards.has($0) && $0 != capture.id }) {
             order.removeAll { $0 == oldest }
             captures[oldest] = nil
+            dragFiles[oldest] = nil
             insights[oldest] = nil
             scans[oldest]?.cancel()
             scans[oldest] = nil
@@ -606,7 +609,19 @@ final class CaptureCoordinator {
     func fileForDragging(_ id: UUID) -> URL? {
         guard let capture = capture(id) else { return nil }
         if isSaved(id), let url = capture.fileURL { return url }
+        if let ready = dragFiles[id], ready.image === capture.image { return ready.url }
         return CaptureStore.temporaryFile(for: capture)
+    }
+
+    /// Makes the copy a drag would need, off the main thread, while you point at the card.
+    func prepareDragFile(_ id: UUID) {
+        guard !isSaved(id), let capture = capture(id), dragFiles[id]?.image !== capture.image else { return }
+        let image = capture.image
+        Task {
+            let url = await Task.detached(priority: .userInitiated) { CaptureStore.temporaryFile(for: capture) }.value
+            guard let url, self.captures[id]?.image === image else { return }
+            dragFiles[id] = (image, url)
+        }
     }
 
     /// Saved, and the file on disk is what the card shows: not still being

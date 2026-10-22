@@ -34,7 +34,7 @@ struct CapturePane: View {
                 Toggle(isOn: $enabled) {
                     BadgeLabel(title: "Screenshots and markup",
                                subtitle: "Capture an area, a window or the whole screen, then mark it up and hand it on.",
-                               symbol: "camera.viewfinder", color: Brand.amber)
+                               symbol: "camera.viewfinder", color: .red)
                 }
                 // Until it's allowed, the permission comes first.
                 if enabled && !model.screenRecordingAllowed {
