@@ -421,7 +421,7 @@ final class VideoTimelineView: NSView {
         guard point.y <= lanesBottom + Metrics.gap / 2 else { return .empty }
         let spans = clipSpans()
         // Edges first, the selected clip's before the rest.
-        let ordered = spans.sorted { lhs, _ in lhs.clip.id == model.selection }
+        let ordered = spans.filter { $0.clip.id == model.selection } + spans.filter { $0.clip.id != model.selection }
         for span in ordered {
             let rect = clipRect(start: span.start, end: span.end, in: videoLane)
             let grab: CGFloat = min(Metrics.grab, rect.width / 3)
@@ -575,11 +575,11 @@ final class VideoTimelineView: NSView {
             onTrimPreview?(clip.start)
         } else {
             var target = base.end + moved
+            // The playhead pulls the end to it.
             let head = model.playhead
-            if let clipEnd = Optional(starts[index] + VideoEdit.Clip(start: base.start, duration: target - base.start,
-                                                                     speed: base.speed).outputDuration),
-               abs(x(clipEnd) - x(head)) <= 5, head > starts[index] {
-                target = base.start + Int64(Double(head - starts[index]) * base.speed)
+            let plays = Int64((Double(max(0, target - base.start)) / base.speed).rounded())
+            if head > starts[index], abs(x(starts[index] + plays) - x(head)) <= 5 {
+                target = base.start + Int64((Double(head - starts[index]) * base.speed).rounded())
             }
             model.setLive { $0.trimEnd(id, to: target) }
             let clip = model.edit.clips[index]

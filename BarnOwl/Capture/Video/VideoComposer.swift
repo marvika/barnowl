@@ -168,7 +168,8 @@ enum VideoComposer {
                 let heard = segment.source.intersection(entry.range)
                 guard heard.duration > .zero else { continue }
                 let at = cursor + (heard.start - segment.source.start)
-                let end = entry.track.timeRange.end
+                let range = entry.track.timeRange
+                let end = range.isValid && !range.isEmpty ? range.end : .zero
                 if end < at { entry.track.insertEmptyTimeRange(CMTimeRange(start: end, end: at)) }
                 try entry.track.insertTimeRange(heard, of: entry.source, at: at)
             }

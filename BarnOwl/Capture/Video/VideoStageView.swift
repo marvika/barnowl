@@ -42,7 +42,8 @@ final class VideoStageView: NSView {
         addSubview(crop)
         readyObservation = playerLayer.observe(\.isReadyForDisplay, options: [.new]) { [weak self] layer, _ in
             let ready = layer.isReadyForDisplay
-            MainActor.assumeIsolated {
+            // KVO can arrive on any thread.
+            Task { @MainActor in
                 guard ready, let self, self.stillTime == nil else { return }
                 self.stillLayer.isHidden = true
             }

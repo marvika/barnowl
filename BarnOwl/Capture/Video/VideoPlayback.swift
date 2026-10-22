@@ -47,8 +47,10 @@ final class VideoPlayback {
         }
         stallObserver = player.observe(\.rate, options: [.new]) { [weak self] player, _ in
             let rate = player.rate
-            MainActor.assumeIsolated {
-                guard let self, rate == 0, self.wantedRate != 0, !self.seeking, self.rebuildTask == nil else { return }
+            // KVO can arrive on any thread; the decision is made on the main one.
+            Task { @MainActor in
+                guard let self, rate == 0, self.player.rate == 0, self.wantedRate != 0, !self.seeking,
+                      self.rebuildTask == nil else { return }
                 // Stopped though asked to play: at an end, or it can't go that way.
                 let at = VideoEdit.ticks(self.player.currentTime())
                 let duration = self.edit?.duration ?? 0
@@ -100,8 +102,11 @@ final class VideoPlayback {
     private func build(_ edit: VideoEdit, fullFrame: Bool, at time: Int64, generation: Int) async {
         var shown = edit
         if fullFrame { shown.crop = nil }
-        guard let built = try? await VideoComposer.build(asset, info: info, edit: shown, output: .preview),
-              generation == self.generation, !closed else { return }
+        guard let built = try? await VideoComposer.build(asset, info: info, edit: shown, output: .preview) else {
+            if generation == self.generation { rebuildTask = nil }
+            return
+        }
+        guard generation == self.generation, !closed else { return }
         let item = AVPlayerItem(asset: built.composition)
         item.videoComposition = built.videoComposition
         item.audioMix = built.audioMix

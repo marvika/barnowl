@@ -147,7 +147,7 @@ struct VideoCommand {
         }
         // ? is ⇧/ on most layouts.
         if typed == "?" { return .shortcuts }
-        if key == "=" || key == "+", flags == .command { return .zoomIn }
+        if key == "=" || key == "+", flags.subtracting(.shift) == .command { return .zoomIn }
         let arrows: Set<String> = [left, right, up, down]
         let relevant = arrows.contains(key) ? flags.subtracting(.function) : flags
         return all.first { $0.key == key && $0.modifiers == relevant }?.id

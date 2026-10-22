@@ -118,7 +118,7 @@ final class VideoEditor {
         controller.onClose = { [weak self] in self?.didClose() }
         controller.onShareFile = { [weak self] completion in
             guard let self else { return completion(nil) }
-            Task { completion(await self.renderFile("Making it")) }
+            Task { completion(await self.renderFile("Preparing")) }
         }
         self.controller = controller
         return controller
