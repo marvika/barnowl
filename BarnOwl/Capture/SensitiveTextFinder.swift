@@ -232,9 +232,10 @@ enum SensitiveTextFinder {
         Rule(#"hooks\.slack\.com/services/[A-Za-z0-9/]+"#, .key),
         Rule(#"\bAIza[0-9A-Za-z_-]{30,}"#, .key),
         Rule(#"\b(?:sk|pk|rk)_(?:live|test)_[A-Za-z0-9]{16,}"#, .key),
-        // "PASSWORD=…", "api_key: …", "aws_secret_access_key = …": only the value.
-        Rule(#"(?i)\b[\w.-]*(?:pass(?:word|wd)?|secret|token|api[_-]?key|access[_-]?key|client[_-]?secret)\b["']?\s*[:=]\s*["']?([^\s"',;]{6,})"#,
-             .password, group: 1),
+        // "PASSWORD=…", "api_key: …", "aws_secret_access_key = …": only the value, named by its label.
+        Rule(#"(?i)\b[\w.-]*pass(?:word|wd)?\b["']?\s*[:=]\s*["']?([^\s"',;]{6,})"#, .password, group: 1),
+        Rule(#"(?i)\b[\w.-]*(?:secret|token|api[_-]?key|access[_-]?key|client[_-]?secret)\b["']?\s*[:=]\s*["']?([^\s"',;]{6,})"#,
+             .key, group: 1),
         Rule(#"(?i)\bbearer\s+([A-Za-z0-9._~+/=-]{12,})"#, .key, group: 1),
         // user:password@ in a link: everything up to the @.
         Rule(#"\b[a-z][a-z0-9+.-]*://([^\s/:@]+:[^\s/@]+)@"#, .credentialLink, group: 1),

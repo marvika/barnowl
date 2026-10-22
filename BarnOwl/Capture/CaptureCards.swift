@@ -213,7 +213,12 @@ private struct CaptureCardView: View {
         }
         .padding(8)
         .frame(width: CaptureCards.width)
-        .background(.thickMaterial, in: .rect(cornerRadius: 16))
+        .background {
+            // The material alone turns grey over a white window; some of the window's own
+            // colour keeps the text crisp on anything.
+            RoundedRectangle(cornerRadius: 16).fill(.thickMaterial)
+                .overlay { RoundedRectangle(cornerRadius: 16).fill(Color(nsColor: .windowBackgroundColor).opacity(0.6)) }
+        }
         .overlay { RoundedRectangle(cornerRadius: 16).strokeBorder(.primary.opacity(0.1), lineWidth: 0.5) }
         .shadow(color: .black.opacity(0.22), radius: 14, y: 6)
         .overlay(alignment: .topLeading) {

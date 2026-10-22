@@ -44,6 +44,10 @@ struct SensitiveTextTests {
 
     @Test func hidesOnlyTheValueOfALabelledSecret() {
         #expect(found("PASSWORD=Sup3rS3cret!") == ["Sup3rS3cret!"])
+        // Named by the label: a password, or a key or token.
+        #expect(kinds("PASSWORD=Sup3rS3cret!") == [.password])
+        #expect(kinds("DEPLOY_TOKEN=Zq8vR2mK9xL4") == [.key])
+        #expect(kinds("api_key: Zq8vR2mK9xL4") == [.key])
         #expect(found("aws_secret_access_key = wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY") == ["wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"])
         #expect(found("Authorization: Bearer abc123def456ghi789jkl012mno345") == ["abc123def456ghi789jkl012mno345"])
         let env = SensitiveTextFinder.classify("OPENAI_API_KEY=sk-proj-AbCdEf0123456789XyZaBcDeF")
