@@ -4,7 +4,7 @@ import SwiftUI
 /// Settings laid out like System Settings: a sidebar of panes, each a
 /// grouped form.
 enum SettingsPane: String, CaseIterable, Identifiable {
-    case layout, general, menuBar, appearance, keepAwake, agents, toggles, clipboard, shortcuts, about
+    case layout, general, menuBar, appearance, keepAwake, agents, toggles, clipboard, capture, shortcuts, about
     var id: Self { self }
 
     var title: String {
@@ -14,6 +14,7 @@ enum SettingsPane: String, CaseIterable, Identifiable {
         case .menuBar: "Menu Bar"
         case .appearance: "Appearance"
         case .clipboard: "Clipboard"
+        case .capture: "Capture"
         case .keepAwake: "Keep Awake"
         case .agents: "Agents"
         case .toggles: "Toggles"
@@ -29,6 +30,7 @@ enum SettingsPane: String, CaseIterable, Identifiable {
         case .menuBar: "menubar.rectangle"
         case .appearance: "paintpalette.fill"
         case .clipboard: "doc.on.clipboard.fill"
+        case .capture: "camera.viewfinder"
         case .keepAwake: "eyes"
         case .agents: "bird.fill"
         case .toggles: "switch.2"
@@ -44,6 +46,7 @@ enum SettingsPane: String, CaseIterable, Identifiable {
         case .menuBar: .blue
         case .appearance: .pink
         case .clipboard: .teal
+        case .capture: Brand.amber
         case .keepAwake: .orange
         case .agents: .brown
         case .toggles: .green
@@ -78,6 +81,7 @@ struct SettingsView: View {
                 case .menuBar: MenuBarPane(model: model)
                 case .appearance: AppearancePane(appearance: model.appearance)
                 case .clipboard: ClipboardPane(model: model)
+                case .capture: CapturePane(model: model)
                 case .keepAwake: KeepAwakePane(model: model)
                 case .agents: AgentsPane(model: model)
                 case .toggles: TogglesPane()

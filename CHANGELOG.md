@@ -3,6 +3,65 @@
 All notable changes to Barn Owl. Versions follow [semantic versioning](https://semver.org);
 before 1.0, a minor version can change behaviour.
 
+## 0.15.0
+
+- **Capture: screenshots with markup.** Optional; turn it on in Settings ›
+  Capture or in the setup guide.
+  - **Capture an area** with ⌃⌥⌘4: the screen freezes so menus and hover
+    states stay put. Drag an area, click a window, or press F for the whole
+    screen. A loupe shows the pixels, their position and colour.
+  - **Adjust before you keep it:** the selection stays adjustable, with
+    handles, and Space or arrow keys to move it. Return copies and saves, E
+    opens the editor, P pins it above your windows, and Esc starts over. If
+    you'd rather it captured the moment you let go, say so in Settings.
+  - **Shortcuts:**
+    - ⌃⌥⌘3 takes the whole screen.
+    - L in the overlay brings back the last area.
+    - ⌃⌥⌘E reopens the last capture with its marks still editable.
+    - ? shows every key.
+    - Once macOS's own shortcuts are off, Barn Owl can answer ⇧⌘4 and ⇧⌘3.
+  - **Clean shots:** other apps' menu bar icons, the desktop icons and the
+    "screen is being recorded" dot are left out of the picture. Nothing
+    changes on screen.
+  - **The card:** a small card in the corner shows what you caught. It never
+    takes your keyboard. Click it to edit, drag it into any app, or point at
+    it to copy, save or pin. If the capture shows a key or token, the card
+    offers to hide it.
+  - **The editor:** arrows (straight or curved), rectangles, ellipses, text,
+    numbered steps, highlighter, pen, blur and pixelate, spotlight and crop,
+    each a key away (A, R, O, T, N, H, P, B, S, C). Every mark stays movable
+    and restylable until you're done.
+    - **Smart where it helps:** click a paragraph with Rectangle or
+      Spotlight to frame it; click a word with Redact to hide it; drag the
+      highlighter across text and it follows the lines. Marks snap into line
+      with each other and the picture.
+    - **Remembers your style:** one pen colour for arrows, shapes, text and
+      steps, as CleanShot does, plus each tool's size and style, between
+      captures. Text comes in four faces, three weights, five looks
+      (including a callout) and any size.
+    - **Frame:** put the capture on a gradient, a colour or your wallpaper,
+      with padding, rounded corners, a shadow and an aspect ratio for
+      sharing.
+    - **Private info:** the editor reads the capture's text on your Mac and
+      offers to blur keys, passwords, card numbers, emails and other
+      personal details; ⇧B reviews what it found before you hide it. Done
+      asks once if a key is still showing.
+    - Done (⌘Return) copies it and saves over its file. Close without Done
+      and your marks are kept; the card offers to copy or save them.
+    - ⌘C and ⌘V copy marks from one capture to another, and Revert to
+      Original starts over in one undoable step.
+  - **Files:** saved like macOS's own screenshots (same folder, name and
+    tags) unless you choose otherwise. Captures stay editable for 30 days, or
+    7, or not at all, as you choose in Settings › Capture.
+- **Presenter mode no longer moves your pointer.** On macOS 26 it used to hide
+  the menu bar's icons by dragging them one by one, which sent the pointer to
+  the menu bar and could leave it there as a call started sharing. Now an
+  invisible curtain next to the arrow covers them all at once, and they come
+  back exactly where they were. While presenting, the Perch lists them too.
+- When Barn Owl does drag an icon (arranging, or opening one from the Perch),
+  the pointer goes back only once the drag has landed, so it can't be left
+  in the menu bar.
+
 ## 0.14.1
 
 - **Explore's basket is stricter.** It no longer takes a protected folder

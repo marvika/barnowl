@@ -23,6 +23,8 @@ final class LengthEngine: HidingEngine {
 
     func apply(_ state: SectionState, alwaysHiddenEnabled: Bool) async -> Bool {
         let alwaysHidden = alwaysHiddenEnabled ? items.ensureAlwaysHiddenItem() : items.alwaysHidden
+        // A display may have been added since presenting began.
+        items.curtain?.length = collapsedLength
         switch state {
         case .collapsed:
             items.separator.length = collapsedLength
@@ -50,9 +52,23 @@ final class LengthEngine: HidingEngine {
         // Lengths are recomputed from the current screens on the next apply.
     }
 
-    /// A divider can only hide what's left of it, and macOS doesn't draw a
-    /// status item that runs off screen, so presenting moves icons instead.
+    /// A divider can only hide what's left of it, so presenting widens a
+    /// curtain placed right of every icon, just left of the arrow. If it can't
+    /// be placed there, presenting moves the icons instead. Ending always
+    /// reports false, so icons moved that way are put back.
     func setPresenting(_ presenting: Bool) async -> Bool {
-        false
+        guard presenting else {
+            items.lowerCurtain()
+            return false
+        }
+        guard items.raiseCurtain(length: collapsedLength) else { return false }
+        // The menu bar lays out on its next pass.
+        for _ in 0..<10 {
+            try? await Task.sleep(for: .milliseconds(50))
+            if items.curtainIsLeftOfArrow { return true }
+        }
+        Log.menuBar.error("Presenter curtain didn't land left of the arrow; moving icons instead")
+        items.lowerCurtain()
+        return false
     }
 }

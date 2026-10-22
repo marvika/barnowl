@@ -30,11 +30,14 @@ final class ItemOpener {
     }
 
     private func perform(_ item: MenuBarItem, anchor: CGWindowID?) async {
-        if item.section == .visible && !item.isBehindNotch {
+        // While presenting, every icon is behind the curtain left of the arrow:
+        // it comes out between the two, and goes back after.
+        let curtain = StatusItems.windowID(of: sections.items.curtain)
+        if item.section == .visible && !item.isBehindNotch && curtain == nil {
             await press(item)
             return
         }
-        let destination: MoveDestination? = anchor.map { .rightOf($0) }
+        let destination: MoveDestination? = (curtain ?? anchor).map { .rightOf($0) }
             ?? StatusItems.windowID(of: sections.items.separator).map { .rightOf($0) }
         if item.isMovable, let destination, await openMovedOut(item, to: destination) {
             return
@@ -153,6 +156,6 @@ final class ItemOpener {
             SyntheticEvents.mark(event)
             event?.post(tap: .cghidEventTap)
         }
-        if let original { CGWarpMouseCursorPosition(original) }
+        if let original { SyntheticEvents.restorePointer(to: original, after: point) }
     }
 }

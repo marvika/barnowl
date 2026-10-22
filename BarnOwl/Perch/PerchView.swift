@@ -11,6 +11,11 @@ struct PerchView: View {
     private var hidden: [MenuBarItem] { model.layout.items(in: .hidden) }
     private var alwaysHidden: [MenuBarItem] { model.layout.items(in: .alwaysHidden) }
     private var behindNotch: [MenuBarItem] { scanner.items.filter(\.isBehindNotch) }
+    /// While presenting, the menu bar's own icons are out of view too.
+    private var behindCurtain: [MenuBarItem] {
+        model.presenter.iconsBehindCurtain ? model.layout.items(in: .visible).filter { !$0.isBehindNotch } : []
+    }
+    private var isEmpty: Bool { hidden.isEmpty && alwaysHidden.isEmpty && behindNotch.isEmpty && behindCurtain.isEmpty }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -20,9 +25,10 @@ struct PerchView: View {
                     title: "Allow Accessibility",
                     message: "Barn Owl needs it to find your hidden icons and open them.",
                     action: { AccessibilityInventory.requestTrust() })
-            } else if hidden.isEmpty && alwaysHidden.isEmpty && behindNotch.isEmpty {
+            } else if isEmpty {
                 emptyState
             } else {
+                group("In the menu bar", behindCurtain)
                 group("Behind the notch", behindNotch)
                 group("Hidden", hidden)
                 group("Always hidden", alwaysHidden)
@@ -47,7 +53,7 @@ struct PerchView: View {
             // Perched in the corner, watching the icon you point at. It stays
             // below the menu bar: the Perch sits just under it, and anything
             // higher gets cut off when the menu bar draws on top.
-            if model.accessibilityTrusted, !(hidden.isEmpty && alwaysHidden.isEmpty && behindNotch.isEmpty) {
+            if model.accessibilityTrusted, !isEmpty {
                 WatchingOwl(snores: false)
                     .frame(width: 30, height: 30)
                     .offset(x: -12, y: -3)

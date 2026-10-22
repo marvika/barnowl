@@ -9,6 +9,8 @@ enum Brand {
     static let golden = Color(hex: 0xF0B04F)
     /// A lighter indigo that reads well on dark backgrounds.
     static let lavender = Color(hex: 0x8C87FF)
+    /// A deeper lavender for filled buttons with a white label (4.5:1).
+    static let lavenderFill = Color(hex: 0x6A64F0)
 
     /// The dusk sky behind the owl in setup and About.
     static let dusk = LinearGradient(colors: [indigo, indigoDeep], startPoint: .top, endPoint: .bottom)
