@@ -372,3 +372,25 @@ struct ScrollStitcherTests {
         #expect(whole.height == 40)
     }
 }
+
+@MainActor
+struct ScrollingCaptureGeometryTests {
+    @Test func areaInTheDisplaysOwnPointsFromTheTop() {
+        // A second display above and to the right of the main one.
+        let screen = CGRect(x: 1512, y: 982, width: 1920, height: 1080)
+        let area = CGRect(x: 1612, y: 1500, width: 400, height: 300)
+        let source = ScrollingCaptureSession.sourceRect(for: area, on: screen)
+        #expect(source == CGRect(x: 100, y: 1080 - (1500 + 300 - 982), width: 400, height: 300))
+        // The main display.
+        let main = CGRect(x: 0, y: 0, width: 1512, height: 982)
+        #expect(ScrollingCaptureSession.sourceRect(for: CGRect(x: 10, y: 20, width: 100, height: 50), on: main)
+                == CGRect(x: 10, y: 982 - 70, width: 100, height: 50))
+    }
+
+    @Test func snapsToWholePixels() {
+        let snapped = ScrollingCaptureSession.pixelAligned(CGRect(x: 10.3, y: 20.74, width: 99.9, height: 50.2), scale: 2)
+        #expect(snapped == CGRect(x: 10.5, y: 20.5, width: 99.5, height: 50.5))
+        #expect(ScrollingCaptureSession.pixelAligned(CGRect(x: 10.4, y: 0, width: 10, height: 10), scale: 1)
+                == CGRect(x: 10, y: 0, width: 10, height: 10))
+    }
+}
