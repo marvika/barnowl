@@ -40,6 +40,8 @@ enum CaptureAction {
     /// Copy and save, as Settings › Capture says.
     case primary
     case edit, pin, copy, save
+    /// The words in it, not the picture.
+    case copyText
 }
 
 /// What you've selected.
@@ -70,13 +72,15 @@ final class SelectionOverlay {
     /// Asks for new pictures when an option that changes them is switched.
     var onOptionsChanged: (() -> Void)?
 
-    init(snapshots: [DisplaySnapshot], targets: [WindowTarget], mode: CaptureMode,
+    /// `copiesText`: started to copy text, so Return copies the words in the selection.
+    init(snapshots: [DisplaySnapshot], targets: [WindowTarget], mode: CaptureMode, copiesText: Bool = false,
          completion: @escaping (SelectionResult) -> Void) {
         self.mode = mode
         self.completion = completion
         let hints = Preferences.captureHintCount < 10
         for snapshot in snapshots {
             let window = OverlayWindow(snapshot: snapshot, targets: targets, mode: mode, showsHints: hints)
+            window.selection.copiesText = copiesText
             window.selection.onResult = { [weak self] in self?.finish($0) }
             window.selection.onMode = { [weak self] in self?.setMode($0) }
             window.selection.onSelect = { [weak self, weak window] in self?.selectionStarted(in: window) }
@@ -253,6 +257,10 @@ final class SelectionView: NSView {
     private var selectedWindow: WindowTarget?
     private var selectedScreen = false
     private var hovered: WindowTarget?
+    /// Started to copy text: Return copies the words in the selection, not the picture.
+    var copiesText = false {
+        didSet { modeBar?.rootView = modeBarView }
+    }
 
     init(snapshot: DisplaySnapshot, targets: [WindowTarget], mode: CaptureMode, showsHints: Bool) {
         self.snapshot = snapshot
@@ -330,7 +338,7 @@ final class SelectionView: NSView {
     }
 
     private var modeBarView: CaptureModeBar {
-        CaptureModeBar(mode: mode, showsHints: showsHints, select: { [weak self] in self?.onMode?($0) },
+        CaptureModeBar(mode: mode, showsHints: showsHints, copiesText: copiesText, select: { [weak self] in self?.onMode?($0) },
                        options: { [weak self] in self?.onOptions?() },
                        cancel: { [weak self] in self?.onResult?(.cancelled) })
     }
@@ -596,6 +604,7 @@ final class SelectionView: NSView {
         case ("s", true): if selection != nil { act(.save) }
         case ("e", false): if selection != nil { act(.edit) }
         case ("p", false): if selection != nil { act(.pin) }
+        case ("t", false): if selection != nil { act(.copyText) }
         case ("a", false): onMode?(.area)
         case ("w", false): onMode?(.window)
         case ("f", false): onMode?(.screen)
@@ -614,7 +623,7 @@ final class SelectionView: NSView {
     /// carries no characters (some automation tools send those).
     static func letter(for event: NSEvent) -> String {
         if let characters = event.charactersIgnoringModifiers?.lowercased(), !characters.isEmpty { return characters }
-        let byKey: [UInt16: String] = [0: "a", 1: "s", 3: "f", 8: "c", 13: "w", 14: "e", 35: "p", 37: "l"]
+        let byKey: [UInt16: String] = [0: "a", 1: "s", 3: "f", 8: "c", 13: "w", 14: "e", 17: "t", 35: "p", 37: "l"]
         return byKey[event.keyCode] ?? ""
     }
 
@@ -630,6 +639,7 @@ final class SelectionView: NSView {
 
     private func act(_ action: CaptureAction) {
         guard let selection else { return }
+        let action = copiesText && action == .primary ? .copyText : action
         guard selection.width >= 1, selection.height >= 1 else { return NSSound.beep() }
         if selectedScreen, selection == bounds {
             onResult?(.done(.screen(snapshot), action))
@@ -776,7 +786,8 @@ final class SelectionView: NSView {
     }
 
     private var actionBarView: CaptureActionBar {
-        CaptureActionBar(primary: Self.primaryTitle, showsHint: showsHints) { [weak self] action in
+        CaptureActionBar(primary: copiesText ? "Copy Text" : Self.primaryTitle, copiesText: copiesText,
+                         showsHint: showsHints) { [weak self] action in
             if let action { self?.act(action) } else { self?.clearSelection() }
         }
     }
@@ -908,6 +919,7 @@ private final class Loupe {
 struct CaptureModeBar: View {
     let mode: CaptureMode
     let showsHints: Bool
+    var copiesText = false
     let select: (CaptureMode) -> Void
     let options: () -> Void
     let cancel: () -> Void
@@ -960,8 +972,8 @@ struct CaptureModeBar: View {
                 .help("Cancel (Esc)")
                 .accessibilityLabel("Cancel")
             }
-            if showsHints {
-                Text(mode.hint)
+            if showsHints || copiesText {
+                Text(copiesText ? "Drag over text to copy it · click a window for all of its text" : mode.hint)
                     .font(.system(size: 11))
                     .foregroundStyle(.white.opacity(0.7))
                     .padding(.bottom, 2)
@@ -982,6 +994,8 @@ struct CaptureModeBar: View {
 /// What to do with the selection: the main action on Return, and the others with a letter each.
 struct CaptureActionBar: View {
     let primary: String
+    /// Copying text: the main action copies the words, so there's no separate Text button.
+    var copiesText = false
     let showsHint: Bool
     /// nil closes the selection.
     let act: (CaptureAction?) -> Void
@@ -991,7 +1005,11 @@ struct CaptureActionBar: View {
             HStack(spacing: 4) {
                 BarButton(title: "Edit", symbol: "pencil", key: "E") { act(.edit) }
                 BarButton(title: "Pin", symbol: "pin", key: "P") { act(.pin) }
-                BarButton(title: primary, symbol: "arrow.down.doc", key: "↩", prominent: true) { act(.primary) }
+                if !copiesText {
+                    BarButton(title: "Text", symbol: "text.viewfinder", key: "T") { act(.copyText) }
+                }
+                BarButton(title: primary, symbol: copiesText ? "text.viewfinder" : "arrow.down.doc", key: "↩",
+                          prominent: true) { act(.primary) }
                 Button { act(nil) } label: {
                     Image(systemName: "xmark").font(.system(size: 11, weight: .bold))
                         .foregroundStyle(.white.opacity(0.75))
@@ -1072,7 +1090,7 @@ struct CaptureKeysSheet: View {
                     ("Space", "switch area and window"), ("L", "the last area again")]),
         ("Shape it", [("⇧ drag", "square"), ("⌥ drag", "from the centre"), ("Space while dragging", "move it"),
                       ("Arrows", "nudge (⇧ 10 pt)"), ("⌥ Arrows", "resize")]),
-        ("Then", [("Return", SelectionView.primaryTitle.lowercased()), ("E", "edit"), ("P", "pin"), ("⌘C · ⌘S", "copy only · save only"),
+        ("Then", [("Return", SelectionView.primaryTitle.lowercased()), ("E", "edit"), ("P", "pin"), ("T", "copy its text"), ("⌘C · ⌘S", "copy only · save only"),
                   ("Esc", "start over, then cancel")]),
     ]
 

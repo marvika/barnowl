@@ -5,7 +5,7 @@ import AppKit
 struct EditorCommand {
     enum ID: String, CaseIterable {
         case copy, save, pin, done, close, revert
-        case undo, redo, cut, copyMarks, paste, delete, selectAll, duplicate
+        case undo, redo, cut, copyMarks, copyText, paste, delete, selectAll, duplicate
         case actualSize, zoomToFit, zoomIn, zoomOut, showFrame, shortcuts
         case bringToFront, sendToBack, bringForward, sendBackward
         case alignLeft, alignCentre, alignRight, alignTop, alignMiddle, alignBottom
@@ -114,6 +114,7 @@ struct EditorCommand {
             EditorCommand(.redo, "Redo", key: "z", [.command, .shift], menu: .edit, action: #selector(EditorCanvas.redo(_:))),
             EditorCommand(.cut, "Cut", key: "x", .command, menu: .edit, action: #selector(NSText.cut(_:))),
             EditorCommand(.copyMarks, "Copy", key: "c", .command, menu: .edit, action: #selector(NSText.copy(_:))),
+            EditorCommand(.copyText, "Copy Text", key: "c", [.command, .option], menu: .edit),
             EditorCommand(.paste, "Paste", key: "v", .command, menu: .edit, action: #selector(NSText.paste(_:))),
             EditorCommand(.delete, "Delete", menu: .edit, action: #selector(NSText.delete(_:)), group: .marks),
             EditorCommand(.selectAll, "Select All", key: "a", .command, menu: .edit, action: #selector(NSText.selectAll(_:))),

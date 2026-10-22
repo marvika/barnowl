@@ -108,6 +108,8 @@ final class CaptureCards {
         remove(id)
     }
     func hide(_ id: UUID) { coordinator?.hideSecrets(id) }
+    func copyText(_ id: UUID) { coordinator?.copyText(id) }
+    func hasText(_ id: UUID) -> Bool { coordinator?.hasText(id) ?? false }
     func file(_ id: UUID) -> URL? { coordinator?.fileForDragging(id) }
     func isSaved(_ id: UUID) -> Bool { coordinator?.isSaved(id) ?? false }
 
@@ -273,6 +275,9 @@ private struct CaptureCardView: View {
     private var actions: some View {
         HStack(spacing: 8) {
             IconButton(symbol: "doc.on.doc", label: "Copy") { cards.copy(card.id) }
+            if cards.hasText(card.id) {
+                IconButton(symbol: "text.viewfinder", label: "Copy Text") { cards.copyText(card.id) }
+            }
             IconButton(symbol: cards.isSaved(card.id) ? "folder" : "square.and.arrow.down",
                        label: cards.isSaved(card.id) ? "Show in Finder" : "Save") { cards.save(card.id) }
             IconButton(symbol: "pin", label: "Pin") { cards.pin(card.id) }

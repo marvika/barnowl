@@ -105,6 +105,7 @@ struct CapturePane: View {
             LabeledContent("Capture the whole screen") { KeyboardShortcuts.Recorder(for: .captureScreen) }
             LabeledContent("Capture the same area again") { KeyboardShortcuts.Recorder(for: .captureSameArea) }
             LabeledContent("Edit the last capture") { KeyboardShortcuts.Recorder(for: .editLastCapture) }
+            LabeledContent("Copy text from the screen") { KeyboardShortcuts.Recorder(for: .captureText) }
             Toggle(isOn: $appleKeys) {
                 Text("Also answer ⇧⌘4 and ⇧⌘3")
                 Text(systemKeysOn

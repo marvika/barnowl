@@ -459,11 +459,30 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSTool
         perform(id)
     }
 
+    /// The words in the capture, as much of it as the crop shows, in reading order.
+    private func copyText() {
+        guard let insight = model.insight, insight.textWasRead else {
+            model.showHint("Still reading the text · try again in a moment")
+            return
+        }
+        let words = insight.text.plainText(within: model.document.crop)
+        guard !words.isEmpty else {
+            NSSound.beep()
+            model.showHint("No text in this capture")
+            return
+        }
+        let pasteboard = NSPasteboard.general
+        pasteboard.clearContents()
+        pasteboard.setString(words, forType: .string)
+        model.showHint("Text copied")
+    }
+
     func perform(_ id: EditorCommand.ID) {
         guard canPerform(id) else { return }
         switch id {
         case .copy: model.perform(.copy)
         case .copyMarks: canvas.copy(nil)
+        case .copyText: copyText()
         case .save: model.perform(.save)
         case .pin: model.perform(.pin)
         case .done: model.perform(.done)
@@ -541,6 +560,8 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSTool
             return model.insight != nil
         case .revert:
             return model.canRevert
+        case .copyText:
+            return model.insight?.textWasRead != false
         default:
             return true
         }

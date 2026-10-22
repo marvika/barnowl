@@ -355,6 +355,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 switch query?.first(where: { $0.name == "mode" })?.value {
                 case "screen": model.capture.captureScreen()
                 case "same": model.capture.captureSameArea()
+                case "text": model.capture.captureText()
                 case "window": model.capture.start(.window)
                 default: model.capture.start(.area)
                 }

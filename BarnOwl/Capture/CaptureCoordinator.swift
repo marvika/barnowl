@@ -51,6 +51,7 @@ final class CaptureCoordinator {
         KeyboardShortcuts.onKeyUp(for: .captureAreaApple) { [weak self] in self?.start(.area) }
         KeyboardShortcuts.onKeyUp(for: .captureScreenApple) { [weak self] in self?.captureScreen() }
         KeyboardShortcuts.onKeyUp(for: .editLastCapture) { [weak self] in self?.editLastCapture() }
+        KeyboardShortcuts.onKeyUp(for: .captureText) { [weak self] in self?.captureText() }
         NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.didActivateApplicationNotification,
                                                           object: nil, queue: .main) { [weak self] note in
             let app = note.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication
@@ -68,7 +69,7 @@ final class CaptureCoordinator {
     /// Turns the shortcuts on or off with the setting, and takes ⇧⌘3 and ⇧⌘4
     /// only while you've asked for them and macOS's own are off.
     func applySettings() {
-        let names: [KeyboardShortcuts.Name] = [.captureArea, .captureScreen, .captureSameArea, .editLastCapture]
+        let names: [KeyboardShortcuts.Name] = [.captureArea, .captureScreen, .captureSameArea, .editLastCapture, .captureText]
         if Preferences.captureEnabled { KeyboardShortcuts.enable(names) } else { KeyboardShortcuts.disable(names) }
         // At launch, and whenever you keep captures for less time.
         if CaptureLibrary.keepDays != lastKeepDays {
@@ -93,7 +94,8 @@ final class CaptureCoordinator {
     // MARK: Capturing
 
     /// Freezes the screens and lets you pick an area, a window or a screen.
-    func start(_ mode: CaptureMode = .area) {
+    /// `copiesText`: Return copies the words in what you select instead of the picture.
+    func start(_ mode: CaptureMode = .area, copiesText: Bool = false) {
         guard Preferences.captureEnabled, !isCapturing, Self.hasPermission() else { return }
         isCapturing = true
         rememberFrontApp()
@@ -104,7 +106,8 @@ final class CaptureCoordinator {
                 let snapshots = try await ScreenSnapshotter.snapshots(options: options)
                 guard !snapshots.isEmpty else { isCapturing = false; return NSSound.beep() }
                 targets = WindowLocator.onScreenWindows()
-                let overlay = SelectionOverlay(snapshots: snapshots, targets: targets, mode: mode) { [weak self] result in
+                let overlay = SelectionOverlay(snapshots: snapshots, targets: targets, mode: mode,
+                                               copiesText: copiesText) { [weak self] result in
                     guard let self else { return }
                     self.overlay = nil
                     Task { await self.finish(result, appName: appName) }
@@ -235,7 +238,7 @@ final class CaptureCoordinator {
         case .primary: copies = Preferences.captureCopies; saves = Preferences.captureSaves
         case .copy: copies = true; saves = false
         case .save: copies = false; saves = true
-        case .edit, .pin: copies = false; saves = false
+        case .edit, .pin, .copyText: copies = false; saves = false
         }
         if Preferences.captureSound { shutter?.stop(); shutter?.play() }
         if saves { capture.fileURL = CaptureStore.reserveURL(for: capture) }
@@ -251,6 +254,12 @@ final class CaptureCoordinator {
         case .pin:
             pin(capture.id)
             giveFocusBack()
+        case .copyText:
+            // The card says how it went; the picture is still there to copy or save.
+            cards.add(capture, status: "Reading the text…", kept: true)
+            giveFocusBack()
+            copyText(capture.id)
+            return
         default:
             switch Preferences.captureThen {
             case .editor: openEditor(capture.id)
@@ -394,16 +403,16 @@ final class CaptureCoordinator {
         }
     }
 
+    /// Reads the capture's text on the Mac, for smart marks, Copy Text and history search;
+    /// private info is only looked for, and offered, when Settings › Capture says so.
     private func scanInBackground(_ capture: Capture, windows: [CGRect]) {
         let image = capture.image, id = capture.id
-        guard Preferences.capturePrivateInfo else {
-            insights[id] = CaptureInsight(windowRects: windows)
-            return
-        }
+        let looksForPrivateInfo = Preferences.capturePrivateInfo
         scans[id] = Task {
-            let insight = await Task.detached(priority: .utility) {
+            var insight = await Task.detached(priority: .utility) {
                 await CaptureInsight.make(image: image, windowRects: windows)
             }.value
+            if !looksForPrivateInfo { insight.text.findings = [] }
             guard !Task.isCancelled else { return }
             insights[id] = insight
             scans[id] = nil
@@ -491,6 +500,62 @@ final class CaptureCoordinator {
         UserDefaults.standard.set(true, forKey: "captureAskedPermission")
         _ = CGRequestScreenCaptureAccess()
         return false
+    }
+
+    // MARK: Text
+
+    /// A shortcut of its own: select something, and its words go to the clipboard.
+    func captureText() {
+        start(.area, copiesText: true)
+    }
+
+    /// The capture's text, read now if it hasn't been yet.
+    func text(of id: UUID) async -> CaptureText? {
+        if let scan = scans[id] { await scan.value }
+        if let insight = insights[id], insight.textWasRead { return insight.text }
+        guard let capture = capture(id) else { return nil }
+        // The words under the marks, not the marks: read the original when it's kept.
+        let image = CaptureLibrary.original(id) ?? capture.image
+        let windows = insights[id]?.windowRects ?? CaptureLibrary.entry(id)?.windows ?? []
+        var insight = await Task.detached(priority: .userInitiated) {
+            await CaptureInsight.make(image: image, windowRects: windows)
+        }.value
+        guard insight.textWasRead else { return nil }
+        if !Preferences.capturePrivateInfo { insight.text.findings = [] }
+        insights[id] = insight
+        let words = insight.text.plainText()
+        if !words.isEmpty { inOrder(id) { CaptureLibrary.update(id) { $0.text = words } } }
+        return insight.text
+    }
+
+    /// Whether there's text worth copying, as far as is known yet.
+    func hasText(_ id: UUID) -> Bool {
+        if let insight = insights[id], insight.textWasRead { return !insight.text.lines.isEmpty }
+        return CaptureLibrary.entry(id)?.text?.isEmpty == false
+    }
+
+    /// Puts the capture's words on the clipboard, in reading order, and says how it went.
+    func copyText(_ id: UUID) {
+        Task {
+            let words = await text(of: id)?.plainText() ?? ""
+            let status: String
+            if words.isEmpty {
+                status = "No text found"
+                NSSound.beep()
+            } else {
+                let pasteboard = NSPasteboard.general
+                pasteboard.clearContents()
+                pasteboard.setString(words, forType: .string)
+                // The clipboard has words now, not this capture's picture.
+                onClipboard = nil
+                copied.remove(id)
+                let lines = words.components(separatedBy: "\n").count
+                status = lines == 1 ? "Text copied" : "Text copied · \(lines) lines"
+            }
+            cards.update(id, status: status, kept: true)
+            NSAccessibility.post(element: NSApp as Any, notification: .announcementRequested,
+                                 userInfo: [.announcement: status, .priority: NSAccessibilityPriorityLevel.high.rawValue])
+        }
     }
 
     // MARK: What cards and pins ask for
