@@ -230,6 +230,11 @@ final class EditorCanvas: NSView, NSTextViewDelegate, NSMenuItemValidation {
         }
         if old.counterStart != new.counterStart { return bounds }
         guard !dirty.isNull else { return .zero }
+        // A magnifier over what changed shows it enlarged, so it redraws too.
+        for magnifier in new.marks where magnifier.kind == .magnifier {
+            let area = MarkGeometry.paintedBounds(magnifier, scale: scale)
+            if area.intersects(dirty) { dirty = dirty.union(area) }
+        }
         return viewRect(fromImage: dirty).insetBy(dx: -2, dy: -2)
     }
 
@@ -340,8 +345,10 @@ final class EditorCanvas: NSView, NSTextViewDelegate, NSMenuItemValidation {
         let pixelsPerImagePixel: CGFloat = zoom * backing / scale
         imageView.sharp = pixelsPerImagePixel > 2
         let framed = shown.frame.isOn
-        imageView.outlined = !framed
-        imageView.cornerRadius = framed ? shown.frame.cornerRadius / scale : 0
+        // A window with its own shadow needs no outline of ours around its clear margin.
+        imageView.outlined = !framed && !renderer.ownShadow
+        // On a card, the card has the corners and the image's own are square.
+        imageView.cornerRadius = renderer.hasCard(shown.frame) ? 0 : renderer.cornerRadius(shown.frame) / scale
         imageView.zoom = zoom
         paper.zoom = zoom
         paper.outlined = framed
@@ -369,10 +376,12 @@ final class EditorCanvas: NSView, NSTextViewDelegate, NSMenuItemValidation {
 
     func describe(_ mark: Mark) -> String {
         var parts: [String] = [mark.kind.title]
-        if mark.kind != .spotlight, mark.kind != .image, mark.kind != .redact || mark.style.redact == .solid {
+        if !mark.kind.isColourless, mark.kind != .redact || mark.style.redact == .solid {
             parts.append(mark.colour.name.lowercased())
         }
         switch mark.kind {
+        case .magnifier:
+            parts.append(SizeLadder.zoomTitle(mark.style.zoom))
         case .arrow:
             parts.append(Self.direction(from: mark.start, to: mark.end))
         case .text:

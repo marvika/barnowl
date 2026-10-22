@@ -445,6 +445,39 @@ enum MarkGeometry {
         }
     }
 
+    // MARK: Magnifiers
+
+    /// A magnifier's outline: a circle (or ellipse), or a rounded rectangle.
+    static func magnifierPath(_ mark: Mark, scale: CGFloat) -> CGPath {
+        switch mark.style.spotlight {
+        case .rectangle: roundedRect(mark.rect, radius: 12 * scale)
+        case .ellipse: CGPath(ellipseIn: mark.rect, transform: nil)
+        }
+    }
+
+    /// What a magnifier shows: its own area shrunk by the zoom about its centre, slid back inside
+    /// `area` where it would reach past an edge.
+    static func magnifierSource(_ mark: Mark, within area: CGRect) -> CGRect {
+        let rect = mark.rect
+        let zoom: CGFloat = CGFloat(max(mark.style.zoom, 1))
+        let width: CGFloat = rect.width / zoom
+        let height: CGFloat = rect.height / zoom
+        var x: CGFloat = rect.midX - width / 2
+        var y: CGFloat = rect.midY - height / 2
+        guard !area.isNull, area.width > 0, area.height > 0 else {
+            return CGRect(x: x, y: y, width: width, height: height)
+        }
+        x = width >= area.width ? area.midX - width / 2 : min(max(x, area.minX), area.maxX - width)
+        y = height >= area.height ? area.midY - height / 2 : min(max(y, area.minY), area.maxY - height)
+        return CGRect(x: x, y: y, width: width, height: height)
+    }
+
+    /// A click with the Magnify tool: a circle 120 points across, centred where you clicked.
+    static func placedMagnifier(at point: CGPoint, scale: CGFloat) -> CGRect {
+        let side: CGFloat = 120 * scale
+        return CGRect(x: point.x - side / 2, y: point.y - side / 2, width: side, height: side)
+    }
+
     static func penBounds(_ points: [CGPoint]) -> CGRect {
         guard let first = points.first else { return .null }
         var rect = CGRect(origin: first, size: .zero)
@@ -471,7 +504,7 @@ enum MarkGeometry {
             if counterTail(mark, scale: scale) != nil { rect = rect.union(CGRect(origin: mark.end, size: .zero)) }
             if !mark.text.isEmpty { rect = rect.union(counterLabel(mark, scale: scale).pill) }
             return rect
-        case .rectangle, .ellipse, .highlighter, .redact, .spotlight, .image:
+        case .rectangle, .ellipse, .highlighter, .redact, .spotlight, .image, .magnifier:
             return mark.rect
         }
     }
@@ -509,6 +542,8 @@ enum MarkGeometry {
             return mark.rect.insetBy(dx: -tolerance / 4, dy: -tolerance / 4).contains(point)
         case .spotlight:
             return spotlightPath(mark, scale: scale).contains(point)
+        case .magnifier:
+            return magnifierPath(mark, scale: scale).contains(point)
         case .text:
             let layout = textLayout(mark, scale: scale)
             if layout.boxRect.insetBy(dx: -tolerance / 4, dy: -tolerance / 4).contains(point) { return true }
@@ -542,7 +577,7 @@ enum MarkGeometry {
             return boxHandles(penBounds(mark.points), edges: false)
         case .image:
             return boxHandles(mark.rect, edges: false)
-        case .rectangle, .ellipse, .highlighter, .redact, .spotlight:
+        case .rectangle, .ellipse, .highlighter, .redact, .spotlight, .magnifier:
             return boxHandles(mark.rect, edges: true)
         }
     }

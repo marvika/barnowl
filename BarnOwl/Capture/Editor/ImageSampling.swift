@@ -132,6 +132,170 @@ enum ImageSampler {
         return MarkColour(red: r / n, green: g / n, blue: b / n)
     }
 
+    /// The colour around the edge of `crop` (image pixels, top left): the median of each channel
+    /// over a ring two pixels deep, so a stray pixel or two of content doesn't sway it.
+    static func edgeColour(in image: CGImage, crop: CGRect) -> MarkColour {
+        let bounds = CGRect(x: 0, y: 0, width: image.width, height: image.height)
+        let area = crop.integral.intersection(bounds)
+        guard !area.isNull, area.width >= 1, area.height >= 1 else { return .white }
+        let depth: CGFloat = min(2, area.width, area.height)
+        let strips = [
+            CGRect(x: area.minX, y: area.minY, width: area.width, height: depth),
+            CGRect(x: area.minX, y: area.maxY - depth, width: area.width, height: depth),
+            CGRect(x: area.minX, y: area.minY, width: depth, height: area.height),
+            CGRect(x: area.maxX - depth, y: area.minY, width: depth, height: area.height),
+        ]
+        var reds: [UInt8] = []
+        var greens: [UInt8] = []
+        var blues: [UInt8] = []
+        for strip in strips {
+            let pixels = rgba(in: image, rect: strip)
+            for index in stride(from: 0, to: pixels.count, by: 4) {
+                reds.append(pixels[index])
+                greens.append(pixels[index + 1])
+                blues.append(pixels[index + 2])
+            }
+        }
+        func median(_ values: [UInt8]) -> Double {
+            guard !values.isEmpty else { return 1 }
+            return Double(values.sorted()[values.count / 2]) / 255
+        }
+        return MarkColour(red: median(reds), green: median(greens), blue: median(blues))
+    }
+
+    /// What's in `crop` apart from its plain surround: the box around every pixel that stands
+    /// apart from `background`. Nil when nothing does. Looked at no larger than 800 pixels across,
+    /// so it's quick and within a few pixels.
+    static func contentBounds(in image: CGImage, crop: CGRect, background: MarkColour,
+                              tolerance: Double = 0.08) -> CGRect? {
+        let bounds = CGRect(x: 0, y: 0, width: image.width, height: image.height)
+        let area = crop.integral.intersection(bounds)
+        guard !area.isNull, area.width >= 4, area.height >= 4, let part = image.cropping(to: area) else { return nil }
+        let factor: CGFloat = min(1, 800 / max(area.width, area.height))
+        let width = max(1, Int((area.width * factor).rounded()))
+        let height = max(1, Int((area.height * factor).rounded()))
+        var bytes = [UInt8](repeating: 255, count: width * height * 4)
+        let space = CGColorSpace(name: CGColorSpace.sRGB) ?? CGColorSpaceCreateDeviceRGB()
+        let made: Bool = bytes.withUnsafeMutableBytes { buffer -> Bool in
+            guard let context = CGContext(data: buffer.baseAddress, width: width, height: height, bitsPerComponent: 8,
+                                          bytesPerRow: width * 4, space: space,
+                                          bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue) else { return false }
+            context.interpolationQuality = .medium
+            context.setFillColor(CGColor(gray: 1, alpha: 1))
+            context.fill(CGRect(x: 0, y: 0, width: width, height: height))
+            context.draw(part, in: CGRect(x: 0, y: 0, width: width, height: height))
+            return true
+        }
+        guard made else { return nil }
+        let limit = Int(tolerance * 255)
+        let red = Int((background.red * 255).rounded())
+        let green = Int((background.green * 255).rounded())
+        let blue = Int((background.blue * 255).rounded())
+        var minX = width
+        var minY = height
+        var maxX = -1
+        var maxY = -1
+        for y in 0..<height {
+            let row = y * width * 4
+            for x in 0..<width {
+                let index = row + x * 4
+                let apart = abs(Int(bytes[index]) - red) > limit || abs(Int(bytes[index + 1]) - green) > limit
+                    || abs(Int(bytes[index + 2]) - blue) > limit
+                guard apart else { continue }
+                minX = min(minX, x)
+                maxX = max(maxX, x)
+                minY = min(minY, y)
+                maxY = max(maxY, y)
+            }
+        }
+        guard maxX >= minX, maxY >= minY else { return nil }
+        let x: CGFloat = area.minX + CGFloat(minX) / factor
+        let y: CGFloat = area.minY + CGFloat(minY) / factor
+        let right: CGFloat = area.minX + CGFloat(maxX + 1) / factor
+        let bottom: CGFloat = area.minY + CGFloat(maxY + 1) / factor
+        return CGRect(x: x, y: y, width: right - x, height: bottom - y).integral.intersection(area)
+    }
+
+    /// The pixels in `rect` (image pixels, top left), row by row, as RGBA bytes on white.
+    private static func rgba(in image: CGImage, rect: CGRect) -> [UInt8] {
+        guard let part = image.cropping(to: rect) else { return [] }
+        let width = part.width
+        let height = part.height
+        var bytes = [UInt8](repeating: 255, count: width * height * 4)
+        let space = CGColorSpace(name: CGColorSpace.sRGB) ?? CGColorSpaceCreateDeviceRGB()
+        let made: Bool = bytes.withUnsafeMutableBytes { buffer -> Bool in
+            guard let context = CGContext(data: buffer.baseAddress, width: width, height: height, bitsPerComponent: 8,
+                                          bytesPerRow: width * 4, space: space,
+                                          bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue) else { return false }
+            context.interpolationQuality = .none
+            context.setFillColor(CGColor(gray: 1, alpha: 1))
+            context.fill(CGRect(x: 0, y: 0, width: width, height: height))
+            context.draw(part, in: CGRect(x: 0, y: 0, width: width, height: height))
+            return true
+        }
+        return made ? bytes : []
+    }
+
+    /// Whether the capture is a window caught with its shadow on a clear background: its corners
+    /// are clear, and walking in from the middle of most edges passes through the shadow's soft,
+    /// part-clear pixels before reaching the window. A window caught without its shadow has
+    /// clear corners too, but its edges are solid.
+    static func hasOwnShadow(_ image: CGImage) -> Bool {
+        switch image.alphaInfo {
+        case .none, .noneSkipFirst, .noneSkipLast: return false
+        default: break
+        }
+        let width = image.width
+        let height = image.height
+        guard width >= 16, height >= 16 else { return false }
+        let corners = [CGPoint(x: 0, y: 0), CGPoint(x: width - 1, y: 0), CGPoint(x: 0, y: height - 1),
+                       CGPoint(x: width - 1, y: height - 1)]
+        for corner in corners {
+            let alpha: Double = alphas(in: image, rect: CGRect(origin: corner, size: CGSize(width: 1, height: 1))).first ?? 1
+            if alpha >= 0.1 { return false }
+        }
+        // From each edge's middle, a quarter of the way in.
+        let reachX = max(4, width / 4)
+        let reachY = max(4, height / 4)
+        let lines: [(CGRect, Bool)] = [
+            (CGRect(x: 0, y: height / 2, width: reachX, height: 1), false),
+            (CGRect(x: width - reachX, y: height / 2, width: reachX, height: 1), true),
+            (CGRect(x: width / 2, y: 0, width: 1, height: reachY), false),
+            (CGRect(x: width / 2, y: height - reachY, width: 1, height: reachY), true),
+        ]
+        var soft = 0
+        for (rect, fromEnd) in lines {
+            var values = alphas(in: image, rect: rect)
+            if fromEnd { values.reverse() }
+            guard let first = values.first, first < 0.5 else { continue }
+            // The shadow: several part-clear pixels before anything solid.
+            let ramp = values.prefix { $0 < 0.95 }
+            if ramp.filter({ $0 > 0.02 && $0 < 0.9 }).count >= 3 { soft += 1 }
+        }
+        return soft >= 3
+    }
+
+    /// The alpha of each pixel in `rect` (image pixels, top left), row by row.
+    private static func alphas(in image: CGImage, rect: CGRect) -> [Double] {
+        let bounds = CGRect(x: 0, y: 0, width: image.width, height: image.height)
+        let area = rect.integral.intersection(bounds)
+        guard !area.isNull, area.width >= 1, area.height >= 1, let part = image.cropping(to: area) else { return [] }
+        let width = Int(area.width)
+        let height = Int(area.height)
+        var bytes = [UInt8](repeating: 0, count: width * height * 4)
+        let space = CGColorSpace(name: CGColorSpace.sRGB) ?? CGColorSpaceCreateDeviceRGB()
+        let made: Bool = bytes.withUnsafeMutableBytes { buffer -> Bool in
+            guard let context = CGContext(data: buffer.baseAddress, width: width, height: height, bitsPerComponent: 8,
+                                          bytesPerRow: width * 4, space: space,
+                                          bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return false }
+            context.interpolationQuality = .none
+            context.draw(part, in: CGRect(x: 0, y: 0, width: width, height: height))
+            return true
+        }
+        guard made else { return [] }
+        return stride(from: 3, to: bytes.count, by: 4).map { Double(bytes[$0]) / 255 }
+    }
+
     /// What hides things on dark areas, where an ink bar would vanish.
     static let darkRedaction = MarkColour(hex: 0x8E8E93)
 

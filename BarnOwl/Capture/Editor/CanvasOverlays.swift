@@ -119,6 +119,7 @@ struct HintStrip: View {
         case .pen: "Draw freely"
         case .redact: "Drag to hide · click a word to hide it · ⇧B finds private info"
         case .spotlight: "Drag to light up an area · click text or a window to fit it"
+        case .magnifier: "Drag to magnify · click to place one · [ ] zoom"
         case .crop: "Drag the edges · Return crops · Esc cancels"
         }
     }

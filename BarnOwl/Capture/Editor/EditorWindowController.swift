@@ -37,7 +37,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSTool
     private var shortcutsSheet: NSWindow?
 
     /// Wide enough for every toolbar item, Done included, without the overflow menu.
-    static let minimumSize = NSSize(width: 940, height: 480)
+    static let minimumSize = NSSize(width: 980, height: 480)
     static let sizeKey = "captureEditor.windowSize"
 
     private enum Item {
@@ -533,6 +533,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSTool
         case .redact: model.choose(.redact)
         case .review: model.beginReview()
         case .spotlight: model.choose(.spotlight)
+        case .magnifier: model.choose(.magnifier)
         case .crop: model.tool == .crop ? model.applyCrop() : model.choose(.crop)
         case .colour1, .colour2, .colour3, .colour4, .colour5, .colour6, .colour7, .colour8:
             chooseColour(EditorCommand.colourKeys.firstIndex(of: id) ?? 0)
@@ -596,6 +597,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSTool
         case .pen: model.tool == .pen
         case .redact: model.tool == .redact
         case .spotlight: model.tool == .spotlight
+        case .magnifier: model.tool == .magnifier
         case .crop: model.tool == .crop
         case .bold: model.isTextContext && model.shownStyle.fontWeight == .bold
         default: false

@@ -12,7 +12,12 @@ final class AnnotationRenderer: Sendable {
     /// Pixels per point, so marks have sensible pixel sizes.
     let scale: CGFloat
     let luminance: LuminanceMap?
+    /// A window caught with its shadow on a clear background: the frame leaves its corners and
+    /// its shadow alone, rather than drawing a second one.
+    let ownShadow: Bool
     private let desktopPicture = Mutex<Picture?>(nil)
+    private let edgeColours = Mutex<[EdgeKey: MarkColour]>([:])
+    private let balancedCrops = Mutex<[EdgeKey: CGRect]>([:])
     private let effects: RedactionEffects
     private let pasted = Mutex<[UUID: PastedImage]>([:])
 
@@ -25,10 +30,18 @@ final class AnnotationRenderer: Sendable {
         let image: CGImage
     }
 
+    private struct EdgeKey: Hashable {
+        let x: Int
+        let y: Int
+        let width: Int
+        let height: Int
+    }
+
     init(image: CGImage, scale: CGFloat, desktop: CGImage? = nil) {
         self.image = image
         self.scale = max(scale, 0.5)
         luminance = LuminanceMap(image: image)
+        ownShadow = ImageSampler.hasOwnShadow(image)
         effects = RedactionEffects(image: image)
         if let desktop { desktopPicture.withLock { $0 = Picture(image: desktop) } }
     }
@@ -83,40 +96,97 @@ final class AnnotationRenderer: Sendable {
     func drawBackdrop(_ document: EditorDocument, in context: CGContext, includingImage: Bool) {
         let layout = FrameLayout(document: document)
         let frame = document.frame
-        if frame.isOn { drawBackground(frame, size: layout.canvasSize, in: context) }
-        let shadowed = frame.isOn && frame.shadow
-        guard includingImage || shadowed else { return }
-        let radius: CGFloat = frame.isOn ? frame.cornerRadius : 0
-        let clip = MarkGeometry.roundedRect(layout.imageRect, radius: radius)
+        if frame.isOn { drawBackground(frame, layout: layout, in: context) }
+        let shadowed = frame.isOn && frame.shadow && !ownShadow
+        let card = hasCard(frame)
+        guard includingImage || shadowed || card else { return }
+        let clip = MarkGeometry.roundedRect(card ? layout.cardRect : layout.imageRect, radius: cornerRadius(frame))
         let full = CGRect(x: layout.offset.x, y: layout.offset.y, width: CGFloat(image.width), height: CGFloat(image.height))
         context.saveGState()
         if shadowed {
-            let blur: CGFloat = min(28 * scale, max(4 * scale, frame.padding * 0.45))
-            setShadow(context, offset: blur * 0.3, blur: blur, colour: CGColor(gray: 0, alpha: 0.4))
+            // 50% is the classic shadow; stronger is darker and softer, weaker lighter and tighter.
+            let amount: CGFloat = min(max(frame.shadowAmount, 0), 1)
+            let base: CGFloat = min(28 * scale, max(4 * scale, frame.padding * 0.45))
+            let blur: CGFloat = base * (0.6 + 0.8 * amount)
+            setShadow(context, offset: blur * 0.3, blur: blur, colour: CGColor(gray: 0, alpha: 0.8 * amount))
             context.beginTransparencyLayer(auxiliaryInfo: nil)
         }
         context.saveGState()
         context.addPath(clip)
         context.clip()
-        drawImage(image, in: full, context)
+        if card {
+            // The card, in the capture's own edge colour, so the capture runs on into it.
+            context.setFillColor(edgeColour(for: document.crop).cgColor())
+            context.fill(layout.cardRect)
+            context.clip(to: layout.imageRect)
+        }
+        // Without a card, the image is drawn even for the canvas: its shape casts the shadow.
+        if includingImage || !card { drawImage(image, in: full, context) }
         context.restoreGState()
         if shadowed { context.endTransparencyLayer() }
         context.restoreGState()
+    }
+
+    /// The capture's corner radius on the frame: none unframed, or when it has its own shadow.
+    func cornerRadius(_ frame: FrameSettings) -> CGFloat {
+        frame.isOn && !ownShadow ? frame.cornerRadius : 0
+    }
+
+    /// Whether the capture sits on a card: an inset, and not a window with its own shadow (whose
+    /// clear margin has no colour to carry on).
+    func hasCard(_ frame: FrameSettings) -> Bool {
+        frame.isOn && frame.inset > 0 && !ownShadow
+    }
+
+    /// The crop with even margins round what's in it, or nil when they're even already (within
+    /// 4% of the shorter side), or the content reaches an edge.
+    func balancedCrop(for crop: CGRect) -> CGRect? {
+        let area = crop.integral
+        let key = EdgeKey(x: Int(area.minX), y: Int(area.minY), width: Int(area.width), height: Int(area.height))
+        if let cached = balancedCrops.withLock({ $0[key] }) { return cached.isNull ? nil : cached }
+        let balanced = Self.balanced(area, content: ImageSampler.contentBounds(in: image, crop: area,
+                                                                               background: edgeColour(for: area)))
+        balancedCrops.withLock { $0[key] = balanced ?? .null }
+        return balanced
+    }
+
+    static func balanced(_ crop: CGRect, content: CGRect?) -> CGRect? {
+        guard let content else { return nil }
+        let margins: [CGFloat] = [content.minX - crop.minX, crop.maxX - content.maxX, content.minY - crop.minY,
+                                  crop.maxY - content.maxY]
+        guard let least = margins.min(), let most = margins.max(), least >= 1 else { return nil }
+        guard most - least > 0.04 * min(crop.width, crop.height) else { return nil }
+        let even = content.insetBy(dx: -least, dy: -least).integral.intersection(crop)
+        return even.isNull || even == crop ? nil : even
+    }
+
+    /// The colour around the crop's edge, which the card takes: the median of a ring two pixels deep.
+    func edgeColour(for crop: CGRect) -> MarkColour {
+        let area = crop.integral
+        let key = EdgeKey(x: Int(area.minX), y: Int(area.minY), width: Int(area.width), height: Int(area.height))
+        if let cached = edgeColours.withLock({ $0[key] }) { return cached }
+        let colour = ImageSampler.edgeColour(in: image, crop: area)
+        edgeColours.withLock { $0[key] = colour }
+        return colour
     }
 
     /// Every mark, clipped to the image. `imageUnderneath` false (on the canvas, where the image
     /// is a separate layer) makes highlights carry the pixels they blend with.
     func drawMarks(_ document: EditorDocument, in context: CGContext, imageUnderneath: Bool, editingText: UUID? = nil) {
         let layout = FrameLayout(document: document)
-        let frame = document.frame
-        let radius: CGFloat = frame.isOn ? frame.cornerRadius : 0
+        let clip: CGRect = hasCard(document.frame) ? layout.cardRect : layout.imageRect
         context.saveGState()
-        context.addPath(MarkGeometry.roundedRect(layout.imageRect, radius: radius))
+        context.addPath(MarkGeometry.roundedRect(clip, radius: cornerRadius(document.frame)))
         context.clip()
         context.translateBy(x: layout.offset.x, y: layout.offset.y)
         let numbers = document.counterNumbers
         let ordered = document.drawingOrder
         let spotlights = ordered.filter { $0.kind == .spotlight }
+        // What a magnifier enlarges with the image: never anything a redaction hides.
+        let underneath = ordered.filter { $0.kind == .highlighter || $0.kind == .redact }
+        // Spotlights dim the whole card, its inset too.
+        let inset: CGFloat = hasCard(document.frame) ? layout.imageRect.minX - layout.cardRect.minX : 0
+        let dimmed = document.crop.insetBy(dx: -inset, dy: -inset)
         var spotlightsDrawn = false
         for mark in ordered {
             switch mark.kind {
@@ -124,10 +194,12 @@ final class AnnotationRenderer: Sendable {
                 drawHighlight(mark, imageUnderneath: imageUnderneath, in: context)
             case .redact:
                 drawRedaction(mark, in: context)
+            case .magnifier:
+                drawMagnifier(mark, effects: underneath, area: document.crop, in: context)
             case .spotlight:
                 guard !spotlightsDrawn else { continue }
                 spotlightsDrawn = true
-                drawSpotlights(spotlights, area: document.crop, in: context)
+                drawSpotlights(spotlights, area: dimmed, effects: underneath, in: context)
             default:
                 withOpacity(mark.style.opacity, context) {
                     drawObject(mark, number: numbers[mark.id] ?? 1, editing: mark.id == editingText, in: context)
@@ -147,7 +219,7 @@ final class AnnotationRenderer: Sendable {
         case .counter: drawCounter(mark, label: mark.style.counterFormat.label(number), editing: editing, in: context)
         case .text: drawText(mark, in: context)
         case .image: drawPasted(mark, in: context)
-        case .highlighter, .redact, .spotlight: break
+        case .highlighter, .redact, .spotlight, .magnifier: break
         }
     }
 
@@ -161,9 +233,15 @@ final class AnnotationRenderer: Sendable {
         context.restoreGState()
     }
 
-    private func drawBackground(_ frame: FrameSettings, size: CGSize, in context: CGContext) {
-        let canvas = CGRect(origin: .zero, size: size)
-        switch frame.background {
+    private func drawBackground(_ frame: FrameSettings, layout: FrameLayout, in context: CGContext) {
+        let canvas = CGRect(origin: .zero, size: layout.canvasSize)
+        let focus = CGPoint(x: layout.imageRect.midX, y: layout.imageRect.midY)
+        drawBackground(frame.background, in: canvas, focus: focus, context)
+    }
+
+    /// `focus` is where a radial gradient spreads from: the capture's centre.
+    private func drawBackground(_ background: FrameBackground, in canvas: CGRect, focus: CGPoint, _ context: CGContext) {
+        switch background {
         case .none, .transparent:
             return
         case .solid(let colour):
@@ -171,7 +249,7 @@ final class AnnotationRenderer: Sendable {
             context.fill(canvas)
         case .desktop:
             guard let desktop else {
-                drawGradient(.mist, in: canvas, context)
+                GradientPainter.paint(.mist, in: canvas, context)
                 return
             }
             // Fills the canvas, like the desktop fills the screen.
@@ -188,26 +266,10 @@ final class AnnotationRenderer: Sendable {
             drawImage(desktop, in: rect, context)
             context.restoreGState()
         case .gradient(let gradient):
-            drawGradient(gradient, in: canvas, context)
+            GradientPainter.paint(gradient, in: canvas, context)
+        case .custom(let gradient):
+            GradientPainter.paint(gradient, in: canvas, focus: focus, context)
         }
-    }
-
-    private func drawGradient(_ gradient: FrameGradient, in canvas: CGRect, _ context: CGContext) {
-        let space = CGColorSpace(name: CGColorSpace.sRGB) ?? CGColorSpaceCreateDeviceRGB()
-        let (from, to) = gradient.colours
-        let colours: [CGColor] = [from.cgColor(), to.cgColor()]
-        let glowColours: [CGColor] = [CGColor(gray: 1, alpha: 0.2), CGColor(gray: 1, alpha: 0)]
-        guard let fill = CGGradient(colorsSpace: space, colors: colours as CFArray, locations: [0, 1]),
-              let glow = CGGradient(colorsSpace: space, colors: glowColours as CFArray, locations: [0, 1]) else { return }
-        context.saveGState()
-        context.clip(to: canvas)
-        context.drawLinearGradient(fill, start: .zero, end: CGPoint(x: canvas.maxX, y: canvas.maxY),
-                                   options: [.drawsBeforeStartLocation, .drawsAfterEndLocation])
-        // A soft light from the top left, as through a window.
-        let centre = CGPoint(x: canvas.width * 0.18, y: 0)
-        let reach: CGFloat = max(canvas.width, canvas.height) * 0.75
-        context.drawRadialGradient(glow, startCenter: centre, startRadius: 0, endCenter: centre, endRadius: reach, options: [])
-        context.restoreGState()
     }
 
     /// Draws a bitmap upright in a y-down context.
@@ -220,6 +282,56 @@ final class AnnotationRenderer: Sendable {
     }
 
     // MARK: Effects
+
+    /// A loupe: the image under it enlarged about its centre, with the highlights and redactions
+    /// on it enlarged too, so it never shows what a redaction hides. At the edge of `area` (the
+    /// crop) the source slides inward rather than reaching past it.
+    private func drawMagnifier(_ mark: Mark, effects underneath: [Mark], area: CGRect, in context: CGContext) {
+        let rect = mark.rect
+        guard rect.width >= 2, rect.height >= 2 else { return }
+        let bounds = CGRect(x: 0, y: 0, width: image.width, height: image.height)
+        let source = MarkGeometry.magnifierSource(mark, within: area.intersection(bounds))
+        guard source.width > 0, source.height > 0 else { return }
+        let shape = MarkGeometry.magnifierPath(mark, scale: scale)
+        let ring: CGFloat = 3 * scale
+
+        // A soft shadow lifts it off the capture.
+        context.saveGState()
+        setShadow(context, offset: 2 * scale, blur: 8 * scale, colour: CGColor(gray: 0, alpha: 0.3))
+        context.addPath(shape)
+        context.setFillColor(CGColor(gray: 1, alpha: 1))
+        context.fillPath()
+        context.restoreGState()
+
+        context.saveGState()
+        context.addPath(shape)
+        context.clip()
+        context.translateBy(x: rect.minX, y: rect.minY)
+        context.scaleBy(x: rect.width / source.width, y: rect.height / source.height)
+        context.translateBy(x: -source.minX, y: -source.minY)
+        context.interpolationQuality = .high
+        drawImage(image, in: bounds, context)
+        for effect in underneath {
+            if effect.kind == .redact {
+                drawRedaction(effect, in: context)
+            } else {
+                drawHighlight(effect, imageUnderneath: true, in: context)
+            }
+        }
+        context.restoreGState()
+
+        // A white ring with an ink hairline either side, as Preview's loupe has.
+        context.saveGState()
+        context.addPath(shape)
+        context.setStrokeColor(MarkColour.ink.cgColor(alpha: 0.28))
+        context.setLineWidth(ring + scale)
+        context.strokePath()
+        context.addPath(shape)
+        context.setStrokeColor(CGColor(gray: 1, alpha: 1))
+        context.setLineWidth(ring)
+        context.strokePath()
+        context.restoreGState()
+    }
 
     private func drawRedaction(_ mark: Mark, in context: CGContext) {
         let bounds = CGRect(x: 0, y: 0, width: image.width, height: image.height)
@@ -252,10 +364,33 @@ final class AnnotationRenderer: Sendable {
     }
 
     /// Dims everything outside the spotlights, once for all of them so they can overlap.
-    private func drawSpotlights(_ marks: [Mark], area: CGRect, in context: CGContext) {
-        let dim: Double = marks.last?.style.dim ?? 0.5
+    /// Blurring draws the image anew round the spotlights, so the highlights and redactions on it
+    /// (`underneath`) are drawn again over the blur: nothing hidden comes back.
+    private func drawSpotlights(_ marks: [Mark], area: CGRect, effects underneath: [Mark], in context: CGContext) {
+        let style = marks.last?.style ?? MarkStyle()
+        let blurs = style.spotlightEffect == .blur
+        // Blurred, it only needs a little darkening to step back.
+        let dim: Double = blurs ? style.dim * 0.45 : style.dim
         context.saveGState()
         context.beginTransparencyLayer(auxiliaryInfo: nil)
+        if blurs {
+            let bounds = CGRect(x: 0, y: 0, width: image.width, height: image.height)
+            let radius = max(2, Int((RedactStrength.medium.radius * scale).rounded()))
+            context.saveGState()
+            context.clip(to: area)
+            if let blurred = effects.blurred(radius: radius) {
+                context.interpolationQuality = .high
+                drawImage(blurred, in: bounds, context)
+            }
+            for effect in underneath {
+                if effect.kind == .redact {
+                    drawRedaction(effect, in: context)
+                } else {
+                    drawHighlight(effect, imageUnderneath: true, in: context)
+                }
+            }
+            context.restoreGState()
+        }
         context.setFillColor(CGColor(gray: 0, alpha: CGFloat(dim)))
         context.fill(area)
         context.setBlendMode(.clear)
@@ -594,7 +729,30 @@ final class AnnotationRenderer: Sendable {
         }
     }
 
-    // MARK: Pictures for the options bar
+    // MARK: Pictures for the options bar and the Frame inspector
+
+    /// A background on its own at `size` points, as the frame would draw it behind a capture in
+    /// the middle. Nil for backgrounds that aren't painted (none, transparent) or a desktop
+    /// picture that hasn't loaded.
+    func backgroundSample(_ background: FrameBackground, size: CGSize, pixelsPerPoint: CGFloat) -> CGImage? {
+        switch background {
+        case .none, .transparent: return nil
+        case .desktop where desktop == nil: return nil
+        default: break
+        }
+        let width = Int((size.width * pixelsPerPoint).rounded())
+        let height = Int((size.height * pixelsPerPoint).rounded())
+        let srgb = CGColorSpace(name: CGColorSpace.sRGB) ?? CGColorSpaceCreateDeviceRGB()
+        guard width > 0, height > 0,
+              let context = CGContext(data: nil, width: width, height: height, bitsPerComponent: 8, bytesPerRow: 0,
+                                      space: srgb, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return nil }
+        context.interpolationQuality = .high
+        context.translateBy(x: 0, y: CGFloat(height))
+        context.scaleBy(x: 1, y: -1)
+        let canvas = CGRect(x: 0, y: 0, width: width, height: height)
+        drawBackground(background, in: canvas, focus: CGPoint(x: canvas.midX, y: canvas.midY), context)
+        return context.makeImage()
+    }
 
     /// A small picture of `mark` on a clear background, for style and size choices.
     func sample(_ mark: Mark, size: CGSize, pixelsPerPoint: CGFloat) -> CGImage? {

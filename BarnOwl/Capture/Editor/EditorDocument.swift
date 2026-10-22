@@ -349,6 +349,21 @@ enum SpotlightShape: String, Codable, CaseIterable, Sendable {
     }
 }
 
+/// What a spotlight does to everything around it.
+enum SpotlightEffect: String, Codable, CaseIterable, Sendable {
+    /// Darkens it.
+    case dim
+    /// Softens it out of focus, and darkens it a little.
+    case blur
+
+    var title: String {
+        switch self {
+        case .dim: "Dim"
+        case .blur: "Blur"
+        }
+    }
+}
+
 /// How a mark looks, apart from its colour. Lengths are in points; marks multiply them by
 /// the capture's scale. Every kind reads only the fields it uses.
 struct MarkStyle: Codable, Equatable, Sendable {
@@ -368,10 +383,14 @@ struct MarkStyle: Codable, Equatable, Sendable {
     var counterFormat = CounterFormat.number
     var redact = RedactStyle.solid
     var strength = RedactStrength.medium
+    /// A spotlight's shape, and a magnifier's.
     var spotlight = SpotlightShape.rectangle
     var smoothing = PenSmoothing.medium
     /// How dark a spotlight makes everything around it, from 0 to 1.
     var dim: Double = 0.5
+    var spotlightEffect = SpotlightEffect.dim
+    /// How much a magnifier enlarges.
+    var zoom: Double = 2
 
     init() {}
 
@@ -395,6 +414,8 @@ struct MarkStyle: Codable, Equatable, Sendable {
         spotlight = try c.decodeIfPresent(SpotlightShape.self, forKey: .spotlight) ?? base.spotlight
         smoothing = try c.decodeIfPresent(PenSmoothing.self, forKey: .smoothing) ?? base.smoothing
         dim = try c.decodeIfPresent(Double.self, forKey: .dim) ?? base.dim
+        zoom = (try? c.decodeIfPresent(Double.self, forKey: .zoom)) ?? base.zoom
+        spotlightEffect = (try? c.decodeIfPresent(SpotlightEffect.self, forKey: .spotlightEffect)) ?? base.spotlightEffect
     }
 }
 
@@ -416,20 +437,29 @@ struct MarkOrigin: Codable, Equatable, Sendable {
 /// so marks stay put when the image is cropped or framed.
 struct Mark: Identifiable, Codable, Equatable, Sendable {
     enum Kind: String, Codable, CaseIterable, Sendable {
-        case arrow, rectangle, ellipse, text, counter, highlighter, pen, redact, spotlight, image
+        case arrow, rectangle, ellipse, text, counter, highlighter, pen, redact, spotlight, image, magnifier
 
         /// Marks drawn as the rectangle between `start` and `end`.
         var isBoxed: Bool {
             switch self {
-            case .rectangle, .ellipse, .highlighter, .redact, .spotlight, .image: true
+            case .rectangle, .ellipse, .highlighter, .redact, .spotlight, .image, .magnifier: true
             case .arrow, .text, .counter, .pen: false
             }
         }
 
-        /// Effects (highlights, redactions, spotlights) sit on the image, under every other mark.
+        /// Effects (highlights, redactions, spotlights, magnifiers) sit on the image, under every
+        /// other mark.
         var isEffect: Bool {
             switch self {
-            case .highlighter, .redact, .spotlight: true
+            case .highlighter, .redact, .spotlight, .magnifier: true
+            default: false
+            }
+        }
+
+        /// Kinds without a colour of their own.
+        var isColourless: Bool {
+            switch self {
+            case .spotlight, .image, .magnifier: true
             default: false
             }
         }
@@ -446,6 +476,7 @@ struct Mark: Identifiable, Codable, Equatable, Sendable {
             case .redact: "Redaction"
             case .spotlight: "Spotlight"
             case .image: "Image"
+            case .magnifier: "Magnifier"
             }
         }
     }
@@ -499,30 +530,147 @@ struct Mark: Identifiable, Codable, Equatable, Sendable {
 
 // MARK: Frame
 
+/// The ready-made gradients: three light, four vivid and two dark.
 enum FrameGradient: String, Codable, CaseIterable, Sendable {
-    case dawn, dusk, meadow, mist
+    case mist, glacier, blossom, dawn, meadow, lagoon, ember, dusk, graphite
 
     var title: String {
         switch self {
-        case .dawn: "Dawn"
-        case .dusk: "Dusk"
-        case .meadow: "Meadow"
         case .mist: "Mist"
+        case .glacier: "Glacier"
+        case .blossom: "Blossom"
+        case .dawn: "Dawn"
+        case .meadow: "Meadow"
+        case .lagoon: "Lagoon"
+        case .ember: "Ember"
+        case .dusk: "Dusk"
+        case .graphite: "Graphite"
         }
     }
 
-    /// From the top-left corner to the bottom-right.
-    var colours: (MarkColour, MarkColour) {
+    /// From the top-left corner to the bottom-right, evenly spaced.
+    var stops: [MarkColour] {
         switch self {
-        case .dawn: (MarkColour(hex: 0x8C87FF), MarkColour(hex: 0xF5A633))
-        case .dusk: (MarkColour(hex: 0x5A55C8), MarkColour(hex: 0x1C1A40))
-        case .meadow: (MarkColour(hex: 0x34C759), MarkColour(hex: 0x2AA6B8))
-        case .mist: (MarkColour(hex: 0xF4F3F8), MarkColour(hex: 0xD5D3DE))
+        case .mist: [MarkColour(hex: 0xF4F3F8), MarkColour(hex: 0xD5D3DE)]
+        case .glacier: [MarkColour(hex: 0xEAF6FB), MarkColour(hex: 0xB8DDF0)]
+        case .blossom: [MarkColour(hex: 0xFBC2EB), MarkColour(hex: 0xA6C1EE)]
+        case .dawn: [MarkColour(hex: 0x8C87FF), MarkColour(hex: 0xF5A633)]
+        case .meadow: [MarkColour(hex: 0x34C759), MarkColour(hex: 0x2AA6B8)]
+        case .lagoon: [MarkColour(hex: 0x5AC8FA), MarkColour(hex: 0x007AFF), MarkColour(hex: 0x5856D6)]
+        case .ember: [MarkColour(hex: 0xFFB340), MarkColour(hex: 0xFF6B4A), MarkColour(hex: 0xE5396E)]
+        case .dusk: [MarkColour(hex: 0x5A55C8), MarkColour(hex: 0x1C1A40)]
+        case .graphite: [MarkColour(hex: 0x3A3A44), MarkColour(hex: 0x121217)]
         }
+    }
+
+    /// The same colours as a gradient of your own, to change: at 135°, as these run.
+    var custom: CustomGradient {
+        CustomGradient(colours: stops)
     }
 }
 
-enum FrameBackground: Codable, Equatable, Sendable {
+/// One colour of a gradient, and where along it it sits, from 0 to 1.
+struct GradientStop: Codable, Hashable, Sendable {
+    var colour: MarkColour
+    var location: Double
+
+    init(colour: MarkColour, location: Double) {
+        self.colour = colour
+        self.location = location
+    }
+}
+
+enum GradientKind: String, Codable, CaseIterable, Sendable {
+    /// Along a line across the whole frame.
+    case linear
+    /// Out from the middle of the capture.
+    case radial
+}
+
+/// A gradient of your own: two to four colours, along a line at any angle or out from the capture.
+struct CustomGradient: Codable, Hashable, Sendable {
+    static let stopCount = 2...4
+
+    /// In order along the gradient (see `normalised`).
+    var stops: [GradientStop]
+    /// Which way a linear gradient runs, in CSS degrees: 0 points up, 90 right, 135 to the bottom right.
+    var angle: Double = 135
+    var kind = GradientKind.linear
+    /// The ready-made gradients' soft light from the top left, as through a window. Off keeps
+    /// brand colours exact.
+    var softLight = true
+    /// A fine texture you can see, like paper. (A fainter one, too faint to see, always keeps
+    /// gradients from banding.)
+    var grain = false
+
+    init(stops: [GradientStop], angle: Double = 135, kind: GradientKind = .linear, softLight: Bool = true,
+         grain: Bool = false) {
+        self.stops = stops
+        self.angle = angle
+        self.kind = kind
+        self.softLight = softLight
+        self.grain = grain
+        self = normalised
+    }
+
+    /// Evenly spaced colours.
+    init(colours: [MarkColour], angle: Double = 135, kind: GradientKind = .linear, softLight: Bool = true,
+         grain: Bool = false) {
+        let last: Double = Double(max(colours.count - 1, 1))
+        let stops: [GradientStop] = colours.enumerated().map { index, colour in
+            GradientStop(colour: colour, location: Double(index) / last)
+        }
+        self.init(stops: stops, angle: angle, kind: kind, softLight: softLight, grain: grain)
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        stops = try c.decode([GradientStop].self, forKey: .stops)
+        angle = (try? c.decodeIfPresent(Double.self, forKey: .angle)) ?? 135
+        kind = (try? c.decodeIfPresent(GradientKind.self, forKey: .kind)) ?? .linear
+        softLight = (try? c.decodeIfPresent(Bool.self, forKey: .softLight)) ?? true
+        grain = (try? c.decodeIfPresent(Bool.self, forKey: .grain)) ?? false
+        self = normalised
+    }
+
+    /// Two to four stops, in order and inside 0...1, with the angle between 0 and 360.
+    var normalised: CustomGradient {
+        var copy = self
+        var sorted: [GradientStop] = stops.map { stop in
+            GradientStop(colour: stop.colour, location: min(max(stop.location, 0), 1))
+        }
+        sorted.sort { $0.location < $1.location }
+        if sorted.isEmpty { sorted = [GradientStop(colour: .lavender, location: 0)] }
+        if sorted.count == 1 { sorted.append(GradientStop(colour: sorted[0].colour, location: 1)) }
+        if sorted.count > Self.stopCount.upperBound { sorted = Array(sorted.prefix(Self.stopCount.upperBound)) }
+        copy.stops = sorted
+        let turned: Double = angle.truncatingRemainder(dividingBy: 360)
+        copy.angle = turned < 0 ? turned + 360 : turned
+        return copy
+    }
+
+    /// The colour at `location`, mixed between its neighbours as the eye sees it.
+    func colour(at location: Double) -> MarkColour {
+        let sorted = normalised.stops
+        guard let first = sorted.first, let last = sorted.last else { return .lavender }
+        if location <= first.location { return first.colour }
+        if location >= last.location { return last.colour }
+        for (from, to) in zip(sorted, sorted.dropFirst()) where location <= to.location {
+            let span: Double = max(to.location - from.location, 0.0001)
+            return from.colour.blended(with: to.colour, (location - from.location) / span)
+        }
+        return last.colour
+    }
+
+    /// The same colours the other way round.
+    var reversed: CustomGradient {
+        var copy = self
+        copy.stops = stops.reversed().map { GradientStop(colour: $0.colour, location: 1 - $0.location) }
+        return copy.normalised
+    }
+}
+
+enum FrameBackground: Codable, Hashable, Sendable {
     /// No frame: the output is just the (cropped) image.
     case none
     case gradient(FrameGradient)
@@ -531,18 +679,47 @@ enum FrameBackground: Codable, Equatable, Sendable {
     case desktop
     /// A frame with nothing behind it, so the padding and shadow stay transparent.
     case transparent
+    /// A gradient of your own, or one matched to the capture.
+    case custom(CustomGradient)
+
+    /// A ready-made or custom gradient.
+    var isGradient: Bool {
+        switch self {
+        case .gradient, .custom: true
+        default: false
+        }
+    }
 }
 
 enum AspectRatio: String, Codable, CaseIterable, Sendable {
-    case auto, wide, standard, square, portrait
+    case auto, wide, threeTwo, standard, square, portrait, threeFour, story, link
 
     var title: String {
         switch self {
         case .auto: "Auto"
         case .wide: "16:9"
+        case .threeTwo: "3:2"
         case .standard: "4:3"
         case .square: "1:1"
         case .portrait: "4:5"
+        case .threeFour: "3:4"
+        case .story: "9:16"
+        case .link: "1.91:1"
+        }
+    }
+
+    /// What each is for, in its tooltip.
+    var purpose: String {
+        switch self {
+        case .auto: "Auto — follows the capture"
+        case .wide: "16:9 — slides and video"
+        case .threeTwo: "3:2 — photos and blog posts"
+        case .standard: "4:3 — presentations and iPad"
+        case .square: "1:1 — square posts"
+        case .portrait: "4:5 — portrait posts"
+        case .threeFour: "3:4 — portrait"
+        case .story: "9:16 — stories"
+        case .link: "1.91:1 — link previews (LinkedIn, X, Slack)"
         }
     }
 
@@ -551,10 +728,49 @@ enum AspectRatio: String, Codable, CaseIterable, Sendable {
         switch self {
         case .auto: nil
         case .wide: 16.0 / 9.0
+        case .threeTwo: 3.0 / 2.0
         case .standard: 4.0 / 3.0
         case .square: 1
         case .portrait: 4.0 / 5.0
+        case .threeFour: 3.0 / 4.0
+        case .story: 9.0 / 16.0
+        case .link: 1.91
         }
+    }
+}
+
+/// Where the capture sits when the ratio leaves room to spare: 0 is the left or top, 1 the
+/// right or bottom.
+struct FramePosition: Codable, Hashable, Sendable {
+    var x: Double = 0.5
+    var y: Double = 0.5
+
+    init(x: Double = 0.5, y: Double = 0.5) {
+        self.x = x
+        self.y = y
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        x = min(max((try? c.decodeIfPresent(Double.self, forKey: .x)) ?? 0.5, 0), 1)
+        y = min(max((try? c.decodeIfPresent(Double.self, forKey: .y)) ?? 0.5, 0), 1)
+    }
+
+    static let centre = FramePosition()
+
+    /// The nine places, row by row from the top left.
+    static let grid: [FramePosition] = [0.0, 0.5, 1.0].flatMap { y in
+        [0.0, 0.5, 1.0].map { x in FramePosition(x: x, y: y) }
+    }
+
+    /// "Top Left", "Centre", "Bottom".
+    var title: String {
+        let row: String = y < 0.25 ? "Top" : (y > 0.75 ? "Bottom" : "")
+        let column: String = x < 0.25 ? "Left" : (x > 0.75 ? "Right" : "")
+        if row.isEmpty && column.isEmpty { return "Centre" }
+        if row.isEmpty { return column }
+        if column.isEmpty { return row }
+        return "\(row) \(column)"
     }
 }
 
@@ -563,27 +779,63 @@ struct FrameSettings: Codable, Equatable, Sendable {
     var background = FrameBackground.none
     var padding: CGFloat = 0
     var cornerRadius: CGFloat = 0
-    var shadow = true
+    /// How strong the shadow under the capture is, from 0 (none) to 1; 0.5 is the classic one.
+    var shadowAmount: CGFloat = 0.5
     var ratio = AspectRatio.auto
+    /// Where the capture sits in any room the ratio adds beyond the padding.
+    var position = FramePosition()
+    /// Room between the capture and the edge of a card under it, in the capture's own edge
+    /// colour, so it sits on the frame like a page rather than at its very edge.
+    var inset: CGFloat = 0
 
     var isOn: Bool { background != .none }
+    var shadow: Bool { shadowAmount > 0.001 }
 
-    init(background: FrameBackground = .none, padding: CGFloat = 0, cornerRadius: CGFloat = 0, shadow: Bool = true,
-         ratio: AspectRatio = .auto) {
+    init(background: FrameBackground = .none, padding: CGFloat = 0, cornerRadius: CGFloat = 0,
+         shadowAmount: CGFloat = 0.5, ratio: AspectRatio = .auto, position: FramePosition = .centre, inset: CGFloat = 0) {
         self.background = background
         self.padding = padding
         self.cornerRadius = cornerRadius
-        self.shadow = shadow
+        self.shadowAmount = shadowAmount
         self.ratio = ratio
+        self.position = position
+        self.inset = inset
     }
 
+    enum CodingKeys: String, CodingKey {
+        case background, padding, cornerRadius, shadow, shadowAmount, ratio, position, inset
+    }
+
+    /// Anything this build doesn't know (a background or ratio from a newer one) falls back to
+    /// its default rather than losing the whole document.
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
-        background = try c.decodeIfPresent(FrameBackground.self, forKey: .background) ?? .none
-        padding = try c.decodeIfPresent(CGFloat.self, forKey: .padding) ?? 0
-        cornerRadius = try c.decodeIfPresent(CGFloat.self, forKey: .cornerRadius) ?? 0
-        shadow = try c.decodeIfPresent(Bool.self, forKey: .shadow) ?? true
-        ratio = try c.decodeIfPresent(AspectRatio.self, forKey: .ratio) ?? .auto
+        background = (try? c.decodeIfPresent(FrameBackground.self, forKey: .background)) ?? FrameBackground.none
+        padding = (try? c.decodeIfPresent(CGFloat.self, forKey: .padding)) ?? 0
+        cornerRadius = (try? c.decodeIfPresent(CGFloat.self, forKey: .cornerRadius)) ?? 0
+        if let amount = try? c.decodeIfPresent(CGFloat.self, forKey: .shadowAmount) {
+            shadowAmount = min(max(amount, 0), 1)
+        } else {
+            // Before schema 3 the shadow was on or off; on is today's 50%.
+            let on: Bool = (try? c.decodeIfPresent(Bool.self, forKey: .shadow)) ?? true
+            shadowAmount = on ? 0.5 : 0
+        }
+        ratio = (try? c.decodeIfPresent(AspectRatio.self, forKey: .ratio)) ?? .auto
+        position = (try? c.decodeIfPresent(FramePosition.self, forKey: .position)) ?? .centre
+        inset = max((try? c.decodeIfPresent(CGFloat.self, forKey: .inset)) ?? 0, 0)
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(background, forKey: .background)
+        try c.encode(padding, forKey: .padding)
+        try c.encode(cornerRadius, forKey: .cornerRadius)
+        // Still written, so earlier builds keep the shadow on or off.
+        try c.encode(shadow, forKey: .shadow)
+        try c.encode(shadowAmount, forKey: .shadowAmount)
+        try c.encode(ratio, forKey: .ratio)
+        try c.encode(position, forKey: .position)
+        try c.encode(inset, forKey: .inset)
     }
 }
 
@@ -594,7 +846,8 @@ struct FrameSettings: Codable, Equatable, Sendable {
 /// still editable.
 struct EditorDocument: Codable, Equatable, Sendable {
     /// 2: weights in points, arrow heads, fills, fonts, counter formats, smart origins.
-    static let currentSchema = 2
+    /// 3: gradients of your own, shadow strength, more ratios, position, inset, magnifiers.
+    static let currentSchema = 3
 
     var schemaVersion = EditorDocument.currentSchema
     /// The captured image's size in pixels.
@@ -620,8 +873,10 @@ struct EditorDocument: Codable, Equatable, Sendable {
         schemaVersion = try c.decodeIfPresent(Int.self, forKey: .schemaVersion) ?? 1
         imageSize = try c.decode(CGSize.self, forKey: .imageSize)
         crop = try c.decodeIfPresent(CGRect.self, forKey: .crop) ?? CGRect(origin: .zero, size: imageSize)
-        marks = try c.decodeIfPresent([Mark].self, forKey: .marks) ?? []
-        frame = try c.decodeIfPresent(FrameSettings.self, forKey: .frame) ?? FrameSettings()
+        // A mark this build can't read (a kind from a newer one) is left out; the rest open.
+        let lossy: [Lossy<Mark>] = try c.decodeIfPresent([Lossy<Mark>].self, forKey: .marks) ?? []
+        marks = lossy.compactMap(\.value)
+        frame = (try? c.decodeIfPresent(FrameSettings.self, forKey: .frame)) ?? FrameSettings()
         counterStart = try c.decodeIfPresent(Int.self, forKey: .counterStart) ?? 1
         // Read in the current shape from here on.
         schemaVersion = Self.currentSchema
@@ -654,14 +909,25 @@ struct EditorDocument: Codable, Equatable, Sendable {
         return numbers
     }
 
-    /// The marks in the order they're drawn: highlights, redactions and spotlights on the image,
-    /// then everything else, each in array order. Nothing ever sits between the image and a
-    /// highlight, and a highlight never shows what a redaction hides.
+    /// The marks in the order they're drawn: highlights, redactions, spotlights and magnifiers
+    /// on the image, then everything else, each in array order. Nothing ever sits between the
+    /// image and a highlight, a highlight never shows what a redaction hides, and a magnifier
+    /// enlarges both.
     var drawingOrder: [Mark] {
         let highlights: [Mark] = marks.filter { $0.kind == .highlighter }
         let redactions: [Mark] = marks.filter { $0.kind == .redact }
         let spotlights: [Mark] = marks.filter { $0.kind == .spotlight }
+        let magnifiers: [Mark] = marks.filter { $0.kind == .magnifier }
         let objects: [Mark] = marks.filter { !$0.kind.isEffect }
-        return highlights + redactions + spotlights + objects
+        return highlights + redactions + spotlights + magnifiers + objects
+    }
+}
+
+/// Decodes a value if it can, and nil if it can't, so one bad element doesn't sink an array.
+struct Lossy<Value: Decodable>: Decodable {
+    let value: Value?
+
+    init(from decoder: Decoder) throws {
+        value = try? Value(from: decoder)
     }
 }

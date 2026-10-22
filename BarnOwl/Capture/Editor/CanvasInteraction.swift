@@ -391,10 +391,15 @@ extension EditorCanvas {
         default: dragged && mark.rect.width >= 3 * screenPoint && mark.rect.height >= 3 * screenPoint
         }
         guard largeEnough else {
-            // A click: fit to the text or window under it, if there's one.
             model.setLive(before)
             model.selection = []
-            model.placeFitted(at: origin)
+            if mark.kind == .magnifier {
+                // A click: a loupe of the usual size.
+                model.placeMagnifier(at: origin)
+            } else {
+                // A click: fit to the text or window under it, if there's one.
+                model.placeFitted(at: origin)
+            }
             return
         }
         if mark.kind == .redact, mark.style.redact == .solid {

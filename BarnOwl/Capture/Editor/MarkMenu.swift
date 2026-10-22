@@ -30,7 +30,7 @@ struct MarkMenu {
         let marks = model.selectedMarks
         let kinds = Set(marks.map(\.kind))
         let kind: Mark.Kind? = kinds.count == 1 ? kinds.first : nil
-        if !kinds.contains(.spotlight), !kinds.contains(.image) {
+        if !kinds.contains(where: \.isColourless) {
             menu.addItem(submenu("Colour", colourItems(kind: kind)))
         }
         if let kind, !SizeLadder.presets(for: kind).isEmpty {
@@ -38,7 +38,10 @@ struct MarkMenu {
         }
         if let kind {
             let styles = styleItems(kind)
-            if !styles.isEmpty { menu.addItem(submenu("Style", styles)) }
+            if !styles.isEmpty { menu.addItem(submenu(kind == .magnifier ? "Shape" : "Style", styles)) }
+        }
+        if kind == .magnifier {
+            menu.addItem(submenu("Zoom", zoomItems()))
         }
         menu.addItem(.separator())
         menu.addItem(ClosureMenuItem("Duplicate", key: "d", modifiers: .command) { model.duplicateSelection() })
@@ -91,6 +94,15 @@ struct MarkMenu {
         }
     }
 
+    private func zoomItems() -> [NSMenuItem] {
+        let current = model.shownStyle.zoom
+        return SizeLadder.zooms.map { zoom in
+            ClosureMenuItem(SizeLadder.zoomTitle(zoom), checked: abs(current - zoom) < 0.01) {
+                model.updateStyle("Change Zoom") { $0.zoom = zoom }
+            }
+        }
+    }
+
     private func styleItems(_ kind: Mark.Kind) -> [NSMenuItem] {
         let style = model.shownStyle
         switch kind {
@@ -119,6 +131,17 @@ struct MarkMenu {
                 ClosureMenuItem(option.title, checked: style.redact == option) { model.updateStyle { $0.redact = option } }
             }
         case .spotlight:
+            var items: [NSMenuItem] = SpotlightShape.allCases.map { shape in
+                ClosureMenuItem(shape.title, checked: style.spotlight == shape) { model.updateStyle { $0.spotlight = shape } }
+            }
+            items.append(.separator())
+            items += SpotlightEffect.allCases.map { effect in
+                ClosureMenuItem(effect.title, checked: style.spotlightEffect == effect) {
+                    model.updateStyle { $0.spotlightEffect = effect }
+                }
+            }
+            return items
+        case .magnifier:
             return SpotlightShape.allCases.map { shape in
                 ClosureMenuItem(shape.title, checked: style.spotlight == shape) { model.updateStyle { $0.spotlight = shape } }
             }

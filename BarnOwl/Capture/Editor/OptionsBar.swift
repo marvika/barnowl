@@ -102,7 +102,7 @@ private struct MarkOptions: View {
     }
 
     private var usesColour: Bool {
-        model.selectedMarks.allSatisfy { $0.kind != .spotlight && $0.kind != .image }
+        model.selectedMarks.allSatisfy { !$0.kind.isColourless }
     }
 
     @ViewBuilder private func sections(for kind: Mark.Kind) -> some View {
@@ -138,6 +138,8 @@ private struct MarkOptions: View {
             RedactSection(model: model, actions: actions)
         case .spotlight:
             SpotlightSection(model: model)
+        case .magnifier:
+            MagnifierSection(model: model)
         case .image:
             MoreButton(model: model, kind: kind)
         }
@@ -677,6 +679,15 @@ private struct SpotlightSection: View {
             .pickerStyle(.segmented)
             .labelsHidden()
             .fixedSize()
+            Picker("Around it", selection: Binding(get: { style.spotlightEffect }, set: { effect in
+                model.updateStyle { $0.spotlightEffect = effect }
+            })) {
+                ForEach(SpotlightEffect.allCases, id: \.self) { Text($0.title).tag($0) }
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            .fixedSize()
+            .help("Dim or blur everything around the spotlight")
             HStack(spacing: 6) {
                 Text("Dim").font(.system(size: 12)).foregroundStyle(.secondary)
                 Slider(value: Binding(get: { style.dim }, set: { value in
@@ -690,6 +701,42 @@ private struct SpotlightSection: View {
                     .foregroundStyle(.secondary)
                     .frame(width: 30, alignment: .trailing)
             }
+        }
+    }
+}
+
+/// A magnifier's shape and how far it zooms. Its ring is always white, so there's no colour.
+private struct MagnifierSection: View {
+    let model: EditorModel
+
+    var body: some View {
+        let style = model.shownStyle
+        HStack(spacing: 14) {
+            Picker("Shape", selection: Binding(get: { style.spotlight }, set: { shape in
+                model.updateStyle { $0.spotlight = shape }
+            })) {
+                Image(systemName: "circle").accessibilityLabel("Circle").tag(SpotlightShape.ellipse)
+                Image(systemName: "rectangle").accessibilityLabel("Rectangle").tag(SpotlightShape.rectangle)
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            .fixedSize()
+            HStack(spacing: 6) {
+                Text("Zoom").font(.system(size: 12)).foregroundStyle(.secondary)
+                Picker("Zoom", selection: Binding<Double?>(get: { SizeLadder.zooms.first { abs($0 - style.zoom) < 0.01 } },
+                                                           set: { zoom in
+                    guard let zoom else { return }
+                    model.updateStyle("Change Zoom") { $0.zoom = zoom }
+                })) {
+                    ForEach(SizeLadder.zooms, id: \.self) { zoom in
+                        Text(SizeLadder.zoomTitle(zoom)).tag(Optional(zoom))
+                    }
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .fixedSize()
+            }
+            .help("Zoom ([ ] or − + step it)")
         }
     }
 }
