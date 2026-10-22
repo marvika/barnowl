@@ -764,9 +764,9 @@ struct CaptureEditorTests {
         let data = try JSONEncoder().encode(document)
         let decoded = try JSONDecoder().decode(EditorDocument.self, from: data)
         #expect(decoded == document)
-        #expect(decoded.schemaVersion == 2)
+        #expect(decoded.schemaVersion == 3)
         let json = try JSONSerialization.jsonObject(with: data) as? [String: Any]
-        #expect(json?["schemaVersion"] as? Int == 2)
+        #expect(json?["schemaVersion"] as? Int == 3)
     }
 
     @Test func documentsWithMissingFieldsStillOpen() throws {

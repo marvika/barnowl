@@ -1,0 +1,475 @@
+import AppKit
+import Foundation
+import Testing
+@testable import BarnOwl
+
+/// The Frame: gradients of your own, matched backgrounds, shadow strength, ratios and position,
+/// and the remembered look.
+@MainActor
+struct CaptureEditorFrameTests {
+    typealias Pixel = (red: Double, green: Double, blue: Double, alpha: Double)
+
+    /// The pixel at (`x`, `y`) from the top left, unpremultiplied.
+    static func pixel(_ image: CGImage, _ x: Int, _ y: Int) -> Pixel {
+        var bytes = [UInt8](repeating: 0, count: 4)
+        let space = CGColorSpace(name: CGColorSpace.sRGB)!
+        bytes.withUnsafeMutableBytes { buffer in
+            let context = CGContext(data: buffer.baseAddress, width: 1, height: 1, bitsPerComponent: 8, bytesPerRow: 4,
+                                    space: space, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
+            context.draw(image.cropping(to: CGRect(x: x, y: y, width: 1, height: 1))!, in: CGRect(x: 0, y: 0, width: 1, height: 1))
+        }
+        let alpha = Double(bytes[3]) / 255
+        let divisor = max(alpha, 1.0 / 255) * 255
+        return (Double(bytes[0]) / divisor, Double(bytes[1]) / divisor, Double(bytes[2]) / divisor, alpha)
+    }
+
+    static func near(_ pixel: Pixel, _ colour: MarkColour, within tolerance: Double = 4.0 / 255) -> Bool {
+        abs(pixel.red - colour.red) <= tolerance && abs(pixel.green - colour.green) <= tolerance
+            && abs(pixel.blue - colour.blue) <= tolerance
+    }
+
+    static func colour(_ pixel: Pixel) -> MarkColour {
+        MarkColour(red: pixel.red, green: pixel.green, blue: pixel.blue)
+    }
+
+    static func image(width: Int, height: Int, draw: (CGContext) -> Void) -> CGImage {
+        let context = CGContext(data: nil, width: width, height: height, bitsPerComponent: 8, bytesPerRow: 0,
+                                space: CGColorSpace(name: CGColorSpace.sRGB)!,
+                                bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
+        // Top-left origin, like the editor.
+        context.translateBy(x: 0, y: CGFloat(height))
+        context.scaleBy(x: 1, y: -1)
+        draw(context)
+        return context.makeImage()!
+    }
+
+    static func solid(_ colour: MarkColour, width: Int = 300, height: Int = 200) -> CGImage {
+        image(width: width, height: height) { context in
+            context.setFillColor(colour.cgColor())
+            context.fill(CGRect(x: 0, y: 0, width: width, height: height))
+        }
+    }
+
+    /// A document with only a frame, for looking at the background around a capture.
+    static func framed(_ background: FrameBackground, size: CGSize = CGSize(width: 300, height: 200), padding: CGFloat = 50)
+        -> EditorDocument {
+        var document = EditorDocument(imageSize: size, scale: 1)
+        document.frame.background = background
+        document.frame.padding = padding
+        document.frame.shadowAmount = 0
+        return document
+    }
+
+    // MARK: Decoding
+
+    @Test func aSchemaTwoDocumentGetsTheClassicShadowAndACentredCapture() throws {
+        func open(shadow: Bool) throws -> EditorDocument {
+            let json = """
+            {"schemaVersion":2,"imageSize":[100,80],"marks":[{"kind":"arrow","start":[1,2],"end":[30,40]}],
+             "frame":{"background":{"gradient":{"_0":"dawn"}},"padding":96,"cornerRadius":20,"shadow":\(shadow),"ratio":"wide"}}
+            """
+            return try JSONDecoder().decode(EditorDocument.self, from: Data(json.utf8))
+        }
+        let on = try open(shadow: true)
+        #expect(on.frame.shadowAmount == 0.5)
+        #expect(on.frame.shadow)
+        #expect(on.frame.position == .centre)
+        #expect(on.frame.background == .gradient(.dawn))
+        #expect(on.frame.ratio == .wide)
+        #expect(on.marks.count == 1)
+        #expect(on.schemaVersion == EditorDocument.currentSchema)
+        let off = try open(shadow: false)
+        #expect(off.frame.shadowAmount == 0)
+        #expect(!off.frame.shadow)
+    }
+
+    @Test func unknownValuesFallBackAndKeepTheMarks() throws {
+        let json = """
+        {"schemaVersion":9,"imageSize":[100,80],
+         "marks":[{"kind":"arrow","start":[1,2],"end":[30,40]},{"kind":"hologram","start":[0,0]},
+                  {"kind":"rectangle","start":[5,5],"end":[50,50]}],
+         "frame":{"background":{"aurora":{}},"padding":40,"ratio":"cinema","position":{"x":0}}}
+        """
+        let document = try JSONDecoder().decode(EditorDocument.self, from: Data(json.utf8))
+        #expect(document.marks.map(\.kind) == [.arrow, .rectangle])
+        #expect(document.frame.background == FrameBackground.none)
+        #expect(document.frame.ratio == .auto)
+        #expect(document.frame.padding == 40)
+        #expect(document.frame.position == FramePosition(x: 0, y: 0.5))
+    }
+
+    @Test func schemaThreeRoundTripsEveryField() throws {
+        var document = EditorDocument(imageSize: CGSize(width: 100, height: 80))
+        let gradient = CustomGradient(stops: [GradientStop(colour: .blue, location: 0),
+                                              GradientStop(colour: MarkColour(hex: 0x5AC8FA), location: 0.3),
+                                              GradientStop(colour: .amber, location: 1)],
+                                      angle: 200, kind: .radial, softLight: false)
+        document.frame = FrameSettings(background: .custom(gradient), padding: 30, cornerRadius: 12, shadowAmount: 0.8,
+                                       ratio: .link, position: FramePosition(x: 1, y: 0))
+        document.marks = [CaptureEditorTests.mark(.arrow, CGPoint(x: 1, y: 2), CGPoint(x: 30, y: 40))]
+        let data = try JSONEncoder().encode(document)
+        let decoded = try JSONDecoder().decode(EditorDocument.self, from: data)
+        #expect(decoded == document)
+        #expect(decoded.schemaVersion == 3)
+        // Earlier builds still find the shadow on or off.
+        let json = try JSONSerialization.jsonObject(with: data) as? [String: Any]
+        let frame = json?["frame"] as? [String: Any]
+        #expect(frame?["shadow"] as? Bool == true)
+        #expect(json?["schemaVersion"] as? Int == 3)
+    }
+
+    @Test func customGradientsKeepTwoToFourStopsInOrder() {
+        let one = CustomGradient(stops: [GradientStop(colour: .red, location: 0.4)])
+        #expect(one.stops.count == 2)
+        let five = CustomGradient(colours: [.red, .amber, .yellow, .green, .blue])
+        #expect(five.stops.count == 4)
+        let unordered = CustomGradient(stops: [GradientStop(colour: .blue, location: 1.4), GradientStop(colour: .red, location: -1)],
+                                       angle: -45)
+        #expect(unordered.stops.map(\.location) == [0, 1])
+        #expect(unordered.stops.first?.colour == .red)
+        #expect(unordered.angle == 315)
+        let reversed = unordered.reversed
+        #expect(reversed.stops.first?.colour == .blue)
+        #expect(reversed.reversed == unordered)
+    }
+
+    // MARK: Gradients
+
+    @Test func gradientsAreMixedAsTheEyeSeesThem() {
+        let gradient = CustomGradient(colours: [.blue, MarkColour(hex: 0xFF9500), .green])
+        let ramp = GradientPainter.expanded(gradient.stops)
+        #expect(ramp.colours.count == GradientPainter.substeps * 2 + 1)
+        #expect(ramp.locations == ramp.locations.sorted())
+        #expect(ramp.locations.first == 0)
+        #expect(ramp.locations.last == 1)
+        #expect(gradient.colour(at: 0) == .blue)
+        #expect(gradient.colour(at: 1) == .green)
+        // Blue to orange goes round by way of a colour, not through grey.
+        let middle = MarkColour.blue.blended(with: MarkColour(hex: 0xFF9500), 0.5)
+        let plain = MarkColour.blue.mixed(with: MarkColour(hex: 0xFF9500), 0.5)
+        #expect(middle.oklab.chroma > 0.1)
+        #expect(plain.oklab.chroma < 0.05)
+    }
+
+    @Test func aGradientAtNinetyDegreesRunsLeftToRight() throws {
+        let gradient = CustomGradient(colours: [.blue, MarkColour(hex: 0xFF9500)], angle: 90, softLight: false)
+        let renderer = AnnotationRenderer(image: Self.solid(.white), scale: 1)
+        let image = try #require(renderer.render(Self.framed(.custom(gradient))))
+        #expect(image.width == 400)
+        let left = Self.pixel(image, 0, 20)
+        let right = Self.pixel(image, 399, 20)
+        #expect(Self.near(left, .blue, within: 8.0 / 255))
+        #expect(Self.near(right, MarkColour(hex: 0xFF9500), within: 8.0 / 255))
+        // The middle keeps its colour.
+        let middle = Self.colour(Self.pixel(image, 200, 20))
+        #expect(middle.oklab.chroma > 0.1)
+        let ends = GradientPainter.linearEnds(angle: 90, in: CGRect(x: 0, y: 0, width: 400, height: 300))
+        #expect(CaptureEditorTests.close(ends.start, CGPoint(x: 0, y: 150)))
+        #expect(CaptureEditorTests.close(ends.end, CGPoint(x: 400, y: 150)))
+    }
+
+    @Test func aRadialGradientStartsAtTheCapturesCentre() throws {
+        let gradient = CustomGradient(colours: [.yellow, .ink], kind: .radial, softLight: false)
+        let renderer = AnnotationRenderer(image: Self.solid(.white), scale: 1)
+        let sample = try #require(renderer.backgroundSample(.custom(gradient), size: CGSize(width: 200, height: 100),
+                                                            pixelsPerPoint: 1))
+        #expect(Self.near(Self.pixel(sample, 100, 50), .yellow, within: 8.0 / 255))
+        #expect(Self.near(Self.pixel(sample, 0, 0), .ink, within: 8.0 / 255))
+
+        // With the capture at the left of a wide frame, the light follows it there.
+        var document = Self.framed(.custom(gradient))
+        document.frame.ratio = .wide
+        document.frame.position = FramePosition(x: 0, y: 0.5)
+        let layout = FrameLayout(document: document)
+        #expect(layout.imageRect.minX == 50)
+        let image = try #require(renderer.render(document))
+        let centreY = Int(layout.imageRect.midY)
+        let left = Self.colour(Self.pixel(image, 20, centreY))
+        let right = Self.colour(Self.pixel(image, Int(layout.canvasSize.width) - 1, centreY))
+        #expect(left.lightness > right.lightness + 0.2)
+    }
+
+    @Test func rendersAreTheSameEveryTime() throws {
+        let gradient = CustomGradient(colours: [MarkColour(hex: 0x3A3A44), MarkColour(hex: 0x121217)])
+        let renderer = AnnotationRenderer(image: Self.solid(.white), scale: 2)
+        let document = Self.framed(.custom(gradient))
+        func bytes(_ document: EditorDocument) throws -> Data {
+            let data = try #require(renderer.render(document)?.dataProvider?.data)
+            return data as Data
+        }
+        #expect(try bytes(document) == bytes(document))
+        let curated = Self.framed(.gradient(.graphite))
+        #expect(try bytes(curated) == bytes(curated))
+    }
+
+    @Test func theReadyMadeGradientsLookAsTheyAlwaysHave() throws {
+        let renderer = AnnotationRenderer(image: Self.solid(.white), scale: 1)
+        let image = try #require(renderer.render(Self.framed(.gradient(.dawn))))
+        // Corner to corner in sRGB, with the soft light from the top left.
+        let from = MarkColour(hex: 0x8C87FF)
+        let to = MarkColour(hex: 0xF5A633)
+        // The grain moves a channel by a few levels at most.
+        let grain = 7.0 / 255
+        #expect(Self.near(Self.pixel(image, 399, 299), to, within: grain))
+        func expected(_ x: Double, _ y: Double) -> MarkColour {
+            let t = min(max((x * 400 + y * 300) / (400.0 * 400 + 300 * 300), 0), 1)
+            let base = from.mixed(with: to, t)
+            let glow = 0.2 * max(0, 1 - hypot(x - 72, y) / 300)
+            return base.mixed(with: .white, glow)
+        }
+        for (x, y) in [(200, 30), (20, 280), (380, 10), (120, 20)] {
+            #expect(Self.near(Self.pixel(image, x, y), expected(Double(x) + 0.5, Double(y) + 0.5), within: grain))
+        }
+        #expect(FrameGradient.dawn.stops == [from, to])
+        #expect(FrameGradient.allCases.count == 9)
+    }
+
+    // MARK: Matched backgrounds
+
+    @Test func aRedCaptureGetsRedBackgrounds() {
+        let suggestions = BackgroundHarmony.suggestions(for: Self.solid(MarkColour(hex: 0xE0352B)))
+        let red = MarkColour(hex: 0xE0352B).oklab.hue
+        #expect(BackgroundHarmony.angle(between: suggestions.hue, and: red) < 10)
+        #expect(!suggestions.gradients.isEmpty)
+        #expect(suggestions.gradients.contains { BackgroundHarmony.angle(between: $0.stops[0].colour.oklab.hue, and: red) < 15 })
+        for gradient in suggestions.gradients {
+            // Deep ones lean toward dusk, but none strays far from the capture's red.
+            let hue = gradient.stops[0].colour.oklab.hue
+            #expect(BackgroundHarmony.angle(between: hue, and: red) < 60)
+        }
+        #expect(suggestions.colours.first.map { BackgroundHarmony.angle(between: $0.oklab.hue, and: red) < 10 } == true)
+    }
+
+    @Test func warmCapturesNeverGetOliveOrMud() {
+        for hex: UInt32 in [0xF5A633, 0xFFD60A, 0xFF9500, 0xC8A951] {
+            let suggestions = BackgroundHarmony.suggestions(for: Self.solid(MarkColour(hex: hex)))
+            for gradient in suggestions.gradients {
+                for stop in gradient.stops {
+                    let lab = stop.colour.oklab
+                    // Yellow-greens that aren't light read as olive; mid-dark oranges as brown.
+                    let olive = lab.hue > 95 && lab.hue < 135 && lab.l < 0.8 && lab.chroma > 0.05
+                    let mud = lab.hue > 50 && lab.hue < 95 && lab.l < 0.5 && lab.chroma > 0.04
+                    #expect(!olive && !mud, "\(stop.colour.hex) from \(String(format: "%06X", hex))")
+                }
+            }
+        }
+    }
+
+    @Test func aGreyCaptureFallsBackToLavender() {
+        let suggestions = BackgroundHarmony.suggestions(for: CaptureEditorTests.image())
+        #expect(abs(suggestions.hue - BackgroundHarmony.fallbackHue) < 0.001)
+        #expect(suggestions.gradients.count >= 3)
+    }
+
+    @Test func suggestionsAreTheSameEveryTime() {
+        // A white page with a blue block and an amber one, as a capture often is.
+        let picture = Self.image(width: 120, height: 90) { context in
+            context.setFillColor(MarkColour.white.cgColor())
+            context.fill(CGRect(x: 0, y: 0, width: 120, height: 90))
+            context.setFillColor(MarkColour.blue.cgColor())
+            context.fill(CGRect(x: 10, y: 10, width: 50, height: 70))
+            context.setFillColor(MarkColour.amber.cgColor())
+            context.fill(CGRect(x: 64, y: 10, width: 46, height: 70))
+        }
+        let first = BackgroundHarmony.suggestions(for: picture)
+        #expect(first == BackgroundHarmony.suggestions(for: picture))
+        // Two hues: the pair runs from one to the other.
+        let pair = first.gradients.last
+        let hues = [MarkColour.blue.oklab.hue, MarkColour.amber.oklab.hue]
+        let ends = pair.map { [$0.stops[0].colour.oklab.hue, $0.stops[1].colour.oklab.hue] } ?? []
+        #expect(ends.count == 2)
+        #expect(ends.allSatisfy { end in hues.contains { BackgroundHarmony.angle(between: end, and: $0) < 20 } })
+    }
+
+    @Test func everySuggestionStandsApartFromTheCapturesEdge() {
+        for colour in [MarkColour.white, .ink, MarkColour(hex: 0xE0352B), MarkColour(hex: 0xBFD9F2)] {
+            let suggestions = BackgroundHarmony.suggestions(for: Self.solid(colour))
+            #expect(abs(suggestions.edgeLightness - colour.lightness) < 0.03)
+            for gradient in suggestions.gradients {
+                #expect(abs(BackgroundHarmony.meanLightness(gradient) - suggestions.edgeLightness) > BackgroundHarmony.separation)
+            }
+        }
+    }
+
+    @Test func aWindowIsJudgedByItsOwnEdgeNotTheClearMarginAroundIt() {
+        let window = Self.shadowedWindow()
+        let suggestions = BackgroundHarmony.suggestions(for: window)
+        // White window, dark shadow, clear margin: the edge is light, not the clear margin's black.
+        #expect(suggestions.edgeLightness > 0.7)
+    }
+
+    // MARK: Layout
+
+    @Test func positionPutsTheSpareRoomWhereYouSay() {
+        let crop = CGRect(x: 0, y: 0, width: 400, height: 300)
+        var frame = FrameSettings(background: .gradient(.dawn), padding: 50, ratio: .wide)
+        let centred = FrameLayout(crop: crop, frame: frame)
+        #expect(centred.canvasSize == CGSize(width: 712, height: 400))
+        #expect(centred.imageRect.minX == ((712 - 400) / 2 as CGFloat).rounded(.down))
+        #expect(centred.imageRect.minY == 50)
+        frame.position = FramePosition(x: 0, y: 0.5)
+        #expect(FrameLayout(crop: crop, frame: frame).imageRect.minX == 50)
+        frame.position = FramePosition(x: 1, y: 1)
+        let right = FrameLayout(crop: crop, frame: frame)
+        #expect(right.imageRect.minX == CGFloat(712 - 400 - 50))
+        // No spare room up and down at 16:9: the padding holds.
+        #expect(right.imageRect.minY == 50)
+        frame.ratio = .auto
+        #expect(FrameLayout(crop: crop, frame: frame).imageRect == CGRect(x: 50, y: 50, width: 400, height: 300))
+    }
+
+    @Test func theNewRatiosHaveTheRightShapes() {
+        let crop = CGRect(x: 0, y: 0, width: 400, height: 300)
+        func size(_ ratio: AspectRatio) -> CGSize {
+            FrameLayout(crop: crop, frame: FrameSettings(background: .gradient(.mist), padding: 50, ratio: ratio)).canvasSize
+        }
+        #expect(size(.threeTwo) == CGSize(width: 600, height: 400))
+        #expect(size(.threeFour) == CGSize(width: 500, height: 667))
+        #expect(size(.story) == CGSize(width: 500, height: 889))
+        #expect(size(.link) == CGSize(width: 764, height: 400))
+        #expect(AspectRatio.allCases.map(\.title) == ["Auto", "16:9", "3:2", "4:3", "1:1", "4:5", "3:4", "9:16", "1.91:1"])
+    }
+
+    // MARK: Shadow
+
+    @Test func theShadowHasAStrength() throws {
+        let renderer = AnnotationRenderer(image: Self.solid(.ink), scale: 1)
+        func below(_ amount: CGFloat) throws -> Double {
+            var document = Self.framed(.solid(.white))
+            document.frame.shadowAmount = amount
+            let image = try #require(renderer.render(document))
+            // Just under the capture, where the shadow falls.
+            return Self.pixel(image, 200, 253).red
+        }
+        let none = try below(0)
+        let classic = try below(0.5)
+        let strong = try below(1)
+        #expect(none > 0.99)
+        #expect(classic < none - 0.03)
+        #expect(strong < classic - 0.03)
+    }
+
+    @Test func aWindowWithItsOwnShadowDoesNotGetASecondOne() throws {
+        let window = Self.shadowedWindow()
+        #expect(ImageSampler.hasOwnShadow(window))
+        #expect(!ImageSampler.hasOwnShadow(Self.solid(.white)))
+        // Rounded corners alone (a window caught without its shadow) aren't a shadow.
+        let bare = Self.image(width: 200, height: 160) { context in
+            context.addPath(CGPath(roundedRect: CGRect(x: 0, y: 0, width: 200, height: 160), cornerWidth: 20,
+                                   cornerHeight: 20, transform: nil))
+            context.setFillColor(MarkColour.white.cgColor())
+            context.fillPath()
+        }
+        #expect(!ImageSampler.hasOwnShadow(bare))
+
+        let renderer = AnnotationRenderer(image: window, scale: 1)
+        #expect(renderer.ownShadow)
+        var document = Self.framed(.solid(.white), size: CGSize(width: 200, height: 160), padding: 40)
+        document.frame.shadowAmount = 1
+        document.frame.cornerRadius = 30
+        #expect(renderer.cornerRadius(document.frame) == 0)
+        let image = try #require(renderer.render(document))
+        // Beyond the window's own soft shadow, the frame adds none: the padding stays white.
+        #expect(Self.pixel(image, 140, 236).red > 0.99)
+    }
+
+    /// A window on a clear background with a soft shadow round it, as a window capture is.
+    static func shadowedWindow() -> CGImage {
+        image(width: 200, height: 160) { context in
+            context.setShadow(offset: CGSize(width: 0, height: -6), blur: 22, color: CGColor(gray: 0, alpha: 0.5))
+            context.addPath(CGPath(roundedRect: CGRect(x: 34, y: 30, width: 132, height: 96), cornerWidth: 10,
+                                   cornerHeight: 10, transform: nil))
+            context.setFillColor(MarkColour.white.cgColor())
+            context.fillPath()
+        }
+    }
+
+    // MARK: Undo and memory
+
+    @Test func onePopoverIsOneUndoStep() {
+        let model = CaptureEditorTests.model()
+        model.chooseBackground(.gradient(.mist))
+        let before = model.document
+        let count = model.changeCount
+        model.beginLiveChange()
+        for angle in stride(from: 0.0, through: 180, by: 45) {
+            let gradient = CustomGradient(colours: [.blue, .lavender], angle: angle)
+            model.setFrameLive { $0.background = .custom(gradient) }
+        }
+        model.endLiveChange("Change Background")
+        #expect(model.changeCount == count + 1)
+        #expect(model.undoManager.undoActionName == "Change Background")
+        model.undo()
+        #expect(model.document == before)
+    }
+
+    @Test func yoursKeepsEachOnceNewestFirstAndNineAtMost() {
+        let defaults = CaptureEditorTests.defaults()
+        let model = CaptureEditorTests.model(defaults: defaults)
+        let first = FrameBackground.solid(.blue)
+        let id = model.saveBackground(first)
+        model.saveBackground(.solid(.green))
+        #expect(model.saveBackground(first) == id)
+        #expect(model.styleBook.saved.map(\.background) == [first, .solid(.green)])
+        for index in 0..<12 {
+            model.saveBackground(.solid(MarkColour(red: Double(index) / 12, green: 0.3, blue: 0.5)))
+        }
+        #expect(model.styleBook.saved.count == StyleBook.savedLimit)
+        // Editing one puts it back where it was.
+        let editedID = model.styleBook.saved[3].id
+        model.saveBackground(.custom(FrameGradient.ember.custom), replacing: editedID)
+        #expect(model.styleBook.saved[3].id == editedID)
+        #expect(model.styleBook.saved[3].background == .custom(FrameGradient.ember.custom))
+        model.deleteSavedBackground(editedID)
+        #expect(!model.styleBook.saved.contains { $0.id == editedID })
+        // And it's all still there next time.
+        #expect(EditorModel.savedStyleBook(in: defaults).saved == model.styleBook.saved)
+    }
+
+    @Test func theLookIsRememberedInPoints() {
+        let defaults = CaptureEditorTests.defaults()
+        let retina = EditorModel(image: CaptureEditorTests.image(), scale: 2, defaults: defaults)
+        retina.chooseBackground(.gradient(.dusk))
+        retina.setFrame("Change Padding") { $0.padding = 64 }
+        retina.setFrame("Change Shadow") { $0.shadowAmount = 0.8 }
+        retina.setFrame("Change Aspect Ratio") { $0.ratio = .square }
+        let look = retina.styleBook.frameLook
+        #expect(look?.padding == 32)
+        #expect(look?.cornerRadius == 10)
+        #expect(look?.background == .gradient(.dusk))
+
+        let plain = EditorModel(image: CaptureEditorTests.image(), scale: 1, defaults: defaults)
+        plain.chooseBackground(.gradient(.mist))
+        #expect(plain.document.frame.padding == 32)
+        #expect(plain.document.frame.cornerRadius == 10)
+        #expect(plain.document.frame.shadowAmount == 0.8)
+        #expect(plain.document.frame.ratio == .square)
+        #expect(plain.document.frame.background == .gradient(.mist))
+        // In the same step as the background.
+        plain.undo()
+        #expect(!plain.document.frame.isOn)
+    }
+
+    @Test func openingTheFrameAppliesYourLookOnceAndAFreshEditorStillClosesWithEsc() {
+        let defaults = CaptureEditorTests.defaults()
+        let first = EditorModel(image: CaptureEditorTests.image(), scale: 1, defaults: defaults)
+        // Nothing remembered yet: opening the Frame changes nothing.
+        first.showsFrame = true
+        #expect(!first.document.frame.isOn)
+        first.chooseBackground(.gradient(.lagoon))
+
+        let second = EditorModel(image: CaptureEditorTests.image(), scale: 1, defaults: defaults)
+        #expect(!second.document.frame.isOn)
+        second.showsFrame = true
+        #expect(second.document.frame.background == .gradient(.lagoon))
+        #expect(second.undoManager.undoActionName == "Add Frame")
+        second.chooseBackground(.none)
+        second.showsFrame = false
+        second.showsFrame = true
+        #expect(!second.document.frame.isOn)
+
+        let third = EditorModel(image: CaptureEditorTests.image(), scale: 1, defaults: defaults)
+        #expect(third.escape() == .choseSelect)
+        #expect(third.escape() == .close)
+    }
+}

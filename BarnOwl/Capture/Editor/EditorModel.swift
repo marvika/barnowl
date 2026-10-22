@@ -58,8 +58,14 @@ final class EditorModel {
     private(set) var styleBook: StyleBook
     /// The frame inspector is open.
     var showsFrame = false {
-        didSet { if showsFrame != oldValue { onFrameVisibilityChange?() } }
+        didSet {
+            guard showsFrame != oldValue else { return }
+            if showsFrame { frameOpened() }
+            onFrameVisibilityChange?()
+        }
     }
+    /// Backgrounds matched to this capture, once worked out (the first time the Frame opens).
+    private(set) var harmony: BackgroundHarmony.Suggestions?
     /// The crop being adjusted while the crop tool is out, in image pixels.
     var cropDraft: CGRect? {
         didSet { onChromeChange?() }
@@ -102,6 +108,9 @@ final class EditorModel {
     @ObservationIgnored private var hintTask: Task<Void, Never>?
     /// The document before a slider started moving, so the whole slide is one undo step.
     @ObservationIgnored private var liveBase: EditorDocument?
+    @ObservationIgnored private var harmonyTask: Task<Void, Never>?
+    /// Your last frame has been offered, the first time the Frame opened.
+    @ObservationIgnored private var lookOffered = false
 
     /// The style book as the editor last kept it, or the one out of the box.
     nonisolated static func savedStyleBook(in defaults: UserDefaults = .standard) -> StyleBook {
@@ -472,6 +481,59 @@ final class EditorModel {
         apply(name) { change(&$0.frame) }
     }
 
+    /// Chooses a background. From no frame at all, your last frame comes back with it (padding,
+    /// corners, shadow, ratio), in the same undo step.
+    func chooseBackground(_ background: FrameBackground) {
+        let look = document.frame.isOn ? nil : styleBook.frameLook
+        let scale = scale
+        setFrame("Change Background") { frame in
+            if let look, background != .none { frame = look.settings(scale: scale) }
+            frame.background = background
+        }
+    }
+
+    /// The Frame opened: work out the matched backgrounds, and the first time, frame an unframed
+    /// capture the way you framed the last one.
+    private func frameOpened() {
+        loadHarmony()
+        guard !lookOffered else { return }
+        lookOffered = true
+        guard !document.frame.isOn, let look = styleBook.frameLook, look.background != .none else { return }
+        let settings = look.settings(scale: scale)
+        apply("Add Frame") { $0.frame = settings }
+    }
+
+    private func loadHarmony() {
+        guard harmony == nil, harmonyTask == nil else { return }
+        let image = image
+        harmonyTask = Task { [weak self] in
+            let found = await Task.detached(priority: .utility) { BackgroundHarmony.suggestions(for: image) }.value
+            self?.harmony = found
+        }
+    }
+
+    /// Keeps a background you made in Yours, in place of `replacing` when you edited one there.
+    @discardableResult
+    func saveBackground(_ background: FrameBackground, replacing id: UUID? = nil) -> UUID {
+        let saved = styleBook.save(background, replacing: id)
+        saveStyleBook()
+        return saved
+    }
+
+    /// Takes a background out of Yours. Like the colour panel's own swatches, it can't be undone.
+    func deleteSavedBackground(_ id: UUID) {
+        styleBook.deleteSaved(id)
+        saveStyleBook()
+    }
+
+    /// The frame you just settled on, remembered in points for the next capture.
+    private func rememberLook(from before: EditorDocument) {
+        let frame = document.frame
+        guard frame != before.frame, frame.isOn else { return }
+        styleBook.frameLook = FrameLook(frame, scale: scale)
+        saveStyleBook()
+    }
+
     /// Changes the frame without an undo step, while a slider moves.
     func setFrameLive(_ change: (inout FrameSettings) -> Void) {
         var next = document
@@ -600,6 +662,7 @@ final class EditorModel {
     }
 
     private func registerUndo(restoring snapshot: EditorDocument, _ name: String) {
+        rememberLook(from: snapshot)
         undoManager.beginUndoGrouping()
         undoManager.registerUndo(withTarget: self) { model in
             MainActor.assumeIsolated { model.restore(snapshot, name) }

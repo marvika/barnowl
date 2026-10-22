@@ -31,8 +31,13 @@ struct FrameLayout: Equatable {
             }
         }
         canvasSize = CGSize(width: canvasWidth, height: canvasHeight)
-        let x: CGFloat = ((canvasWidth - width) / 2).rounded(.down)
-        let y: CGFloat = ((canvasHeight - height) / 2).rounded(.down)
+        // The padding is the least there is; the position says where any room beyond it goes.
+        let spareX: CGFloat = canvasWidth - width - 2 * padding
+        let spareY: CGFloat = canvasHeight - height - 2 * padding
+        let along = CGFloat(min(max(frame.position.x, 0), 1))
+        let down = CGFloat(min(max(frame.position.y, 0), 1))
+        let x: CGFloat = (spareX * along + padding).rounded(.down)
+        let y: CGFloat = (spareY * down + padding).rounded(.down)
         imageRect = CGRect(x: x, y: y, width: width, height: height)
     }
 

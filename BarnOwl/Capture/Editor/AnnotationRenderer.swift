@@ -12,6 +12,9 @@ final class AnnotationRenderer: Sendable {
     /// Pixels per point, so marks have sensible pixel sizes.
     let scale: CGFloat
     let luminance: LuminanceMap?
+    /// A window caught with its shadow on a clear background: the frame leaves its corners and
+    /// its shadow alone, rather than drawing a second one.
+    let ownShadow: Bool
     private let desktopPicture = Mutex<Picture?>(nil)
     private let effects: RedactionEffects
     private let pasted = Mutex<[UUID: PastedImage]>([:])
@@ -29,6 +32,7 @@ final class AnnotationRenderer: Sendable {
         self.image = image
         self.scale = max(scale, 0.5)
         luminance = LuminanceMap(image: image)
+        ownShadow = ImageSampler.hasOwnShadow(image)
         effects = RedactionEffects(image: image)
         if let desktop { desktopPicture.withLock { $0 = Picture(image: desktop) } }
     }
@@ -83,16 +87,18 @@ final class AnnotationRenderer: Sendable {
     func drawBackdrop(_ document: EditorDocument, in context: CGContext, includingImage: Bool) {
         let layout = FrameLayout(document: document)
         let frame = document.frame
-        if frame.isOn { drawBackground(frame, size: layout.canvasSize, in: context) }
-        let shadowed = frame.isOn && frame.shadow
+        if frame.isOn { drawBackground(frame, layout: layout, in: context) }
+        let shadowed = frame.isOn && frame.shadow && !ownShadow
         guard includingImage || shadowed else { return }
-        let radius: CGFloat = frame.isOn ? frame.cornerRadius : 0
-        let clip = MarkGeometry.roundedRect(layout.imageRect, radius: radius)
+        let clip = MarkGeometry.roundedRect(layout.imageRect, radius: cornerRadius(frame))
         let full = CGRect(x: layout.offset.x, y: layout.offset.y, width: CGFloat(image.width), height: CGFloat(image.height))
         context.saveGState()
         if shadowed {
-            let blur: CGFloat = min(28 * scale, max(4 * scale, frame.padding * 0.45))
-            setShadow(context, offset: blur * 0.3, blur: blur, colour: CGColor(gray: 0, alpha: 0.4))
+            // 50% is the classic shadow; stronger is darker and softer, weaker lighter and tighter.
+            let amount: CGFloat = min(max(frame.shadowAmount, 0), 1)
+            let base: CGFloat = min(28 * scale, max(4 * scale, frame.padding * 0.45))
+            let blur: CGFloat = base * (0.6 + 0.8 * amount)
+            setShadow(context, offset: blur * 0.3, blur: blur, colour: CGColor(gray: 0, alpha: 0.8 * amount))
             context.beginTransparencyLayer(auxiliaryInfo: nil)
         }
         context.saveGState()
@@ -104,14 +110,17 @@ final class AnnotationRenderer: Sendable {
         context.restoreGState()
     }
 
+    /// The capture's corner radius on the frame: none unframed, or when it has its own shadow.
+    func cornerRadius(_ frame: FrameSettings) -> CGFloat {
+        frame.isOn && !ownShadow ? frame.cornerRadius : 0
+    }
+
     /// Every mark, clipped to the image. `imageUnderneath` false (on the canvas, where the image
     /// is a separate layer) makes highlights carry the pixels they blend with.
     func drawMarks(_ document: EditorDocument, in context: CGContext, imageUnderneath: Bool, editingText: UUID? = nil) {
         let layout = FrameLayout(document: document)
-        let frame = document.frame
-        let radius: CGFloat = frame.isOn ? frame.cornerRadius : 0
         context.saveGState()
-        context.addPath(MarkGeometry.roundedRect(layout.imageRect, radius: radius))
+        context.addPath(MarkGeometry.roundedRect(layout.imageRect, radius: cornerRadius(document.frame)))
         context.clip()
         context.translateBy(x: layout.offset.x, y: layout.offset.y)
         let numbers = document.counterNumbers
@@ -161,9 +170,15 @@ final class AnnotationRenderer: Sendable {
         context.restoreGState()
     }
 
-    private func drawBackground(_ frame: FrameSettings, size: CGSize, in context: CGContext) {
-        let canvas = CGRect(origin: .zero, size: size)
-        switch frame.background {
+    private func drawBackground(_ frame: FrameSettings, layout: FrameLayout, in context: CGContext) {
+        let canvas = CGRect(origin: .zero, size: layout.canvasSize)
+        let focus = CGPoint(x: layout.imageRect.midX, y: layout.imageRect.midY)
+        drawBackground(frame.background, in: canvas, focus: focus, context)
+    }
+
+    /// `focus` is where a radial gradient spreads from: the capture's centre.
+    private func drawBackground(_ background: FrameBackground, in canvas: CGRect, focus: CGPoint, _ context: CGContext) {
+        switch background {
         case .none, .transparent:
             return
         case .solid(let colour):
@@ -171,7 +186,7 @@ final class AnnotationRenderer: Sendable {
             context.fill(canvas)
         case .desktop:
             guard let desktop else {
-                drawGradient(.mist, in: canvas, context)
+                GradientPainter.paint(.mist, in: canvas, context)
                 return
             }
             // Fills the canvas, like the desktop fills the screen.
@@ -188,26 +203,10 @@ final class AnnotationRenderer: Sendable {
             drawImage(desktop, in: rect, context)
             context.restoreGState()
         case .gradient(let gradient):
-            drawGradient(gradient, in: canvas, context)
+            GradientPainter.paint(gradient, in: canvas, context)
+        case .custom(let gradient):
+            GradientPainter.paint(gradient, in: canvas, focus: focus, context)
         }
-    }
-
-    private func drawGradient(_ gradient: FrameGradient, in canvas: CGRect, _ context: CGContext) {
-        let space = CGColorSpace(name: CGColorSpace.sRGB) ?? CGColorSpaceCreateDeviceRGB()
-        let (from, to) = gradient.colours
-        let colours: [CGColor] = [from.cgColor(), to.cgColor()]
-        let glowColours: [CGColor] = [CGColor(gray: 1, alpha: 0.2), CGColor(gray: 1, alpha: 0)]
-        guard let fill = CGGradient(colorsSpace: space, colors: colours as CFArray, locations: [0, 1]),
-              let glow = CGGradient(colorsSpace: space, colors: glowColours as CFArray, locations: [0, 1]) else { return }
-        context.saveGState()
-        context.clip(to: canvas)
-        context.drawLinearGradient(fill, start: .zero, end: CGPoint(x: canvas.maxX, y: canvas.maxY),
-                                   options: [.drawsBeforeStartLocation, .drawsAfterEndLocation])
-        // A soft light from the top left, as through a window.
-        let centre = CGPoint(x: canvas.width * 0.18, y: 0)
-        let reach: CGFloat = max(canvas.width, canvas.height) * 0.75
-        context.drawRadialGradient(glow, startCenter: centre, startRadius: 0, endCenter: centre, endRadius: reach, options: [])
-        context.restoreGState()
     }
 
     /// Draws a bitmap upright in a y-down context.
@@ -594,7 +593,30 @@ final class AnnotationRenderer: Sendable {
         }
     }
 
-    // MARK: Pictures for the options bar
+    // MARK: Pictures for the options bar and the Frame inspector
+
+    /// A background on its own at `size` points, as the frame would draw it behind a capture in
+    /// the middle. Nil for backgrounds that aren't painted (none, transparent) or a desktop
+    /// picture that hasn't loaded.
+    func backgroundSample(_ background: FrameBackground, size: CGSize, pixelsPerPoint: CGFloat) -> CGImage? {
+        switch background {
+        case .none, .transparent: return nil
+        case .desktop where desktop == nil: return nil
+        default: break
+        }
+        let width = Int((size.width * pixelsPerPoint).rounded())
+        let height = Int((size.height * pixelsPerPoint).rounded())
+        let srgb = CGColorSpace(name: CGColorSpace.sRGB) ?? CGColorSpaceCreateDeviceRGB()
+        guard width > 0, height > 0,
+              let context = CGContext(data: nil, width: width, height: height, bitsPerComponent: 8, bytesPerRow: 0,
+                                      space: srgb, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return nil }
+        context.interpolationQuality = .high
+        context.translateBy(x: 0, y: CGFloat(height))
+        context.scaleBy(x: 1, y: -1)
+        let canvas = CGRect(x: 0, y: 0, width: width, height: height)
+        drawBackground(background, in: canvas, focus: CGPoint(x: canvas.midX, y: canvas.midY), context)
+        return context.makeImage()
+    }
 
     /// A small picture of `mark` on a clear background, for style and size choices.
     func sample(_ mark: Mark, size: CGSize, pixelsPerPoint: CGFloat) -> CGImage? {

@@ -340,8 +340,9 @@ final class EditorCanvas: NSView, NSTextViewDelegate, NSMenuItemValidation {
         let pixelsPerImagePixel: CGFloat = zoom * backing / scale
         imageView.sharp = pixelsPerImagePixel > 2
         let framed = shown.frame.isOn
-        imageView.outlined = !framed
-        imageView.cornerRadius = framed ? shown.frame.cornerRadius / scale : 0
+        // A window with its own shadow needs no outline of ours around its clear margin.
+        imageView.outlined = !framed && !renderer.ownShadow
+        imageView.cornerRadius = renderer.cornerRadius(shown.frame) / scale
         imageView.zoom = zoom
         paper.zoom = zoom
         paper.outlined = framed

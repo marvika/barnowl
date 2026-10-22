@@ -126,9 +126,60 @@ enum SizeLadder {
     }
 }
 
+/// A background you made, kept to use again.
+struct SavedBackground: Codable, Hashable, Identifiable, Sendable {
+    var id = UUID()
+    var background: FrameBackground
+
+    init(id: UUID = UUID(), background: FrameBackground) {
+        self.id = id
+        self.background = background
+    }
+}
+
+/// The last frame you used, with lengths in points so it looks the same on any display.
+struct FrameLook: Codable, Equatable, Sendable {
+    var background: FrameBackground
+    var padding: Double
+    var cornerRadius: Double
+    var shadowAmount: Double
+    var ratio: AspectRatio
+    var position: FramePosition
+
+    init(_ frame: FrameSettings, scale: CGFloat) {
+        let scale: Double = Double(max(scale, 0.5))
+        background = frame.background
+        padding = Double(frame.padding) / scale
+        cornerRadius = Double(frame.cornerRadius) / scale
+        shadowAmount = Double(frame.shadowAmount)
+        ratio = frame.ratio
+        position = frame.position
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        background = try c.decode(FrameBackground.self, forKey: .background)
+        padding = (try? c.decodeIfPresent(Double.self, forKey: .padding)) ?? 48
+        cornerRadius = (try? c.decodeIfPresent(Double.self, forKey: .cornerRadius)) ?? 10
+        shadowAmount = (try? c.decodeIfPresent(Double.self, forKey: .shadowAmount)) ?? 0.5
+        ratio = (try? c.decodeIfPresent(AspectRatio.self, forKey: .ratio)) ?? .auto
+        position = (try? c.decodeIfPresent(FramePosition.self, forKey: .position)) ?? .centre
+    }
+
+    /// The frame in pixels at `scale`.
+    func settings(scale: CGFloat) -> FrameSettings {
+        let scale: CGFloat = max(scale, 0.5)
+        let padding: CGFloat = (CGFloat(self.padding) * scale).rounded()
+        let corners: CGFloat = (CGFloat(cornerRadius) * scale).rounded()
+        return FrameSettings(background: background, padding: padding, cornerRadius: corners,
+                             shadowAmount: CGFloat(shadowAmount), ratio: ratio, position: position)
+    }
+}
+
 /// What the editor remembers between marks and between captures: one shared pen colour for
 /// arrows, shapes, text, counters and drawings (as CleanShot does); the highlighter's and the
-/// redaction's own colours; each kind's size and style; and recent custom colours.
+/// redaction's own colours; each kind's size and style; recent custom colours; backgrounds you
+/// made; and the last frame you used.
 struct StyleBook: Codable, Equatable, Sendable {
     var penColour = MarkColour.red
     var highlighterColour = MarkColour.yellow
@@ -139,8 +190,14 @@ struct StyleBook: Codable, Equatable, Sendable {
     var styles: [String: MarkStyle] = [:]
     /// Custom colours, newest first.
     var recents: [MarkColour] = []
+    /// Backgrounds you made, newest first.
+    var saved: [SavedBackground] = []
+    /// The last frame you used, for framing the next capture the same way.
+    var frameLook: FrameLook?
 
     static let recentLimit = 8
+    /// As many as fill the Yours rows beside the ＋.
+    static let savedLimit = 9
 
     init() {}
 
@@ -153,6 +210,9 @@ struct StyleBook: Codable, Equatable, Sendable {
         redactColourChosen = try c.decodeIfPresent(Bool.self, forKey: .redactColourChosen) ?? (redactColour != .ink)
         styles = try c.decodeIfPresent([String: MarkStyle].self, forKey: .styles) ?? [:]
         recents = try c.decodeIfPresent([MarkColour].self, forKey: .recents) ?? []
+        let saved: [Lossy<SavedBackground>] = (try? c.decodeIfPresent([Lossy<SavedBackground>].self, forKey: .saved)) ?? []
+        self.saved = saved.compactMap(\.value)
+        frameLook = try? c.decodeIfPresent(FrameLook.self, forKey: .frameLook)
     }
 
     static func defaultStyle(for kind: Mark.Kind) -> MarkStyle {
@@ -234,5 +294,30 @@ struct StyleBook: Codable, Equatable, Sendable {
         recents.removeAll { $0 == colour }
         recents.insert(colour, at: 0)
         if recents.count > Self.recentLimit { recents.removeLast(recents.count - Self.recentLimit) }
+    }
+
+    /// Keeps a background you made at the front of Yours, or puts it back in place of the one
+    /// you edited. Returns its id.
+    @discardableResult
+    mutating func save(_ background: FrameBackground, replacing id: UUID? = nil) -> UUID {
+        if let id, let index = saved.firstIndex(where: { $0.id == id }) {
+            saved[index].background = background
+            // The same background elsewhere in the list goes, so each shows once.
+            saved.removeAll { $0.id != id && $0.background == background }
+            return id
+        }
+        if let index = saved.firstIndex(where: { $0.background == background }) {
+            let existing = saved.remove(at: index)
+            saved.insert(existing, at: 0)
+            return existing.id
+        }
+        let entry = SavedBackground(background: background)
+        saved.insert(entry, at: 0)
+        if saved.count > Self.savedLimit { saved.removeLast(saved.count - Self.savedLimit) }
+        return entry.id
+    }
+
+    mutating func deleteSaved(_ id: UUID) {
+        saved.removeAll { $0.id == id }
     }
 }
