@@ -230,6 +230,11 @@ final class EditorCanvas: NSView, NSTextViewDelegate, NSMenuItemValidation {
         }
         if old.counterStart != new.counterStart { return bounds }
         guard !dirty.isNull else { return .zero }
+        // A magnifier over what changed shows it enlarged, so it redraws too.
+        for magnifier in new.marks where magnifier.kind == .magnifier {
+            let area = MarkGeometry.paintedBounds(magnifier, scale: scale)
+            if area.intersects(dirty) { dirty = dirty.union(area) }
+        }
         return viewRect(fromImage: dirty).insetBy(dx: -2, dy: -2)
     }
 
@@ -370,10 +375,12 @@ final class EditorCanvas: NSView, NSTextViewDelegate, NSMenuItemValidation {
 
     func describe(_ mark: Mark) -> String {
         var parts: [String] = [mark.kind.title]
-        if mark.kind != .spotlight, mark.kind != .image, mark.kind != .redact || mark.style.redact == .solid {
+        if !mark.kind.isColourless, mark.kind != .redact || mark.style.redact == .solid {
             parts.append(mark.colour.name.lowercased())
         }
         switch mark.kind {
+        case .magnifier:
+            parts.append(SizeLadder.zoomTitle(mark.style.zoom))
         case .arrow:
             parts.append(Self.direction(from: mark.start, to: mark.end))
         case .text:

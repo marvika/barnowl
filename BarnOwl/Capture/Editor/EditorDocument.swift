@@ -368,10 +368,13 @@ struct MarkStyle: Codable, Equatable, Sendable {
     var counterFormat = CounterFormat.number
     var redact = RedactStyle.solid
     var strength = RedactStrength.medium
+    /// A spotlight's shape, and a magnifier's.
     var spotlight = SpotlightShape.rectangle
     var smoothing = PenSmoothing.medium
     /// How dark a spotlight makes everything around it, from 0 to 1.
     var dim: Double = 0.5
+    /// How much a magnifier enlarges.
+    var zoom: Double = 2
 
     init() {}
 
@@ -395,6 +398,7 @@ struct MarkStyle: Codable, Equatable, Sendable {
         spotlight = try c.decodeIfPresent(SpotlightShape.self, forKey: .spotlight) ?? base.spotlight
         smoothing = try c.decodeIfPresent(PenSmoothing.self, forKey: .smoothing) ?? base.smoothing
         dim = try c.decodeIfPresent(Double.self, forKey: .dim) ?? base.dim
+        zoom = (try? c.decodeIfPresent(Double.self, forKey: .zoom)) ?? base.zoom
     }
 }
 
@@ -416,20 +420,29 @@ struct MarkOrigin: Codable, Equatable, Sendable {
 /// so marks stay put when the image is cropped or framed.
 struct Mark: Identifiable, Codable, Equatable, Sendable {
     enum Kind: String, Codable, CaseIterable, Sendable {
-        case arrow, rectangle, ellipse, text, counter, highlighter, pen, redact, spotlight, image
+        case arrow, rectangle, ellipse, text, counter, highlighter, pen, redact, spotlight, image, magnifier
 
         /// Marks drawn as the rectangle between `start` and `end`.
         var isBoxed: Bool {
             switch self {
-            case .rectangle, .ellipse, .highlighter, .redact, .spotlight, .image: true
+            case .rectangle, .ellipse, .highlighter, .redact, .spotlight, .image, .magnifier: true
             case .arrow, .text, .counter, .pen: false
             }
         }
 
-        /// Effects (highlights, redactions, spotlights) sit on the image, under every other mark.
+        /// Effects (highlights, redactions, spotlights, magnifiers) sit on the image, under every
+        /// other mark.
         var isEffect: Bool {
             switch self {
-            case .highlighter, .redact, .spotlight: true
+            case .highlighter, .redact, .spotlight, .magnifier: true
+            default: false
+            }
+        }
+
+        /// Kinds without a colour of their own.
+        var isColourless: Bool {
+            switch self {
+            case .spotlight, .image, .magnifier: true
             default: false
             }
         }
@@ -446,6 +459,7 @@ struct Mark: Identifiable, Codable, Equatable, Sendable {
             case .redact: "Redaction"
             case .spotlight: "Spotlight"
             case .image: "Image"
+            case .magnifier: "Magnifier"
             }
         }
     }
@@ -802,7 +816,7 @@ struct FrameSettings: Codable, Equatable, Sendable {
 /// still editable.
 struct EditorDocument: Codable, Equatable, Sendable {
     /// 2: weights in points, arrow heads, fills, fonts, counter formats, smart origins.
-    /// 3: gradients of your own, shadow strength, more ratios, position.
+    /// 3: gradients of your own, shadow strength, more ratios, position, magnifiers.
     static let currentSchema = 3
 
     var schemaVersion = EditorDocument.currentSchema
@@ -865,15 +879,17 @@ struct EditorDocument: Codable, Equatable, Sendable {
         return numbers
     }
 
-    /// The marks in the order they're drawn: highlights, redactions and spotlights on the image,
-    /// then everything else, each in array order. Nothing ever sits between the image and a
-    /// highlight, and a highlight never shows what a redaction hides.
+    /// The marks in the order they're drawn: highlights, redactions, spotlights and magnifiers
+    /// on the image, then everything else, each in array order. Nothing ever sits between the
+    /// image and a highlight, a highlight never shows what a redaction hides, and a magnifier
+    /// enlarges both.
     var drawingOrder: [Mark] {
         let highlights: [Mark] = marks.filter { $0.kind == .highlighter }
         let redactions: [Mark] = marks.filter { $0.kind == .redact }
         let spotlights: [Mark] = marks.filter { $0.kind == .spotlight }
+        let magnifiers: [Mark] = marks.filter { $0.kind == .magnifier }
         let objects: [Mark] = marks.filter { !$0.kind.isEffect }
-        return highlights + redactions + spotlights + objects
+        return highlights + redactions + spotlights + magnifiers + objects
     }
 }
 

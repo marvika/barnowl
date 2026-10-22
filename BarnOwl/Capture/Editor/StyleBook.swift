@@ -2,11 +2,11 @@ import Foundation
 
 /// A tool in the editor's toolbar, with the key that picks it.
 enum EditorTool: String, CaseIterable, Codable, Sendable {
-    case select, arrow, rectangle, ellipse, text, counter, highlighter, pen, redact, spotlight, crop
+    case select, arrow, rectangle, ellipse, text, counter, highlighter, pen, redact, spotlight, magnifier, crop
 
     /// The tools in the toolbar's main group, in order.
     static let group: [EditorTool] = [.select, .arrow, .rectangle, .ellipse, .text, .counter, .highlighter, .pen,
-                                      .redact, .spotlight]
+                                      .redact, .spotlight, .magnifier]
 
     var key: String {
         switch self {
@@ -20,6 +20,7 @@ enum EditorTool: String, CaseIterable, Codable, Sendable {
         case .pen: "p"
         case .redact: "b"
         case .spotlight: "s"
+        case .magnifier: "m"
         case .crop: "c"
         }
     }
@@ -36,6 +37,7 @@ enum EditorTool: String, CaseIterable, Codable, Sendable {
         case .pen: "Pen"
         case .redact: "Redact"
         case .spotlight: "Spotlight"
+        case .magnifier: "Magnify"
         case .crop: "Crop"
         }
     }
@@ -52,6 +54,7 @@ enum EditorTool: String, CaseIterable, Codable, Sendable {
         case .pen: "scribble.variable"
         case .redact: "checkerboard.rectangle"
         case .spotlight: "camera.metering.spot"
+        case .magnifier: "plus.magnifyingglass"
         case .crop: "crop"
         }
     }
@@ -69,6 +72,7 @@ enum EditorTool: String, CaseIterable, Codable, Sendable {
         case .pen: .pen
         case .redact: .redact
         case .spotlight: .spotlight
+        case .magnifier: .magnifier
         }
     }
 
@@ -87,7 +91,7 @@ enum SizeLadder {
         case .arrow: [3.5, 5.5, 8, 11]
         case .rectangle, .ellipse, .pen: [2.5, 4, 6, 9]
         case .counter: [22, 28, 36, 46]
-        case .text, .highlighter, .redact, .spotlight, .image: []
+        case .text, .highlighter, .redact, .spotlight, .image, .magnifier: []
         }
     }
 
@@ -98,11 +102,20 @@ enum SizeLadder {
         case .rectangle, .ellipse, .pen: [1.5, 2.5, 4, 6, 9, 12, 16]
         case .counter: [18, 22, 28, 36, 46, 56]
         case .text: textSizes
-        case .highlighter, .redact, .spotlight, .image: []
+        case .highlighter, .redact, .spotlight, .image, .magnifier: []
         }
     }
 
     static let textSizes: [Double] = [12, 14, 16, 20, 24, 32, 40, 48, 64, 96]
+    /// A magnifier's zooms, which [ and ] step through.
+    static let zooms: [Double] = [1.5, 2, 3, 4]
+
+    /// "1.5×", "2×".
+    static func zoomTitle(_ zoom: Double) -> String {
+        let whole = zoom.rounded()
+        let number: String = abs(zoom - whole) < 0.01 ? String(Int(whole)) : String(format: "%.1f", zoom)
+        return "\(number)×"
+    }
     static let presetNames = ["Small", "Medium", "Large", "Extra Large"]
 
     /// The next size up or down from `value`, or `value` at either end.
@@ -224,6 +237,9 @@ struct StyleBook: Codable, Equatable, Sendable {
         case .text: style.fontSize = 20
         case .redact:
             style.redact = .pixelate
+        case .magnifier:
+            style.spotlight = .ellipse
+            style.zoom = 2
         case .highlighter, .spotlight, .image: break
         }
         return style
@@ -233,7 +249,7 @@ struct StyleBook: Codable, Equatable, Sendable {
     static func usesPenColour(_ kind: Mark.Kind) -> Bool {
         switch kind {
         case .arrow, .rectangle, .ellipse, .text, .counter, .pen: true
-        case .highlighter, .redact, .spotlight, .image: false
+        case .highlighter, .redact, .spotlight, .image, .magnifier: false
         }
     }
 
@@ -255,7 +271,7 @@ struct StyleBook: Codable, Equatable, Sendable {
         case .redact:
             redactColour = colour
             redactColourChosen = true
-        case .spotlight, .image: return
+        case .spotlight, .image, .magnifier: return
         default: penColour = colour
         }
         noteRecent(colour)
@@ -283,7 +299,7 @@ struct StyleBook: Codable, Equatable, Sendable {
         case .redact:
             redactColour = .ink
             redactColourChosen = false
-        case .spotlight, .image: break
+        case .spotlight, .image, .magnifier: break
         default: penColour = .red
         }
     }

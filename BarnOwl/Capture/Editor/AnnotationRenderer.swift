@@ -126,6 +126,8 @@ final class AnnotationRenderer: Sendable {
         let numbers = document.counterNumbers
         let ordered = document.drawingOrder
         let spotlights = ordered.filter { $0.kind == .spotlight }
+        // What a magnifier enlarges with the image: never anything a redaction hides.
+        let underneath = ordered.filter { $0.kind == .highlighter || $0.kind == .redact }
         var spotlightsDrawn = false
         for mark in ordered {
             switch mark.kind {
@@ -133,6 +135,8 @@ final class AnnotationRenderer: Sendable {
                 drawHighlight(mark, imageUnderneath: imageUnderneath, in: context)
             case .redact:
                 drawRedaction(mark, in: context)
+            case .magnifier:
+                drawMagnifier(mark, effects: underneath, area: document.crop, in: context)
             case .spotlight:
                 guard !spotlightsDrawn else { continue }
                 spotlightsDrawn = true
@@ -156,7 +160,7 @@ final class AnnotationRenderer: Sendable {
         case .counter: drawCounter(mark, label: mark.style.counterFormat.label(number), editing: editing, in: context)
         case .text: drawText(mark, in: context)
         case .image: drawPasted(mark, in: context)
-        case .highlighter, .redact, .spotlight: break
+        case .highlighter, .redact, .spotlight, .magnifier: break
         }
     }
 
@@ -219,6 +223,56 @@ final class AnnotationRenderer: Sendable {
     }
 
     // MARK: Effects
+
+    /// A loupe: the image under it enlarged about its centre, with the highlights and redactions
+    /// on it enlarged too, so it never shows what a redaction hides. At the edge of `area` (the
+    /// crop) the source slides inward rather than reaching past it.
+    private func drawMagnifier(_ mark: Mark, effects underneath: [Mark], area: CGRect, in context: CGContext) {
+        let rect = mark.rect
+        guard rect.width >= 2, rect.height >= 2 else { return }
+        let bounds = CGRect(x: 0, y: 0, width: image.width, height: image.height)
+        let source = MarkGeometry.magnifierSource(mark, within: area.intersection(bounds))
+        guard source.width > 0, source.height > 0 else { return }
+        let shape = MarkGeometry.magnifierPath(mark, scale: scale)
+        let ring: CGFloat = 3 * scale
+
+        // A soft shadow lifts it off the capture.
+        context.saveGState()
+        setShadow(context, offset: 2 * scale, blur: 8 * scale, colour: CGColor(gray: 0, alpha: 0.3))
+        context.addPath(shape)
+        context.setFillColor(CGColor(gray: 1, alpha: 1))
+        context.fillPath()
+        context.restoreGState()
+
+        context.saveGState()
+        context.addPath(shape)
+        context.clip()
+        context.translateBy(x: rect.minX, y: rect.minY)
+        context.scaleBy(x: rect.width / source.width, y: rect.height / source.height)
+        context.translateBy(x: -source.minX, y: -source.minY)
+        context.interpolationQuality = .high
+        drawImage(image, in: bounds, context)
+        for effect in underneath {
+            if effect.kind == .redact {
+                drawRedaction(effect, in: context)
+            } else {
+                drawHighlight(effect, imageUnderneath: true, in: context)
+            }
+        }
+        context.restoreGState()
+
+        // A white ring with an ink hairline either side, as Preview's loupe has.
+        context.saveGState()
+        context.addPath(shape)
+        context.setStrokeColor(MarkColour.ink.cgColor(alpha: 0.28))
+        context.setLineWidth(ring + scale)
+        context.strokePath()
+        context.addPath(shape)
+        context.setStrokeColor(CGColor(gray: 1, alpha: 1))
+        context.setLineWidth(ring)
+        context.strokePath()
+        context.restoreGState()
+    }
 
     private func drawRedaction(_ mark: Mark, in context: CGContext) {
         let bounds = CGRect(x: 0, y: 0, width: image.width, height: image.height)

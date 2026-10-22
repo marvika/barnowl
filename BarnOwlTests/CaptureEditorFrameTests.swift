@@ -3,8 +3,8 @@ import Foundation
 import Testing
 @testable import BarnOwl
 
-/// The Frame: gradients of your own, matched backgrounds, shadow strength, ratios and position,
-/// and the remembered look.
+/// The Frame (gradients of your own, matched backgrounds, shadow strength, ratios and position,
+/// the remembered look) and the magnifier.
 @MainActor
 struct CaptureEditorFrameTests {
     typealias Pixel = (red: Double, green: Double, blue: Double, alpha: Double)
@@ -106,7 +106,11 @@ struct CaptureEditorFrameTests {
                                       angle: 200, kind: .radial, softLight: false)
         document.frame = FrameSettings(background: .custom(gradient), padding: 30, cornerRadius: 12, shadowAmount: 0.8,
                                        ratio: .link, position: FramePosition(x: 1, y: 0))
-        document.marks = [CaptureEditorTests.mark(.arrow, CGPoint(x: 1, y: 2), CGPoint(x: 30, y: 40))]
+        var loupe = Mark(kind: .magnifier, colour: .white, style: StyleBook.defaultStyle(for: .magnifier),
+                         start: CGPoint(x: 10, y: 10), end: CGPoint(x: 60, y: 60))
+        loupe.style.zoom = 3
+        loupe.style.spotlight = .rectangle
+        document.marks = [loupe]
         let data = try JSONEncoder().encode(document)
         let decoded = try JSONDecoder().decode(EditorDocument.self, from: data)
         #expect(decoded == document)
@@ -471,5 +475,164 @@ struct CaptureEditorFrameTests {
         let third = EditorModel(image: CaptureEditorTests.image(), scale: 1, defaults: defaults)
         #expect(third.escape() == .choseSelect)
         #expect(third.escape() == .close)
+    }
+
+    // MARK: Magnifier
+
+    static func checkerboard(cell: Int = 10, side: Int = 200) -> CGImage {
+        image(width: side, height: side) { context in
+            for row in 0..<(side / cell) {
+                for column in 0..<(side / cell) {
+                    let light = (row + column) % 2 == 0
+                    context.setFillColor(light ? MarkColour.white.cgColor() : MarkColour.ink.cgColor())
+                    context.fill(CGRect(x: column * cell, y: row * cell, width: cell, height: cell))
+                }
+            }
+        }
+    }
+
+    static func loupe(_ rect: CGRect, zoom: Double = 2, shape: SpotlightShape = .rectangle) -> Mark {
+        var mark = Mark(kind: .magnifier, colour: .white, style: StyleBook.defaultStyle(for: .magnifier), start: rect.origin,
+                        end: CGPoint(x: rect.maxX, y: rect.maxY))
+        mark.style.zoom = zoom
+        mark.style.spotlight = shape
+        return mark
+    }
+
+    @Test func atTwiceTheSizeTheCellsComeOutTwiceAsLarge() throws {
+        let renderer = AnnotationRenderer(image: Self.checkerboard(), scale: 1)
+        var document = EditorDocument(imageSize: CGSize(width: 200, height: 200), scale: 1)
+        document.marks = [Self.loupe(CGRect(x: 40, y: 40, width: 120, height: 120))]
+        let image = try #require(renderer.render(document))
+        // Source (70…130) is drawn over 40…160: a 10 px cell becomes 20 px.
+        func light(_ x: Int, _ y: Int) -> Bool { Self.pixel(image, x, y).red > 0.5 }
+        let y = 90
+        #expect(light(45, y) == light(55, y))
+        #expect(light(50, y) != light(70, y))
+        #expect(light(70, y) != light(90, y))
+        #expect(light(62, y) == light(78, y))
+        // Outside the loupe, the cells are their own size.
+        #expect(light(5, 5) != light(15, 5))
+    }
+
+    @Test func aMagnifierNeverShowsWhatARedactionHides() throws {
+        let secret = MarkColour(hex: 0x00FF00)
+        let picture = Self.image(width: 200, height: 200) { context in
+            context.setFillColor(MarkColour.white.cgColor())
+            context.fill(CGRect(x: 0, y: 0, width: 200, height: 200))
+            context.setFillColor(secret.cgColor())
+            context.fill(CGRect(x: 80, y: 90, width: 40, height: 20))
+        }
+        let renderer = AnnotationRenderer(image: picture, scale: 1)
+        var document = EditorDocument(imageSize: CGSize(width: 200, height: 200), scale: 1)
+        var bar = CaptureEditorTests.mark(.redact, CGPoint(x: 75, y: 85), CGPoint(x: 125, y: 115), colour: .ink)
+        bar.style.redact = .solid
+        document.marks = [Self.loupe(CGRect(x: 30, y: 30, width: 140, height: 140), zoom: 3, shape: .ellipse), bar]
+        let image = try #require(renderer.render(document))
+        #expect(Self.near(Self.pixel(image, 100, 100), .ink))
+        for y in stride(from: 30, to: 170, by: 3) {
+            for x in stride(from: 30, to: 170, by: 3) {
+                let pixel = Self.pixel(image, x, y)
+                #expect(!(pixel.green > 0.6 && pixel.red < 0.4 && pixel.blue < 0.4), "secret showed at \(x), \(y)")
+            }
+        }
+
+        // A pixelated bar enlarges as the same blocks it shows unmagnified.
+        bar.style.redact = .pixelate
+        document.marks = [bar]
+        let flat = try #require(renderer.render(document))
+        document.marks = [Self.loupe(CGRect(x: 40, y: 40, width: 120, height: 120)), bar]
+        let enlarged = try #require(renderer.render(document))
+        // Canvas (104, 104) shows source (102, 102) at 2×: the same block.
+        let a = Self.pixel(flat, 104, 104)
+        let b = Self.pixel(enlarged, 104, 104)
+        #expect(abs(a.red - b.red) < 0.06 && abs(a.green - b.green) < 0.06 && abs(a.blue - b.blue) < 0.06)
+    }
+
+    @Test func atTheEdgeTheSourceSlidesInsteadOfTheLoupe() {
+        let area = CGRect(x: 0, y: 0, width: 400, height: 300)
+        let corner = Self.loupe(CGRect(x: -60, y: -50, width: 120, height: 120))
+        let source = MarkGeometry.magnifierSource(corner, within: area)
+        #expect(source.minX == 0)
+        #expect(source.minY == 0)
+        #expect(source.width == 60)
+        let middle = MarkGeometry.magnifierSource(Self.loupe(CGRect(x: 100, y: 100, width: 120, height: 120)), within: area)
+        #expect(middle == CGRect(x: 130, y: 130, width: 60, height: 60))
+        // A crop is an edge too: nothing cropped away is shown.
+        let cropped = MarkGeometry.magnifierSource(Self.loupe(CGRect(x: 280, y: 100, width: 120, height: 120)),
+                                                   within: CGRect(x: 0, y: 0, width: 350, height: 300))
+        #expect(cropped.maxX == 350)
+    }
+
+    @Test func bracketsStepTheZoom() {
+        let model = CaptureEditorTests.model()
+        model.choose(.magnifier)
+        #expect(model.shownStyle.zoom == 2)
+        #expect(model.shownStyle.spotlight == .ellipse)
+        model.stepSize(up: true)
+        #expect(model.shownStyle.zoom == 3)
+        model.stepSize(up: true)
+        model.stepSize(up: true)
+        #expect(model.shownStyle.zoom == 4)
+        model.stepSize(up: false)
+        model.stepSize(up: false)
+        model.stepSize(up: false)
+        model.stepSize(up: false)
+        #expect(model.shownStyle.zoom == 1.5)
+        // A selected magnifier steps too, as one undo step each.
+        model.placeMagnifier(at: CGPoint(x: 200, y: 150))
+        let placed = model.selectedMarks.first
+        #expect(placed?.kind == .magnifier)
+        #expect(placed?.rect.width == 120)
+        #expect(placed?.style.zoom == 1.5)
+        model.stepSize(up: true)
+        #expect(model.selectedMarks.first?.style.zoom == 2)
+        model.undo()
+        #expect(model.selectedMarks.first?.style.zoom == 1.5)
+    }
+
+    @Test func magnifiersSitOverEffectsAndUnderEverythingElse() {
+        var document = EditorDocument(imageSize: CGSize(width: 400, height: 300))
+        let arrow = CaptureEditorTests.mark(.arrow, CGPoint(x: 100, y: 100), CGPoint(x: 200, y: 200))
+        let spotlight = CaptureEditorTests.mark(.spotlight, CGPoint(x: 0, y: 0), CGPoint(x: 50, y: 50))
+        let highlight = CaptureEditorTests.mark(.highlighter, CGPoint(x: 0, y: 0), CGPoint(x: 50, y: 10))
+        let loupe = Self.loupe(CGRect(x: 80, y: 80, width: 140, height: 140), shape: .ellipse)
+        document.marks = [arrow, loupe, spotlight, highlight]
+        #expect(document.drawingOrder.map(\.kind) == [.highlighter, .spotlight, .magnifier, .arrow])
+        // The arrow drawn over it is what a click on the arrow picks up; elsewhere, the loupe.
+        #expect(MarkGeometry.topmost(in: document, at: CGPoint(x: 150, y: 150), tolerance: 4, scale: 1)?.id == arrow.id)
+        #expect(MarkGeometry.topmost(in: document, at: CGPoint(x: 150, y: 110), tolerance: 4, scale: 1)?.id == loupe.id)
+        // A circle's corners aren't part of it.
+        #expect(!MarkGeometry.hitTest(loupe, at: CGPoint(x: 84, y: 84), tolerance: 4, scale: 1))
+        #expect(Mark.Kind.magnifier.isEffect)
+        #expect(Mark.Kind.magnifier.isColourless)
+    }
+
+    @Test func mPicksMagnifyAndAClickPlacesOne() {
+        let defaults = UserDefaults(suiteName: "CaptureEditorFrameTests-\(UUID().uuidString)")!
+        let model = EditorModel(image: CaptureEditorTests.image(width: 800, height: 500), scale: 2, defaults: defaults)
+        let controller = EditorWindowController(model: model, title: "Test")
+        controller.window?.setFrame(NSRect(x: 0, y: 0, width: 1000, height: 700), display: false)
+        controller.window?.contentView?.layoutSubtreeIfNeeded()
+        let canvas = controller.canvas
+        canvas.setZoom(1)
+        let key = NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [], timestamp: 0, windowNumber: 0,
+                                   context: nil, characters: "m", charactersIgnoringModifiers: "m", isARepeat: false,
+                                   keyCode: 46)!
+        #expect(EditorCanvas.bareCommand(for: key) == .magnifier)
+        controller.perform(.magnifier)
+        #expect(model.tool == .magnifier)
+        func mouse(_ type: NSEvent.EventType, _ point: CGPoint) -> NSEvent {
+            NSEvent.mouseEvent(with: type, location: canvas.convert(canvas.viewPoint(fromImage: point), to: nil), modifierFlags: [],
+                               timestamp: 0, windowNumber: controller.window!.windowNumber, context: nil, eventNumber: 0,
+                               clickCount: 1, pressure: 1)!
+        }
+        canvas.mouseDown(with: mouse(.leftMouseDown, CGPoint(x: 400, y: 250)))
+        canvas.mouseUp(with: mouse(.leftMouseUp, CGPoint(x: 400, y: 250)))
+        let placed = model.document.marks.first
+        #expect(placed?.kind == .magnifier)
+        #expect(placed?.rect == CGRect(x: 280, y: 130, width: 240, height: 240))
+        #expect(model.undoManager.undoActionName == "Add Magnifier")
+        #expect(EditorWindowController.minimumSize.width >= 980)
     }
 }

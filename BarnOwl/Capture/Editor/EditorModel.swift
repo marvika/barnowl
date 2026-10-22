@@ -233,7 +233,7 @@ final class EditorModel {
         }
         for kind in Set(selectedMarks.map(\.kind)) { rememberColour(colour, for: kind) }
         changeSelection("Change Colour") { mark in
-            guard mark.kind != .spotlight, mark.kind != .image else { return }
+            guard !mark.kind.isColourless else { return }
             mark.colour = colour
         }
     }
@@ -266,11 +266,14 @@ final class EditorModel {
         }
     }
 
-    /// [ and ]: the next size on the active kind's ladder (text sizes for text).
+    /// [ and ]: the next size on the active kind's ladder (text sizes for text, zooms for magnifiers).
     func stepSize(up: Bool) {
         guard let kind = activeKind else { return }
         let style = shownStyle
-        if kind == .text {
+        if kind == .magnifier {
+            let next = SizeLadder.step(style.zoom, in: SizeLadder.zooms, up: up)
+            updateStyle("Change Zoom") { $0.zoom = next }
+        } else if kind == .text {
             let next = SizeLadder.step(style.fontSize, in: SizeLadder.textSizes, up: up)
             updateStyle("Change Size") { $0.fontSize = next }
         } else {
@@ -307,7 +310,7 @@ final class EditorModel {
             let colour = styleBook.colour(for: kind)
             changeSelection("Reset Style") { mark in
                 mark.style = style
-                if mark.kind != .spotlight { mark.colour = colour }
+                if !mark.kind.isColourless { mark.colour = colour }
             }
         }
     }
@@ -469,6 +472,14 @@ final class EditorModel {
     func add(_ mark: Mark) {
         apply("Add \(mark.kind.title)") { $0.marks.append(mark) }
         selection = [mark.id]
+    }
+
+    /// A click with the Magnify tool: a loupe 120 points across, centred where you clicked.
+    func placeMagnifier(at point: CGPoint) {
+        let rect = MarkGeometry.placedMagnifier(at: point, scale: scale)
+        var mark = newMark(.magnifier, at: rect.origin)
+        mark.end = CGPoint(x: rect.maxX, y: rect.maxY)
+        add(mark)
     }
 
     func add(_ marks: [Mark], name: String) {

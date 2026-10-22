@@ -10,7 +10,7 @@ struct EditorCommand {
         case bringToFront, sendToBack, bringForward, sendBackward
         case alignLeft, alignCentre, alignRight, alignTop, alignMiddle, alignBottom
         case select, arrow, line, rectangle, filled, ellipse, text, counter, highlighter, pen, redact, review
-        case spotlight, crop
+        case spotlight, magnifier, crop
         case colour1, colour2, colour3, colour4, colour5, colour6, colour7, colour8
         case smaller, bigger, pickColour
         case bold, fontBigger, fontSmaller, showFonts
@@ -97,6 +97,7 @@ struct EditorCommand {
         case .pen: .pen
         case .redact: .redact
         case .spotlight: .spotlight
+        case .magnifier: .magnifier
         case .crop: .crop
         }
     }
@@ -150,6 +151,7 @@ struct EditorCommand {
             EditorCommand(.redact, "Redact", key: "b", menu: .tools, group: .tools),
             EditorCommand(.review, "Hide Private Info…", key: "B", .shift, menu: .tools, group: .tools),
             EditorCommand(.spotlight, "Spotlight", key: "s", menu: .tools, group: .tools),
+            EditorCommand(.magnifier, "Magnify", key: "m", menu: .tools, group: .tools),
             EditorCommand(.crop, "Crop", key: "c", menu: .tools, group: .tools),
         ]
         for (index, id) in colourKeys.enumerated() {
