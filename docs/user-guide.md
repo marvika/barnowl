@@ -930,7 +930,7 @@ For Raycast, Alfred, scripts and anything that can open a URL:
 | `barnowl://roost` | The Roost |
 | `barnowl://roost?session=<id>` | The Roost, with one session picked (the widget's links use this; ids look like `claude:<session id>`) |
 | `barnowl://presenter`, `?on=1`, `?on=0` | Presenter mode |
-| `barnowl://capture`, `?mode=window`, `?mode=screen`, `?mode=same` | Capture an area (or a window, the whole screen, or the last area again). Needs Capture on |
+| `barnowl://capture`, `?mode=window`, `?mode=screen`, `?mode=same`, `?mode=text` | Capture an area (or a window, the whole screen, the last area again, or copy the text in an area). Needs Capture on |
 | `barnowl://open?app=Mail` | Open an app's icon |
 | `barnowl://place?app=Mail&row=hidden` | Move an icon |
 | `barnowl://watch?app=Mail` (`&on=0` to stop) | Show when it changes |

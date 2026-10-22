@@ -221,9 +221,13 @@ background, with padding, rounded corners and a shadow, ready to share.
 
 Barn Owl reads the text in each capture **on your Mac** and offers to hide
 what looks private: API keys and tokens, passwords, card numbers, email
-addresses and phone numbers. It never hides anything without asking. And
-every capture stays editable: ⌃⌥⌘E reopens the last one with its marks still
-movable.
+addresses and phone numbers. It never hides anything without asking. The
+same reading gives you **Copy Text**: press T on a selection, or ⌃⌥⌘T from
+anywhere, and the words go to the clipboard.
+
+Every capture stays editable. ⌃⌥⌘E reopens the last one with its marks still
+movable, **Capture History** finds older ones by the words in them, and
+Finder's Open With brings a saved screenshot back with its marks.
 
 Already use CleanShot X or Shottr? Leave Capture off and Barn Owl stays out
 of their way.
