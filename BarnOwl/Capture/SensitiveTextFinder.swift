@@ -163,6 +163,57 @@ enum SensitiveTextFinder {
     /// `forReading`: for Copy Text, where words read best corrected; looking for keys and
     /// addresses, which aren't words, never corrects them.
     static func scan(_ image: CGImage, forReading: Bool = false) async throws -> CaptureText {
+        var text = CaptureText()
+        // A tall scrolling capture is read a strip at a time, so Vision never takes it whole.
+        for strip in strips(height: image.height) {
+            let part: CGImage
+            if strip.rows.count == image.height {
+                part = image
+            } else {
+                let rect = CGRect(x: 0, y: strip.rows.lowerBound, width: image.width, height: strip.rows.count)
+                guard let cropped = image.cropping(to: rect) else { continue }
+                part = cropped
+            }
+            let read = try await read(part, forReading: forReading)
+            let down = CGFloat(strip.rows.lowerBound)
+            // Each line once: from the strip whose own part its middle is in.
+            for line in read.lines where strip.keeps.contains(Int(line.rect.midY + down)) {
+                let words = line.words.map { CaptureText.Word(rect: $0.rect.offsetBy(dx: 0, dy: down), text: $0.text) }
+                text.lines.append(CaptureText.Line(rect: line.rect.offsetBy(dx: 0, dy: down), text: line.text, words: words))
+            }
+            for finding in read.findings where strip.keeps.contains(Int(finding.rect.midY + down)) {
+                let rect = finding.rect.offsetBy(dx: 0, dy: down)
+                text.findings.append(Finding(rect: rect, kind: finding.kind, text: finding.text))
+            }
+        }
+        text.blocks = blocks(of: text.lines.map(\.rect))
+        return text
+    }
+
+    /// Part of a tall picture that's read on its own: `rows`, of which it keeps the lines whose
+    /// middles are in `keeps`. Strips overlap, so a line cut by one's edge is whole in the next.
+    struct Strip: Equatable, Sendable {
+        let rows: Range<Int>
+        let keeps: Range<Int>
+    }
+
+    /// Strips at most `tallest` pixels high, overlapping by `overlap`; one for a picture that fits.
+    static func strips(height: Int, tallest: Int = 4_000, overlap: Int = 300) -> [Strip] {
+        guard height > tallest, tallest > overlap else { return [Strip(rows: 0..<max(height, 0), keeps: 0..<max(height, 0))] }
+        var strips: [Strip] = []
+        var top = 0
+        while true {
+            let bottom = min(height, top + tallest)
+            let last = bottom == height
+            let keepsFrom = strips.isEmpty ? 0 : top + overlap / 2
+            strips.append(Strip(rows: top..<bottom, keeps: keepsFrom..<(last ? height : bottom - overlap / 2)))
+            if last { return strips }
+            top = bottom - overlap
+        }
+    }
+
+    /// Reads one picture (or strip), in its own pixels.
+    private static func read(_ image: CGImage, forReading: Bool) async throws -> CaptureText {
         var request = RecognizeTextRequest()
         request.recognitionLevel = .accurate
         request.usesLanguageCorrection = forReading
@@ -189,7 +240,6 @@ enum SensitiveTextFinder {
                                              text: String(string[range])))
             }
         }
-        text.blocks = blocks(of: text.lines.map(\.rect))
         return text
     }
 

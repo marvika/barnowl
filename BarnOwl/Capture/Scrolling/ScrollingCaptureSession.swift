@@ -74,7 +74,7 @@ final class ScrollingCaptureSession {
         do {
             try await startStream(on: screen)
         } catch {
-            failure = "Barn Owl couldn't watch that area."
+            failure = "Barn Owl can't capture that area."
             await tearDown()
             return nil
         }
@@ -232,26 +232,49 @@ final class ScrollingCaptureSession {
         let top = NSScreen.screens.first?.frame.maxY ?? 0
         let point = CGPoint(x: anchor.x, y: top - anchor.y)
         CGWarpMouseCursorPosition(point)
-        var stalls = 0
-        var share = 0.6
+        var pacer = AutoScrollPacer()
+        var step = pacer.share
         while !Task.isCancelled, decision == nil, !model.isFull {
             let before = model.height
-            let rows = bandHeight > 0 ? bandHeight : Int(area.height * scale)
-            await scroll(by: CGFloat(rows) / scale * share, at: point)
+            await scroll(by: points(step), at: point)
             await settle()
             if Task.isCancelled || decision != nil { return }
             // You moved the pointer: you're taking over.
-            if hypot(NSEvent.mouseLocation.x - anchor.x, NSEvent.mouseLocation.y - anchor.y) > 4 {
+            if pointerMoved(from: anchor) {
                 model.hint = .ready
                 return
             }
-            if lastOutcome == .mismatch { share = max(0.2, share / 2) }
-            stalls = model.height > before ? 0 : stalls + 1
-            if stalls >= 2 {
+            switch pacer.after(grew: model.height > before, lost: lastOutcome == .mismatch) {
+            case .down(let share):
+                step = share
+            case .back(let share):
+                // Back to where the picture left off, then on in smaller steps.
+                await scroll(by: -points(share), at: point)
+                await settle()
+                if Task.isCancelled || decision != nil { return }
+                if pointerMoved(from: anchor) {
+                    model.hint = .ready
+                    return
+                }
+                step = pacer.share
+            case .end:
                 model.hint = .end
+                return
+            case .tooFast:
+                model.hint = .slower
                 return
             }
         }
+    }
+
+    /// A share of the rows that scroll, in points.
+    private func points(_ share: Double) -> CGFloat {
+        let rows = bandHeight > 0 ? bandHeight : Int(area.height * scale)
+        return CGFloat(rows) / scale * share
+    }
+
+    private func pointerMoved(from anchor: CGPoint) -> Bool {
+        hypot(NSEvent.mouseLocation.x - anchor.x, NSEvent.mouseLocation.y - anchor.y) > 4
     }
 
     /// A smooth step: a few small, continuous scroll events, like a trackpad's.
@@ -363,6 +386,52 @@ final class ScrollingCaptureSession {
         let maxX = (rect.maxX * scale).rounded() / scale
         let maxY = (rect.maxY * scale).rounded() / scale
         return CGRect(x: minX, y: minY, width: maxX - minX, height: maxY - minY)
+    }
+}
+
+/// How Auto-Scroll steps down a page: a little over half the band at a time. A step the
+/// stitcher couldn't follow is scrolled back, and the steps get smaller; three in a row and
+/// it hands back to you, to scroll slower. Two steps that move nothing are the end of the page.
+struct AutoScrollPacer: Equatable, Sendable {
+    enum Next: Equatable, Sendable {
+        /// Scroll down by this share of the band.
+        case down(Double)
+        /// The last step went too far to follow: scroll back up by this share, then on, slower.
+        case back(Double)
+        /// Nothing moved, twice.
+        case end
+        /// Even small steps can't be followed.
+        case tooFast
+    }
+
+    static let firstShare = 0.6
+    static let smallestShare = 0.15
+    /// Steps in a row it can't follow before it stops.
+    static let misses = 3
+
+    /// The share of the band the next step down scrolls.
+    private(set) var share = firstShare
+    private var stalls = 0
+    private var missed = 0
+
+    /// After a step down: whether the picture grew, and whether the last frame was lost (it
+    /// didn't line up with the picture).
+    mutating func after(grew: Bool, lost: Bool) -> Next {
+        if lost {
+            stalls = 0
+            missed += 1
+            guard missed < Self.misses else { return .tooFast }
+            let step = share
+            share = max(Self.smallestShare, share / 2)
+            return .back(step)
+        }
+        missed = 0
+        if grew {
+            stalls = 0
+            return .down(share)
+        }
+        stalls += 1
+        return stalls >= 2 ? .end : .down(share)
     }
 }
 
