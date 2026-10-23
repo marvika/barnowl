@@ -8,20 +8,8 @@
   Scripts/make-hero.sh so Capture is in it.
 -->
 
-<!--
-  CAPTURE-NEXT marks what describes Capture's phase 2 (screen recording, GIF,
-  the video editor, scrolling capture, the new Frame backgrounds and the
-  magnifier). It was written from the design's MUST items before they
-  shipped. A CAPTURE-NEXT ... /CAPTURE-NEXT pair wraps whole paragraphs or
-  sections; a single "CAPTURE-NEXT: ..." note names the phase 2 words in the
-  paragraph, list or table right below it. Check each against the build, trim
-  what didn't make it, then remove the markers. Everything else has shipped
-  (0.15.0 and the Unreleased changelog).
--->
-
 <h3 align="center">A tidy menu bar, and the small tools you reach for all day.</h3>
 
-<!-- CAPTURE-NEXT: "screen recordings and GIFs" in the paragraph below is phase 2. -->
 <p align="center">
   Barn Owl hides the menu bar icons you rarely use, then takes on the jobs
   you'd otherwise install several apps for: screenshots, screen recordings
@@ -75,8 +63,6 @@ brew install --cask marvika/tap/barn-owl
 
 ## What's inside
 
-<!-- CAPTURE-NEXT: recordings, GIFs, the video editor and scrolling capture in the Capture row are phase 2. -->
-
 |  |  |
 |---|---|
 | **[A tidy menu bar](#a-tidy-menu-bar)** | Hides the icons you rarely use and shows them on the **Perch** when you want them. Nothing gets lost behind the notch. |
@@ -112,15 +98,14 @@ More in the [user guide](docs/user-guide.md#hiding-icons).
 
 ## Capture
 
-<!-- CAPTURE-NEXT (see the note at the top of this file) -->
 Screenshots and screen recordings, each with an editor of its own, plus
 GIFs and pages longer than your screen. Every capture stays editable, and
 you can find it again later.
-<!-- /CAPTURE-NEXT -->
 
 Capture is optional: turn it on in Settings → Capture or in the setup guide.
 Already happy with CleanShot X or Shottr? Leave it off, and Barn Owl stays
-out of their way.
+out of their way. The [user guide](docs/user-guide.md#capture) goes through
+every key and setting.
 
 ### Screenshots
 
@@ -150,28 +135,26 @@ text, a pen that steadies your hand, spotlight, crop, and redaction that
 pixelates, blurs or covers. Every tool has a single-letter key and remembers
 how you last used it, and every mark stays movable until you're done.
 
-<!--
-  CAPTURE-NEXT. If the new Frame doesn't ship, the shipped wording is:
-  **Frame** puts the capture on a gradient, a colour or your wallpaper, with
-  padding, rounded corners, a shadow and an aspect ratio, ready to share.
--->
 **Magnify** (M) enlarges a detail in a loupe, from 1.5× to 4×. It magnifies
 your redactions along with the picture, so it never shows what you've
 hidden.
 
 **Frame** puts a capture on a background, ready to share. Choose one of nine
-gradients, one of four matched to the colours in your capture, a plain
-colour or your wallpaper, or make a gradient of your own in a few clicks;
-Barn Owl keeps it under **Yours**. Then set the padding, corners and shadow,
-and the shape for where it's going: 16:9, 1:1, 1.91:1 for link previews, 9:16
-for stories and more. Frame remembers your last look.
-<!-- /CAPTURE-NEXT -->
+gradients, gradients matched to the colours in your capture, a plain colour
+or your wallpaper, or make a gradient of your own in a few clicks; Barn Owl
+keeps it under **Yours**. Then set the padding, corners and how strong the
+shadow is, and the shape for where it's going: 16:9, 1:1, 1.91:1 for link
+previews, 9:16 for stories and more, with the capture placed where you like
+in it. An **inset** carries the capture's own edge colour out around it, and
+**Balance Margins** evens out the space around what's in the capture. Frame
+remembers your last look.
 
 Barn Owl reads the text in each capture **on your Mac** and offers to hide
 what looks private: API keys and tokens, passwords, card numbers, email
-addresses and phone numbers. It never hides anything without asking.
+addresses and phone numbers. It never hides anything without asking, and
+hides with a light blur unless you'd rather pixelate or use solid bars
+(Settings → Capture → Hide with).
 
-<!-- CAPTURE-NEXT -->
 ### Record the screen
 
 <!-- IMAGE: docs/images/capture-recording.png (760 wide): the record bar with the microphone menu, then the pill and border around an area being recorded. -->
@@ -188,7 +171,8 @@ too. Barn Owl's own controls never appear in the video.
   from any recording later, from its card or in the editor. GIFs loop, at 15
   frames a second and up to 800 pixels wide.
 - **Like any capture:** a recording gets a card, a place in Capture History
-  and a saved movie, with an option for smaller files.
+  and a saved file, with an option for smaller movies, 60 frames a second,
+  and a ring around your clicks in Settings → Capture.
 
 ### Edit a recording
 
@@ -196,30 +180,31 @@ too. Barn Owl's own controls never appear in the video.
 
 The video editor is the screenshot editor's sibling. Drag a clip's ends to
 trim it, split at the playhead with ⌘B, and delete a piece; the rest closes
-up. Your Mac's sound and your microphone each have their own volume, or
+up. Play a clip slower or faster, crop the picture, and fade the sound in and
+out. Your Mac's sound and your microphone each have their own volume, or
 mute either one. Export an MP4, a MOV or a GIF at the size and quality you
-need. Every step can be undone, and a recording stays editable from Capture
-History.
+need, or pull one frame out to mark up as a picture. Every step can be
+undone, and a recording stays editable from Capture History for a week.
 
 ### Scrolling capture
 
-<!-- IMAGE: docs/images/scrolling-capture.png (760 wide): a long page being captured, with the live preview growing beside it and the Scroll for Me button. -->
+<!-- IMAGE: docs/images/scrolling-capture.png (760 wide): a long page being captured, with the live preview growing beside it and the Auto-Scroll button. -->
 
 For a page longer than your screen, press **⌃⌥⌘S**, or S after you select.
-Scroll down slowly, or click **Scroll for Me**, and watch the picture grow
-beside it. A header or footer that stays put appears once, not on every
-screenful. You get an ordinary capture, up to 30,000 pixels tall, to mark
-up, copy and search.
-<!-- /CAPTURE-NEXT -->
+Scroll down slowly, or click **Auto-Scroll** and Barn Owl scrolls for you,
+and watch the picture grow beside it. A header or footer that stays put
+appears once, not on every screenful. Return keeps the picture. You get an
+ordinary capture, up to 30,000 pixels tall, to mark up, copy and search.
+Auto-Scroll needs Accessibility.
 
 ### Find it again
 
 <!-- IMAGE: docs/images/capture-history.png (760 wide): Capture History with a search for one word and the screenshots that contain it. -->
 
 - **Capture History** keeps every capture in one window, newest first, by
-  day. Search finds a screenshot by the words in it. Open one with its marks
-  still movable, or copy, pin or drag it out. Search for "history", or open
-  it from Settings → Capture.
+  day. Search finds a capture by the words in it, the app it came from or
+  its day. Open one with its marks still movable, or copy, pin or drag it
+  out. Search for "history", or open it from Settings → Capture.
 - **Copy Text:** press T on a selection, or ⌃⌥⌘T from anywhere, and the
   words in it go to the clipboard.
 - **⌃⌥⌘E** reopens the last capture, marks and all.
@@ -227,7 +212,7 @@ up, copy and search.
   screenshot Barn Owl saved comes back with its marks still movable.
 
 Captures stay editable for 30 days, or 7, or not at all, as you choose in
-Settings → Capture.
+Settings → Capture. Recordings, which are bigger, stay for a week at most.
 
 ## Keep awake
 
@@ -380,8 +365,6 @@ With Reduce Motion on, it keeps still.
 
 ## Keyboard shortcuts
 
-<!-- CAPTURE-NEXT: the ⌃⌥⌘5 and ⌃⌥⌘S rows, and R, G and S in the overlay line below the table, are phase 2. -->
-
 | Menu bar and tools | | Capture | |
 |---|---|---|---|
 | Show or hide hidden icons | ⌃⌥⌘B | Capture an area or a window | ⌃⌥⌘4 |
@@ -392,9 +375,10 @@ With Reduce Motion on, it keeps still.
 | | | Start or stop a recording | ⌃⌥⌘5 |
 | | | Scrolling capture | ⌃⌥⌘S |
 
-While you capture: **F** the whole screen, **L** the last area, **Return**
-copy and save, **E** edit, **P** pin, **T** copy text, **R** record, **G**
-GIF, **S** scrolling capture, and **?** for every key.
+While you capture: **A** an area, **W** a window, **F** the whole screen,
+**L** the last area, **Return** copy and save, **E** edit, **P** pin, **T**
+copy text, **R** record, **G** GIF, **S** scrolling capture, and **?** for
+every key. Capture History has no key until you give it one.
 
 Set your own in Settings → Shortcuts and Settings → Capture, where Barn Owl
 can also take over ⇧⌘4 and ⇧⌘3 once macOS's own shortcuts are off.
@@ -403,8 +387,9 @@ can also take over ⇧⌘4 and ⇧⌘3 once macOS's own shortcuts are off.
 
 Shortcuts actions, a `barnowl` command for the Terminal (`barnowl awake 90`,
 `barnowl open vpn`, `barnowl present on`) and `barnowl://` links for Raycast,
-Alfred and scripts, such as `barnowl://roost` for the Roost or
-`barnowl://capture` to capture an area. See the
+Alfred and scripts, such as `barnowl://roost` for the Roost,
+`barnowl://capture` to capture an area or `barnowl://capture?mode=record`
+to record one. See the
 [user guide](docs/user-guide.md#automation).
 
 ## Privacy
@@ -413,8 +398,6 @@ Barn Owl works entirely on your Mac. It has no accounts and no analytics.
 Its only network request is checking GitHub for new versions, which sends
 nothing about you or your Mac.
 
-<!-- CAPTURE-NEXT: the Recordings item is phase 2. -->
-
 - **Captures** stay on your Mac. Their text is read on your Mac, with
   Apple's Vision, to offer hiding private details, for Copy Text and for
   searching Capture History. To keep captures editable, Barn Owl stores the
@@ -422,7 +405,8 @@ nothing about you or your Mac.
   `~/Library/Application Support/Barn Owl/Captures`.
 - **Recordings** stay on your Mac too. The microphone is off until you pick
   one, and Barn Owl hears it only while you record. Your Mac's own sound is
-  recorded only when you turn it on.
+  recorded only when you turn it on. To keep them editable, Barn Owl keeps
+  each recording's movie for a week, up to 2 GB in all.
 - **Clipboard history** skips password managers and anything marked
   private, and never saves images to disk.
 - **Coding agents:** Barn Owl reads the agents' session files in
@@ -472,12 +456,10 @@ The setup guide walks you through where hidden icons appear, which icons
 stay visible, your shortcuts, opening at login, Capture and the coding
 agents. macOS asks for permissions only as each feature needs them:
 
-<!-- CAPTURE-NEXT: the Microphone row is phase 2. -->
-
 | Permission | What it's for | Needed? |
 |---|---|---|
-| **Accessibility** | Listing, moving and opening menu bar icons | For hiding and arranging icons |
-| **Screen Recording** | Real pictures of hidden icons on the Perch, and Capture | For Capture. Otherwise optional: without it you see app icons |
+| **Accessibility** | Listing, moving and opening menu bar icons; Auto-Scroll in scrolling capture | For hiding and arranging icons |
+| **Screen Recording** | Real pictures of hidden icons on the Perch, and Capture, including recordings | For Capture. Otherwise optional: without it you see app icons |
 | **Microphone** | Your voice in a screen recording | Only if you pick a microphone |
 | **Automation** | Bringing an agent's Terminal or iTerm tab to the front; switching dark mode | Asked the first time you use it |
 | **Notifications** | Telling you when an agent needs you and the island can't, or a session ends | Optional |
@@ -530,8 +512,6 @@ privately, as [SECURITY.md](SECURITY.md) describes.
 
 ## Credits
 
-<!-- CAPTURE-NEXT: the macshot sentence is phase 2. Keep it only if recording and scrolling capture did take ideas from it. -->
-
 Barn Owl learned from [Hidden Bar](https://github.com/dwarvesf/hidden) and
 [Frost](https://github.com/frostbar/frost), both MIT; see
 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md). It also learned from reading
@@ -540,8 +520,8 @@ Barn Owl learned from [Hidden Bar](https://github.com/dwarvesf/hidden) and
 The Barn's approach to safe cleaning was inspired by
 [Mole](https://github.com/tw93/mole) (GPL-3), and its map by
 [DaisyDisk](https://daisydiskapp.com); no code was copied.
-Capture's recording and scrolling capture took ideas from
-[macshot](https://github.com/sw33tlie/macshot) (GPL-3); no code was copied.
+Capture took ideas from [macshot](https://github.com/sw33tlie/macshot)
+(GPL-3); no code was copied.
 Hotkeys use [KeyboardShortcuts](https://github.com/sindresorhus/KeyboardShortcuts),
 and updates use [Sparkle](https://sparkle-project.org).
 
