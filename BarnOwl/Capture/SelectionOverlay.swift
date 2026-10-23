@@ -730,7 +730,7 @@ final class SelectionView: NSView {
             keysSheet.removeFromSuperview()
             self.keysSheet = nil
         } else {
-            let sheet = NSHostingView(rootView: CaptureKeysSheet())
+            let sheet = NSHostingView(rootView: CaptureKeysSheet(records: recording != nil))
             addSubview(sheet)
             let size = sheet.fittingSize
             sheet.frame = CGRect(x: (bounds.width - size.width) / 2, y: (bounds.height - size.height) / 2,
@@ -1230,15 +1230,23 @@ struct KeyCap: View {
 
 /// Every key, on "?". Keys written in [brackets] are drawn as key caps, as on the bars.
 struct CaptureKeysSheet: View {
-    private let groups: [(String, [(String, String)])] = [
-        ("Choose", [("Drag", "an area"), ("Click", "a window, or the screen"), ("[A] [W] [F]", "area, window, screen"),
-                    ("[Space]", "switch area and window"), ("[L]", "the last area again")]),
-        ("Shape It", [("[⇧] drag", "square"), ("[⌥] drag", "from the centre"), ("[Space]", "move it while dragging"),
-                      ("[←] [→] [↑] [↓]", "nudge (⇧ 10 pt)"), ("[⌥] arrows", "resize")]),
-        ("Then", [("[↩]", SelectionView.primaryTitle.lowercased()), ("[E]", "edit"), ("[P]", "pin"), ("[T]", "copy its text"),
-                  ("[⌘C] [⌘S]", "copy only · save only"), ("[R] [G]", "record a video · a GIF"), ("[S]", "scrolling capture"),
-                  ("[Esc]", "start over, then cancel")]),
-    ]
+    /// Selecting something to record: the picture's own keys are left out.
+    var records = false
+
+    private var groups: [(String, [(String, String)])] {
+        let then: [(String, String)] = records
+            ? [("[↩]", "record"), ("[R] [G]", "record a video · a GIF"), ("[Esc]", "start over, then cancel")]
+            : [("[↩]", SelectionView.primaryTitle.lowercased()), ("[E]", "edit"), ("[P]", "pin"), ("[T]", "copy its text"),
+               ("[⌘C] [⌘S]", "copy only · save only"), ("[R] [G]", "record a video · a GIF"), ("[S]", "scrolling capture"),
+               ("[Esc]", "start over, then cancel")]
+        return [
+            ("Choose", [("Drag", "an area"), ("Click", "a window, or the screen"), ("[A] [W] [F]", "area, window, screen"),
+                        ("[Space]", "switch area and window"), ("[L]", "the last area again")]),
+            ("Shape It", [("[⇧] drag", "square"), ("[⌥] drag", "from the centre"), ("[Space]", "move it while dragging"),
+                          ("[←] [→] [↑] [↓]", "nudge (⇧ 10 pt)"), ("[⌥] arrows", "resize")]),
+            ("Then", then),
+        ]
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
