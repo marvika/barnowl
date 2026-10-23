@@ -280,7 +280,7 @@ struct RecordingCountdownView: View {
                 .contentTransition(.numericText(countsDown: true))
                 .frame(width: 128, height: 128)
                 .captureGlass(in: .circle, tint: 0.55, floating: true)
-            Text("Click to start now · Esc to cancel")
+            Text(caption)
                 .font(.system(size: 11, weight: .medium))
                 .foregroundStyle(.white.opacity(0.8))
                 .padding(.horizontal, 10).padding(.vertical, 5)
@@ -295,6 +295,13 @@ struct RecordingCountdownView: View {
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("Recording starts in \(model.number)")
         .accessibilityAddTraits(.updatesFrequently)
+    }
+
+    /// For your first recordings, how to stop: R in the overlay records without the record bar's hint.
+    private var caption: String {
+        let start = "Click to start now · Esc to cancel"
+        guard Preferences.captureHintCount <= 10, let keys = KeyboardShortcuts.Name.recordScreen.keys else { return start }
+        return "\(start) · \(keys) stops"
     }
 }
 
