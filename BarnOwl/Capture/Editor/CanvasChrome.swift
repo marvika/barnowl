@@ -28,7 +28,22 @@ struct CanvasChrome {
             context.stroke(rect)
         }
         drawGuides(in: context)
+        if let guide = canvas.penGuide { drawPenGuide(guide, in: context) }
         if canvas.picksColour, let point = canvas.hoverPoint { drawColourPicker(at: point, in: context) }
+    }
+
+    /// The pen's string: a faint line from where the line is to the pointer, and a ring there.
+    private func drawPenGuide(_ guide: (tip: CGPoint, pointer: CGPoint), in context: CGContext) {
+        let tip = canvas.viewPoint(fromImage: guide.tip)
+        let pointer = canvas.viewPoint(fromImage: guide.pointer)
+        context.setStrokeColor(accent.withAlphaComponent(0.55).cgColor)
+        context.setLineWidth(unit)
+        context.setLineDash(phase: 0, lengths: [2 * unit, 2 * unit])
+        context.move(to: tip)
+        context.addLine(to: pointer)
+        context.strokePath()
+        context.setLineDash(phase: 0, lengths: [])
+        context.strokeEllipse(in: CGRect(x: pointer.x - 3 * unit, y: pointer.y - 3 * unit, width: 6 * unit, height: 6 * unit))
     }
 
     // MARK: Selection

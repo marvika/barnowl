@@ -268,12 +268,20 @@ extension EditorCanvas {
         switch gesture {
         case .draw(let id, let origin):
             var document = model.document
-            let step: CGFloat = 1.5 * scale
-            document.update(id) { mark in
-                if mark.kind == .pen {
-                    if MarkGeometry.distance(mark.points.last ?? origin, point) >= step { mark.points.append(point) }
-                    return
+            if let pen = document[id], pen.kind == .pen {
+                let tip = pen.points.last ?? origin
+                let next = Self.steadied(tip: tip, pointer: point, radius: CGFloat(pen.style.smoothing.radius) * screenPoint)
+                // A point every 1.5 screen points, whatever the zoom.
+                let moves = MarkGeometry.distance(tip, next) >= 1.5 * screenPoint
+                if moves {
+                    document.update(id) { $0.points.append(next) }
+                    model.setLive(document)
                 }
+                penGuide = pen.style.smoothing == .off ? nil : (moves ? next : tip, point)
+                redrawChrome()
+                return
+            }
+            document.update(id) { mark in
                 mark.end = constrained ? MarkGeometry.constrainedEnd(point, from: origin, kind: mark.kind) : point
                 if mark.kind == .arrow, mark.style.curved {
                     mark.control = MarkGeometry.defaultBend(start: mark.start, end: mark.end)
@@ -357,7 +365,18 @@ extension EditorCanvas {
         }
     }
 
+    /// Where a smoothed line goes next: it trails the pointer on a string of `radius`, and
+    /// only moves once the pointer pulls the string taut, so small wobbles never reach it.
+    static func steadied(tip: CGPoint, pointer: CGPoint, radius: CGFloat) -> CGPoint {
+        let gap = MarkGeometry.distance(tip, pointer)
+        guard radius > 0 else { return pointer }
+        guard gap > radius else { return tip }
+        let pull: CGFloat = (gap - radius) / gap
+        return CGPoint(x: tip.x + (pointer.x - tip.x) * pull, y: tip.y + (pointer.y - tip.y) * pull)
+    }
+
     private func finishDrawing(_ id: UUID, origin: CGPoint, before: EditorDocument) {
+        penGuide = nil
         if let lastPoint, model.document[id]?.kind == .pen {
             var document = model.document
             document.update(id) { mark in
@@ -372,10 +391,15 @@ extension EditorCanvas {
         default: dragged && mark.rect.width >= 3 * screenPoint && mark.rect.height >= 3 * screenPoint
         }
         guard largeEnough else {
-            // A click: fit to the text or window under it, if there's one.
             model.setLive(before)
             model.selection = []
-            model.placeFitted(at: origin)
+            if mark.kind == .magnifier {
+                // A click: a loupe of the usual size.
+                model.placeMagnifier(at: origin)
+            } else {
+                // A click: fit to the text or window under it, if there's one.
+                model.placeFitted(at: origin)
+            }
             return
         }
         if mark.kind == .redact, mark.style.redact == .solid {
@@ -705,6 +729,7 @@ extension EditorCanvas {
             gestureStart = nil
             marquee = nil
             guides = []
+            penGuide = nil
             model.setLive(start)
             redrawChrome()
             return

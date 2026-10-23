@@ -6,6 +6,10 @@
 	     private menu bar API on macOS 27 are both blocked by the App Sandbox. -->
 	<key>com.apple.security.automation.apple-events</key>
 	<true/>
+	<!-- The hardened runtime silently denies the microphone without it: for recordings,
+	     only when you choose a mic. -->
+	<key>com.apple.security.device.audio-input</key>
+	<true/>
 	<!-- Shared with the desktop widget: the Roost snapshot it shows. -->
 	<key>com.apple.security.application-groups</key>
 	<array>

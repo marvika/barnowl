@@ -58,8 +58,14 @@ final class EditorModel {
     private(set) var styleBook: StyleBook
     /// The frame inspector is open.
     var showsFrame = false {
-        didSet { if showsFrame != oldValue { onFrameVisibilityChange?() } }
+        didSet {
+            guard showsFrame != oldValue else { return }
+            if showsFrame { frameOpened() }
+            onFrameVisibilityChange?()
+        }
     }
+    /// Backgrounds matched to this capture, once worked out (the first time the Frame opens).
+    private(set) var harmony: BackgroundHarmony.Suggestions?
     /// The crop being adjusted while the crop tool is out, in image pixels.
     var cropDraft: CGRect? {
         didSet { onChromeChange?() }
@@ -102,6 +108,9 @@ final class EditorModel {
     @ObservationIgnored private var hintTask: Task<Void, Never>?
     /// The document before a slider started moving, so the whole slide is one undo step.
     @ObservationIgnored private var liveBase: EditorDocument?
+    @ObservationIgnored private var harmonyTask: Task<Void, Never>?
+    /// Your last frame has been offered, the first time the Frame opened.
+    @ObservationIgnored private var lookOffered = false
 
     /// The style book as the editor last kept it, or the one out of the box.
     nonisolated static func savedStyleBook(in defaults: UserDefaults = .standard) -> StyleBook {
@@ -224,7 +233,7 @@ final class EditorModel {
         }
         for kind in Set(selectedMarks.map(\.kind)) { rememberColour(colour, for: kind) }
         changeSelection("Change Colour") { mark in
-            guard mark.kind != .spotlight, mark.kind != .image else { return }
+            guard !mark.kind.isColourless else { return }
             mark.colour = colour
         }
     }
@@ -257,11 +266,14 @@ final class EditorModel {
         }
     }
 
-    /// [ and ]: the next size on the active kind's ladder (text sizes for text).
+    /// [ and ]: the next size on the active kind's ladder (text sizes for text, zooms for magnifiers).
     func stepSize(up: Bool) {
         guard let kind = activeKind else { return }
         let style = shownStyle
-        if kind == .text {
+        if kind == .magnifier {
+            let next = SizeLadder.step(style.zoom, in: SizeLadder.zooms, up: up)
+            updateStyle("Change Zoom") { $0.zoom = next }
+        } else if kind == .text {
             let next = SizeLadder.step(style.fontSize, in: SizeLadder.textSizes, up: up)
             updateStyle("Change Size") { $0.fontSize = next }
         } else {
@@ -298,7 +310,7 @@ final class EditorModel {
             let colour = styleBook.colour(for: kind)
             changeSelection("Reset Style") { mark in
                 mark.style = style
-                if mark.kind != .spotlight { mark.colour = colour }
+                if !mark.kind.isColourless { mark.colour = colour }
             }
         }
     }
@@ -306,6 +318,13 @@ final class EditorModel {
     private func rememberColour(_ colour: MarkColour, for kind: Mark.Kind) {
         styleBook.remember(colour: colour, for: kind)
         saveStyleBook()
+    }
+
+    /// Smoothing changes how the next strokes are drawn, never one already made.
+    func updatePenSmoothing(_ level: PenSmoothing) {
+        var style = styleBook.style(for: .pen)
+        style.smoothing = level
+        rememberStyle(style, for: .pen)
     }
 
     private func rememberStyle(_ style: MarkStyle, for kind: Mark.Kind) {
@@ -455,6 +474,14 @@ final class EditorModel {
         selection = [mark.id]
     }
 
+    /// A click with the Magnify tool: a loupe 120 points across, centred where you clicked.
+    func placeMagnifier(at point: CGPoint) {
+        let rect = MarkGeometry.placedMagnifier(at: point, scale: scale)
+        var mark = newMark(.magnifier, at: rect.origin)
+        mark.end = CGPoint(x: rect.maxX, y: rect.maxY)
+        add(mark)
+    }
+
     func add(_ marks: [Mark], name: String) {
         guard !marks.isEmpty else { return }
         apply(name) { $0.marks += marks }
@@ -463,6 +490,70 @@ final class EditorModel {
 
     func setFrame(_ name: String, _ change: (inout FrameSettings) -> Void) {
         apply(name) { change(&$0.frame) }
+    }
+
+    /// Chooses a background. From no frame at all, your last frame comes back with it (padding,
+    /// corners, shadow, ratio), in the same undo step.
+    func chooseBackground(_ background: FrameBackground) {
+        let look = document.frame.isOn ? nil : styleBook.frameLook
+        let scale = scale
+        setFrame("Change Background") { frame in
+            if let look, background != .none { frame = look.settings(scale: scale) }
+            frame.background = background
+        }
+    }
+
+    /// The Frame opened: work out the matched backgrounds, and the first time, frame an unframed
+    /// capture the way you framed the last one.
+    private func frameOpened() {
+        loadHarmony()
+        guard !lookOffered else { return }
+        lookOffered = true
+        guard !document.frame.isOn, let look = styleBook.frameLook, look.background != .none else { return }
+        let settings = look.settings(scale: scale)
+        apply("Add Frame") { $0.frame = settings }
+    }
+
+    private func loadHarmony() {
+        guard harmony == nil, harmonyTask == nil else { return }
+        let image = image
+        harmonyTask = Task { [weak self] in
+            let found = await Task.detached(priority: .utility) { BackgroundHarmony.suggestions(for: image) }.value
+            self?.harmony = found
+        }
+    }
+
+    /// The crop that would even out the space round what's in the capture, if it's uneven.
+    var balancedCrop: CGRect? {
+        renderer.balancedCrop(for: document.crop)
+    }
+
+    /// Crops so every margin round the capture's content is as small as the smallest.
+    func balanceMargins() {
+        guard let balanced = balancedCrop else { return }
+        apply("Balance Margins") { $0.crop = balanced }
+    }
+
+    /// Keeps a background you made in Yours, in place of `replacing` when you edited one there.
+    @discardableResult
+    func saveBackground(_ background: FrameBackground, replacing id: UUID? = nil) -> UUID {
+        let saved = styleBook.save(background, replacing: id)
+        saveStyleBook()
+        return saved
+    }
+
+    /// Takes a background out of Yours. Like the colour panel's own swatches, it can't be undone.
+    func deleteSavedBackground(_ id: UUID) {
+        styleBook.deleteSaved(id)
+        saveStyleBook()
+    }
+
+    /// The frame you just settled on, remembered in points for the next capture.
+    private func rememberLook(from before: EditorDocument) {
+        let frame = document.frame
+        guard frame != before.frame, frame.isOn else { return }
+        styleBook.frameLook = FrameLook(frame, scale: scale)
+        saveStyleBook()
     }
 
     /// Changes the frame without an undo step, while a slider moves.
@@ -593,6 +684,7 @@ final class EditorModel {
     }
 
     private func registerUndo(restoring snapshot: EditorDocument, _ name: String) {
+        rememberLook(from: snapshot)
         undoManager.beginUndoGrouping()
         undoManager.registerUndo(withTarget: self) { model in
             MainActor.assumeIsolated { model.restore(snapshot, name) }

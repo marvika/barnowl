@@ -1,4 +1,5 @@
 import AppKit
+import KeyboardShortcuts
 import SwiftUI
 
 enum CaptureMode: String, CaseIterable, Identifiable {
@@ -33,6 +34,22 @@ enum CaptureMode: String, CaseIterable, Identifiable {
         case .screen: "Click a screen · ? for keys"
         }
     }
+    /// The hint while selecting something to record.
+    var recordHint: String {
+        switch self {
+        case .area: "Drag an area or click a window to record · L for the last area"
+        case .window: "Click a window to record · Space to drag an area"
+        case .screen: "Click a screen to record"
+        }
+    }
+    /// The hint while selecting something for a scrolling capture.
+    var scrollHint: String {
+        switch self {
+        case .area: "Drag over the part that scrolls · L for the last area"
+        case .window: "Click a window to scroll through · Space to drag an area"
+        case .screen: "Click a screen to scroll through"
+        }
+    }
 }
 
 /// What to do with what you've selected.
@@ -40,6 +57,31 @@ enum CaptureAction {
     /// Copy and save, as Settings › Capture says.
     case primary
     case edit, pin, copy, save
+    /// The words in it, not the picture.
+    case copyText
+    /// Record it, as a video or as a GIF.
+    case record, recordGIF
+    /// A scrolling capture of it.
+    case scroll
+
+    /// Records or scrolls: needs more than a sliver to work with.
+    var needsRoom: Bool { self == .record || self == .recordGIF || self == .scroll }
+
+    /// What Return does, as the overlay was started: copy the words, record, scroll, or
+    /// copy and save as usual.
+    static func onReturn(copiesText: Bool = false, recording: RecordingSetup? = nil, scrolls: Bool = false) -> Self {
+        if copiesText { return .copyText }
+        if let recording { return recording.makesGIF ? .recordGIF : .record }
+        return scrolls ? .scroll : .primary
+    }
+}
+
+/// What the record bar offers, when the overlay is up to record.
+struct RecordingSetup {
+    var makesGIF = false
+    var microphones: [Microphone] = []
+    var micStatus = MicrophoneStatus.notAsked
+    var allowMicrophone: () -> Void = {}
 }
 
 /// What you've selected.
@@ -70,13 +112,22 @@ final class SelectionOverlay {
     /// Asks for new pictures when an option that changes them is switched.
     var onOptionsChanged: (() -> Void)?
 
-    init(snapshots: [DisplaySnapshot], targets: [WindowTarget], mode: CaptureMode,
+    /// `copiesText`: started to copy text, so Return copies the words in the selection.
+    /// `recording`: started to record, so the selection gets the record bar and Return records.
+    /// `scrolls`: started for a scrolling capture, so Return starts one.
+    /// `canRecord`: false while a recording is under way, so Record, GIF and Scroll aren't offered.
+    init(snapshots: [DisplaySnapshot], targets: [WindowTarget], mode: CaptureMode, copiesText: Bool = false,
+         recording: RecordingSetup? = nil, scrolls: Bool = false, canRecord: Bool = true,
          completion: @escaping (SelectionResult) -> Void) {
         self.mode = mode
         self.completion = completion
         let hints = Preferences.captureHintCount < 10
         for snapshot in snapshots {
             let window = OverlayWindow(snapshot: snapshot, targets: targets, mode: mode, showsHints: hints)
+            window.selection.copiesText = copiesText
+            window.selection.recording = recording
+            window.selection.scrolls = scrolls
+            window.selection.canRecord = canRecord
             window.selection.onResult = { [weak self] in self?.finish($0) }
             window.selection.onMode = { [weak self] in self?.setMode($0) }
             window.selection.onSelect = { [weak self, weak window] in self?.selectionStarted(in: window) }
@@ -240,6 +291,7 @@ final class SelectionView: NSView {
     private let loupe = Loupe()
     private var modeBar: NSHostingView<CaptureModeBar>?
     private var actionBar: NSHostingView<CaptureActionBar>?
+    private var recordBar: NSHostingView<RecordBar>?
     private var keysSheet: NSHostingView<CaptureKeysSheet>?
 
     private var gesture: Gesture?
@@ -253,6 +305,20 @@ final class SelectionView: NSView {
     private var selectedWindow: WindowTarget?
     private var selectedScreen = false
     private var hovered: WindowTarget?
+    /// Started to copy text: Return copies the words in the selection, not the picture.
+    var copiesText = false {
+        didSet { modeBar?.rootView = modeBarView }
+    }
+    /// Started to record: the record bar instead of the action bar, and Return records.
+    var recording: RecordingSetup? {
+        didSet { modeBar?.rootView = modeBarView }
+    }
+    /// Started for a scrolling capture: Return starts one.
+    var scrolls = false {
+        didSet { modeBar?.rootView = modeBarView }
+    }
+    /// Nothing is being recorded: Record, GIF and Scroll are on offer.
+    var canRecord = true
 
     init(snapshot: DisplaySnapshot, targets: [WindowTarget], mode: CaptureMode, showsHints: Bool) {
         self.snapshot = snapshot
@@ -330,7 +396,9 @@ final class SelectionView: NSView {
     }
 
     private var modeBarView: CaptureModeBar {
-        CaptureModeBar(mode: mode, showsHints: showsHints, select: { [weak self] in self?.onMode?($0) },
+        CaptureModeBar(mode: mode, showsHints: showsHints, copiesText: copiesText, records: recording != nil,
+                       scrolls: scrolls,
+                       select: { [weak self] in self?.onMode?($0) },
                        options: { [weak self] in self?.onOptions?() },
                        cancel: { [weak self] in self?.onResult?(.cancelled) })
     }
@@ -591,11 +659,17 @@ final class SelectionView: NSView {
         default:
             break
         }
+        // Recording, the picture's own actions are left out, so a stray key never takes one.
+        let picture = recording == nil
         switch (key, command) {
-        case ("c", true): if selection != nil { act(.copy) }
-        case ("s", true): if selection != nil { act(.save) }
-        case ("e", false): if selection != nil { act(.edit) }
-        case ("p", false): if selection != nil { act(.pin) }
+        case ("c", true): if selection != nil, picture { act(.copy) }
+        case ("s", true): if selection != nil, picture { act(.save) }
+        case ("e", false): if selection != nil, picture { act(.edit) }
+        case ("p", false): if selection != nil, picture { act(.pin) }
+        case ("t", false): if selection != nil, picture { act(.copyText) }
+        case ("r", false): if selection != nil, canRecord { act(.record) }
+        case ("g", false): if selection != nil, canRecord { act(.recordGIF) }
+        case ("s", false): if selection != nil, picture, canRecord { act(.scroll) }
         case ("a", false): onMode?(.area)
         case ("w", false): onMode?(.window)
         case ("f", false): onMode?(.screen)
@@ -614,7 +688,8 @@ final class SelectionView: NSView {
     /// carries no characters (some automation tools send those).
     static func letter(for event: NSEvent) -> String {
         if let characters = event.charactersIgnoringModifiers?.lowercased(), !characters.isEmpty { return characters }
-        let byKey: [UInt16: String] = [0: "a", 1: "s", 3: "f", 8: "c", 13: "w", 14: "e", 35: "p", 37: "l"]
+        let byKey: [UInt16: String] = [0: "a", 1: "s", 3: "f", 5: "g", 8: "c", 13: "w", 14: "e", 15: "r", 17: "t", 35: "p",
+                                       37: "l"]
         return byKey[event.keyCode] ?? ""
     }
 
@@ -630,7 +705,11 @@ final class SelectionView: NSView {
 
     private func act(_ action: CaptureAction) {
         guard let selection else { return }
+        var action = action
+        if action == .primary { action = .onReturn(copiesText: copiesText, recording: recording, scrolls: scrolls) }
         guard selection.width >= 1, selection.height >= 1 else { return NSSound.beep() }
+        // A recording or a scroll needs something to see.
+        if action.needsRoom, selection.width < 32 || selection.height < 32 { return NSSound.beep() }
         if selectedScreen, selection == bounds {
             onResult?(.done(.screen(snapshot), action))
         } else if let selectedWindow {
@@ -656,7 +735,7 @@ final class SelectionView: NSView {
             keysSheet.removeFromSuperview()
             self.keysSheet = nil
         } else {
-            let sheet = NSHostingView(rootView: CaptureKeysSheet())
+            let sheet = NSHostingView(rootView: CaptureKeysSheet(records: recording != nil, canRecord: canRecord))
             addSubview(sheet)
             let size = sheet.fittingSize
             sheet.frame = CGRect(x: (bounds.width - size.width) / 2, y: (bounds.height - size.height) / 2,
@@ -755,28 +834,57 @@ final class SelectionView: NSView {
                 modeBar.frame = CGRect(x: (bounds.width - size.width) / 2, y: 28, width: size.width, height: size.height)
             }
         }
-        if let selection, gesture == nil {
-            let bar = actionBar ?? {
-                let bar = NSHostingView(rootView: actionBarView)
-                addSubview(bar)
-                actionBar = bar
-                return bar
-            }()
-            bar.rootView = actionBarView
-            let size = bar.fittingSize
-            var y = selection.minY - size.height - 10
-            if y < 12 { y = selection.maxY + 10 }
-            if y + size.height > bounds.maxY - 12 { y = selection.minY + 12 }
-            let x = min(max(selection.midX - size.width / 2, 12), bounds.width - size.width - 12)
-            bar.frame = CGRect(x: x, y: y, width: size.width, height: size.height)
-            bar.isHidden = false
-        } else {
+        guard let selection, gesture == nil else {
             actionBar?.isHidden = true
+            recordBar?.isHidden = true
+            return
         }
+        let bar: NSView
+        if recording != nil {
+            let host = recordBar ?? {
+                let host = NSHostingView(rootView: recordBarView)
+                addSubview(host)
+                recordBar = host
+                return host
+            }()
+            host.rootView = recordBarView
+            bar = host
+        } else {
+            let host = actionBar ?? {
+                let host = NSHostingView(rootView: actionBarView)
+                addSubview(host)
+                actionBar = host
+                return host
+            }()
+            host.rootView = actionBarView
+            bar = host
+        }
+        let size = bar.fittingSize
+        var y = selection.minY - size.height - 10
+        if y < 12 { y = selection.maxY + 10 }
+        if y + size.height > bounds.maxY - 12 { y = selection.minY + 12 }
+        let x = min(max(selection.midX - size.width / 2, 12), bounds.width - size.width - 12)
+        bar.frame = CGRect(x: x, y: y, width: size.width, height: size.height)
+        bar.isHidden = false
+    }
+
+    private var recordBarView: RecordBar {
+        let setup = recording ?? RecordingSetup()
+        return RecordBar(microphones: setup.microphones, micStatus: setup.micStatus, makesGIF: setup.makesGIF,
+                         showsHint: showsHints,
+                         setGIF: { [weak self] gif in
+                             self?.recording?.makesGIF = gif
+                             self?.update()
+                         },
+                         record: { [weak self] in self?.act(.primary) },
+                         allowMicrophone: { [weak self] in self?.recording?.allowMicrophone() },
+                         cancel: { [weak self] in self?.clearSelection() })
     }
 
     private var actionBarView: CaptureActionBar {
-        CaptureActionBar(primary: Self.primaryTitle, showsHint: showsHints) { [weak self] action in
+        CaptureActionBar(primary: copiesText ? "Copy Text" : scrolls ? "Start Capture" : Self.primaryTitle,
+                         copiesText: copiesText, scrolls: scrolls, records: canRecord,
+                         showsHint: showsHints) { [weak self] action in
             if let action { self?.act(action) } else { self?.clearSelection() }
         }
     }
@@ -908,6 +1016,11 @@ private final class Loupe {
 struct CaptureModeBar: View {
     let mode: CaptureMode
     let showsHints: Bool
+    var copiesText = false
+    /// Selecting something to record.
+    var records = false
+    /// Selecting something for a scrolling capture.
+    var scrolls = false
     let select: (CaptureMode) -> Void
     let options: () -> Void
     let cancel: () -> Void
@@ -918,6 +1031,25 @@ struct CaptureModeBar: View {
     var body: some View {
         VStack(spacing: 6) {
             HStack(spacing: 2) {
+                if records {
+                    HStack(spacing: 6) {
+                        Circle().fill(Color(red: 1, green: 0.27, blue: 0.23)).frame(width: 8, height: 8)
+                        Text("Record").font(.system(size: 13, weight: .semibold))
+                    }
+                    .foregroundStyle(.white)
+                    .padding(.leading, 10).padding(.trailing, 6)
+                    .accessibilityElement(children: .combine)
+                    Divider().frame(height: 18).padding(.horizontal, 4)
+                } else if scrolls {
+                    HStack(spacing: 6) {
+                        Image(systemName: "rectangle.expand.vertical").font(.system(size: 13, weight: .medium))
+                        Text("Scrolling Capture").font(.system(size: 13, weight: .semibold))
+                    }
+                    .foregroundStyle(.white)
+                    .padding(.leading, 10).padding(.trailing, 6)
+                    .accessibilityElement(children: .combine)
+                    Divider().frame(height: 18).padding(.horizontal, 4)
+                }
                 ForEach(CaptureMode.allCases) { item in
                     Button { select(item) } label: {
                         HStack(spacing: 6) {
@@ -960,15 +1092,16 @@ struct CaptureModeBar: View {
                 .help("Cancel (Esc)")
                 .accessibilityLabel("Cancel")
             }
-            if showsHints {
-                Text(mode.hint)
+            if showsHints || copiesText || records || scrolls {
+                Text(copiesText ? "Drag over text to copy it · click a window for all of its text"
+                                : records ? mode.recordHint : scrolls ? mode.scrollHint : mode.hint)
                     .font(.system(size: 11))
                     .foregroundStyle(.white.opacity(0.7))
                     .padding(.bottom, 2)
             }
         }
         .padding(6)
-        .glassEffect(.regular.tint(Brand.indigoDeep.opacity(0.5)), in: .rect(cornerRadius: 20))
+        .captureGlass(in: .rect(cornerRadius: 20))
         .environment(\.colorScheme, .dark)
         .fixedSize()
     }
@@ -982,6 +1115,12 @@ struct CaptureModeBar: View {
 /// What to do with the selection: the main action on Return, and the others with a letter each.
 struct CaptureActionBar: View {
     let primary: String
+    /// Copying text: the main action copies the words, so there's no separate Text button.
+    var copiesText = false
+    /// For a scrolling capture: the main action starts it, and nothing else is offered.
+    var scrolls = false
+    /// Recording is possible: false while one is under way, so Record, GIF and Scroll are left out.
+    var records = true
     let showsHint: Bool
     /// nil closes the selection.
     let act: (CaptureAction?) -> Void
@@ -989,9 +1128,22 @@ struct CaptureActionBar: View {
     var body: some View {
         VStack(spacing: 5) {
             HStack(spacing: 4) {
-                BarButton(title: "Edit", symbol: "pencil", key: "E") { act(.edit) }
-                BarButton(title: "Pin", symbol: "pin", key: "P") { act(.pin) }
-                BarButton(title: primary, symbol: "arrow.down.doc", key: "↩", prominent: true) { act(.primary) }
+                if !scrolls {
+                    BarButton(title: "Edit", symbol: "pencil", key: "E") { act(.edit) }
+                    BarButton(title: "Pin", symbol: "pin", key: "P") { act(.pin) }
+                }
+                if !copiesText && !scrolls {
+                    BarButton(title: "Text", symbol: "text.viewfinder", key: "T") { act(.copyText) }
+                    Divider().frame(height: 18).padding(.horizontal, 2)
+                    if records {
+                        BarButton(title: "Record", symbol: "record.circle", key: "R", compact: true) { act(.record) }
+                        BarButton(title: "Record a GIF", glyph: "GIF", key: "G", compact: true) { act(.recordGIF) }
+                        BarButton(title: "Scrolling Capture", symbol: "rectangle.expand.vertical", key: "S",
+                                  compact: true) { act(.scroll) }
+                        Divider().frame(height: 18).padding(.horizontal, 2)
+                    }
+                }
+                BarButton(title: primary, symbol: primarySymbol, key: "↩", prominent: true) { act(.primary) }
                 Button { act(nil) } label: {
                     Image(systemName: "xmark").font(.system(size: 11, weight: .bold))
                         .foregroundStyle(.white.opacity(0.75))
@@ -1003,40 +1155,57 @@ struct CaptureActionBar: View {
                 .accessibilityLabel("Start over")
             }
             if showsHint {
-                Text("Drag the edges to adjust · drag inside to move · Esc to start over")
+                // A scrolling capture's first time: what happens after Return.
+                Text(scrolls ? "Return to start, then scroll down slowly · Esc to start over"
+                             : "Drag the edges to adjust · drag inside to move · Esc to start over")
                     .font(.system(size: 11))
                     .foregroundStyle(.white.opacity(0.7))
             }
         }
         .padding(5)
-        .glassEffect(.regular.tint(Brand.indigoDeep.opacity(0.5)), in: .rect(cornerRadius: 18))
+        .captureGlass(in: .rect(cornerRadius: 18))
         .environment(\.colorScheme, .dark)
         .fixedSize()
     }
 
-    private struct BarButton: View {
+    private var primarySymbol: String {
+        copiesText ? "text.viewfinder" : scrolls ? "rectangle.expand.vertical" : "arrow.down.doc"
+    }
+
+    struct BarButton: View {
         let title: String
-        let symbol: String
+        var symbol = ""
+        /// A few letters in place of a symbol, like GIF.
+        var glyph = ""
         let key: String
         var prominent = false
+        /// Just the symbol and its key; the title shows on hover.
+        var compact = false
         let action: () -> Void
         @State private var hovering = false
 
         var body: some View {
             Button(action: action) {
                 HStack(spacing: 6) {
-                    Image(systemName: symbol).font(.system(size: 12, weight: .semibold))
-                    Text(title).font(.system(size: 13, weight: .semibold))
+                    if glyph.isEmpty {
+                        Image(systemName: symbol).font(.system(size: 12, weight: .semibold))
+                    } else {
+                        Text(glyph).font(.system(size: 9, weight: .heavy, design: .rounded))
+                            .padding(.horizontal, 2.5).padding(.vertical, 1)
+                            .overlay { RoundedRectangle(cornerRadius: 3).strokeBorder(.white, lineWidth: 1.2) }
+                    }
+                    if !compact { Text(title).font(.system(size: 13, weight: .semibold)) }
                     KeyCap(key, onAccent: prominent)
                 }
                 .foregroundStyle(.white)
-                .padding(.horizontal, 11).padding(.vertical, 6)
+                .padding(.horizontal, compact ? 9 : 11).padding(.vertical, 6)
                 .background(background, in: .capsule)
                 .contentShape(.capsule)
             }
             .buttonStyle(PressableStyle())
             .onHover { hovering = $0 }
             .help("\(title) (\(key))")
+            .accessibilityLabel(title)
         }
 
         private var background: AnyShapeStyle {
@@ -1047,54 +1216,136 @@ struct CaptureActionBar: View {
 }
 
 /// A key's letter in a small rounded box.
-private struct KeyCap: View {
+struct KeyCap: View {
     let key: String
     var onAccent = false
+    /// The keys sheet's size, beside 12 pt text.
+    var large = false
 
-    init(_ key: String, onAccent: Bool = false) {
+    init(_ key: String, onAccent: Bool = false, large: Bool = false) {
         self.key = key
         self.onAccent = onAccent
+        self.large = large
     }
 
     var body: some View {
         Text(key)
-            .font(.system(size: 10.5, weight: .semibold, design: .rounded))
-            .padding(.horizontal, 4).padding(.vertical, 1)
-            .background(.white.opacity(onAccent ? 0.22 : 0.1), in: .rect(cornerRadius: 4))
-            .foregroundStyle(.white.opacity(0.8))
+            .font(.system(size: large ? 11.5 : 10.5, weight: .semibold, design: .rounded))
+            .padding(.horizontal, large ? 5 : 4).padding(.vertical, large ? 2 : 1)
+            .frame(minWidth: large ? 20 : 0)
+            .background(.white.opacity(onAccent ? 0.22 : large ? 0.14 : 0.1), in: .rect(cornerRadius: large ? 5 : 4))
+            .foregroundStyle(.white.opacity(large ? 0.92 : 0.8))
     }
 }
 
-/// Every key, on "?".
+/// Every key, on "?". Keys written in [brackets] are drawn as key caps, as on the bars.
 struct CaptureKeysSheet: View {
-    private let groups: [(String, [(String, String)])] = [
-        ("Choose", [("Drag", "an area"), ("Click", "a window, or the screen"), ("A · W · F", "area, window, screen"),
-                    ("Space", "switch area and window"), ("L", "the last area again")]),
-        ("Shape it", [("⇧ drag", "square"), ("⌥ drag", "from the centre"), ("Space while dragging", "move it"),
-                      ("Arrows", "nudge (⇧ 10 pt)"), ("⌥ Arrows", "resize")]),
-        ("Then", [("Return", SelectionView.primaryTitle.lowercased()), ("E", "edit"), ("P", "pin"), ("⌘C · ⌘S", "copy only · save only"),
-                  ("Esc", "start over, then cancel")]),
-    ]
+    /// Selecting something to record: the picture's own keys are left out.
+    var records = false
+    /// Nothing is being recorded: false leaves out Record, GIF and Scroll, as the bar does.
+    var canRecord = true
+
+    private var groups: [(String, [(String, String)])] {
+        let recordKeys: Set<String> = canRecord ? [] : ["[R] [G]", "[S]"]
+        let then: [(String, String)] = records
+            ? [("[↩]", "record"), ("[R] [G]", "record a video · a GIF"), ("[Esc]", "start over, then cancel")]
+            : [("[↩]", SelectionView.primaryTitle.lowercased()), ("[E]", "edit"), ("[P]", "pin"), ("[T]", "copy its text"),
+               ("[⌘C] [⌘S]", "copy only · save only"), ("[R] [G]", "record a video · a GIF"), ("[S]", "scrolling capture"),
+               ("[Esc]", "start over, then cancel")]
+        return [
+            ("Choose", [("Drag", "an area"), ("Click", "a window, or the screen"), ("[A] [W] [F]", "area, window, screen"),
+                        ("[Space]", "switch area and window"), ("[L]", "the last area again")]),
+            ("Shape It", [("[⇧] drag", "square"), ("[⌥] drag", "from the centre"), ("[Space]", "move it while dragging"),
+                          ("[←] [→] [↑] [↓]", "nudge (⇧ 10 pt)"), ("[⌥] arrows", "resize")]),
+            ("Then", then.filter { !recordKeys.contains($0.0) }),
+        ]
+    }
 
     var body: some View {
-        HStack(alignment: .top, spacing: 28) {
-            ForEach(groups, id: \.0) { group in
-                VStack(alignment: .leading, spacing: 7) {
-                    Text(group.0).font(.system(size: 12, weight: .bold)).foregroundStyle(.white.opacity(0.6))
-                    ForEach(group.1, id: \.0) { row in
-                        HStack(spacing: 10) {
-                            Text(row.0).font(.system(size: 12, weight: .semibold, design: .rounded))
-                                .frame(minWidth: 110, alignment: .leading)
-                            Text(row.1).font(.system(size: 12)).foregroundStyle(.white.opacity(0.8))
+        VStack(alignment: .leading, spacing: 18) {
+            HStack(alignment: .top, spacing: 32) {
+                ForEach(groups, id: \.0) { group in
+                    VStack(alignment: .leading, spacing: 8) {
+                        header(group.0)
+                        Grid(alignment: .leading, horizontalSpacing: 12, verticalSpacing: 7) {
+                            ForEach(group.1, id: \.0) { row in
+                                GridRow {
+                                    Self.keys(row.0).frame(minHeight: 20)
+                                    Text(row.1).font(.system(size: 12)).foregroundStyle(.white.opacity(0.8))
+                                        .fixedSize()
+                                }
+                            }
                         }
-                        .foregroundStyle(.white)
                     }
+                }
+            }
+            Rectangle().fill(.white.opacity(0.14)).frame(height: 0.5)
+            HStack(spacing: 22) {
+                if !anywhere.isEmpty {
+                    header("Anywhere")
+                    ForEach(anywhere, id: \.0) { item in
+                        HStack(spacing: 8) {
+                            Self.keys("[\(item.0)]")
+                            Text(item.1).font(.system(size: 12)).foregroundStyle(.white.opacity(0.8))
+                        }
+                    }
+                }
+                Spacer(minLength: 0)
+                HStack(spacing: 8) {
+                    Self.keys("[?]")
+                    Text("shows or hides these").font(.system(size: 12)).foregroundStyle(.white.opacity(0.6))
                 }
             }
         }
         .padding(22)
-        .glassEffect(.regular.tint(Brand.indigoDeep.opacity(0.6)), in: .rect(cornerRadius: 22))
+        .captureGlass(in: .rect(cornerRadius: 22), tint: 0.6)
         .environment(\.colorScheme, .dark)
         .fixedSize()
+    }
+
+    /// The shortcuts that work from any app, as you've set them.
+    private var anywhere: [(String, String)] {
+        var items: [(String, String)] = []
+        if let keys = KeyboardShortcuts.Name.recordScreen.keys { items.append((keys, "record, and again to stop")) }
+        if let keys = KeyboardShortcuts.Name.captureScrolling.keys { items.append((keys, "scrolling capture")) }
+        return items
+    }
+
+    private func header(_ title: String) -> some View {
+        Text(title).font(.system(size: 12, weight: .bold)).foregroundStyle(.white.opacity(0.6))
+    }
+
+    /// "[⇧] drag": a ⇧ key cap, then "drag".
+    static func keys(_ text: String) -> some View {
+        HStack(spacing: 4) {
+            ForEach(Array(tokens(text).enumerated()), id: \.offset) { _, token in
+                if token.isKey {
+                    KeyCap(token.text, large: true)
+                } else {
+                    Text(token.text).font(.system(size: 12, weight: .semibold))
+                }
+            }
+        }
+        .foregroundStyle(.white)
+    }
+
+    /// Splits "[⌥] arrows" into its key caps and words.
+    nonisolated static func tokens(_ text: String) -> [(text: String, isKey: Bool)] {
+        var tokens: [(text: String, isKey: Bool)] = []
+        var current = ""
+        var inKey = false
+        for character in text {
+            guard (character == "[" && !inKey) || (character == "]" && inKey) else {
+                current.append(character)
+                continue
+            }
+            let trimmed = current.trimmingCharacters(in: .whitespaces)
+            if !trimmed.isEmpty { tokens.append((trimmed, inKey)) }
+            current = ""
+            inKey.toggle()
+        }
+        let rest = current.trimmingCharacters(in: .whitespaces)
+        if !rest.isEmpty { tokens.append((rest, false)) }
+        return tokens
     }
 }

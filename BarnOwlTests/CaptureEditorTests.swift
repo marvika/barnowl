@@ -537,6 +537,18 @@ struct CaptureEditorTests {
         #expect(SmartFit.highlights(from: CGPoint(x: 300, y: 150), to: CGPoint(x: 60, y: 70), insight: insight) == nil)
     }
 
+    @Test func redactPixelatesButHideBlurs() {
+        var book = StyleBook()
+        #expect(book.style(for: .redact).redact == .pixelate)
+        #expect(StyleBook.hideStyle(.blur).redact == .blur && StyleBook.hideStyle(.blur).strength == .light)
+        // Hide follows its own setting, never the Redact tool's last style.
+        var solid = book.style(for: .redact)
+        solid.redact = .solid
+        book.remember(style: solid, for: .redact)
+        #expect(StyleBook.hideStyle(.blur).redact == .blur)
+        #expect(StyleBook.hideStyle(.solid).redact == .solid)
+    }
+
     @Test func hidePrivateInfoBlursLightlyInOneStep() {
         let model = Self.model(insight: Self.insight())
         #expect(model.visibleSecrets.count == 1)
@@ -753,9 +765,9 @@ struct CaptureEditorTests {
         let data = try JSONEncoder().encode(document)
         let decoded = try JSONDecoder().decode(EditorDocument.self, from: data)
         #expect(decoded == document)
-        #expect(decoded.schemaVersion == 2)
+        #expect(decoded.schemaVersion == 3)
         let json = try JSONSerialization.jsonObject(with: data) as? [String: Any]
-        #expect(json?["schemaVersion"] as? Int == 2)
+        #expect(json?["schemaVersion"] as? Int == 3)
     }
 
     @Test func documentsWithMissingFieldsStillOpen() throws {

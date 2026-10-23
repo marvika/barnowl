@@ -119,6 +119,7 @@ struct HintStrip: View {
         case .pen: "Draw freely"
         case .redact: "Drag to hide · click a word to hide it · ⇧B finds private info"
         case .spotlight: "Drag to light up an area · click text or a window to fit it"
+        case .magnifier: "Drag to magnify · click to place one · [ ] zoom"
         case .crop: "Drag the edges · Return crops · Esc cancels"
         }
     }
@@ -139,7 +140,7 @@ struct SecretBanner: View {
                 .lineLimit(1)
             Button(model.hidePrivateTitle) { model.hidePrivate() }
                 .buttonStyle(AmberButtonStyle())
-                .help(model.privateCount == 1 ? "Hide it, as the Redact tool would" : "Hide them, as the Redact tool would")
+                .help(model.privateCount == 1 ? "Hide it in what you copy and save" : "Hide them in what you copy and save")
             Button("Review") { model.beginReview() }
                 .help("See everything private before hiding it (⇧B)")
             Button {

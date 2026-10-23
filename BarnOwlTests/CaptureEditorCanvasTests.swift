@@ -138,6 +138,22 @@ struct CaptureEditorCanvasTests {
         #expect(model.document.marks.isEmpty)
     }
 
+    @Test func thePenTrailsThePointerOnAString() {
+        let tip = CGPoint(x: 100, y: 100)
+        // Within the string's reach the line stays put, so small wobbles never reach it.
+        #expect(EditorCanvas.steadied(tip: tip, pointer: CGPoint(x: 105, y: 100), radius: 10) == tip)
+        // Pulled further, it follows to the string's length behind the pointer.
+        #expect(EditorCanvas.steadied(tip: tip, pointer: CGPoint(x: 130, y: 100), radius: 10) == CGPoint(x: 120, y: 100))
+        // Off: right under the pointer.
+        #expect(EditorCanvas.steadied(tip: tip, pointer: CGPoint(x: 103, y: 104), radius: 0) == CGPoint(x: 103, y: 104))
+        // Medium out of the box, and old drawings without the setting read as Medium.
+        #expect(StyleBook().style(for: .pen).smoothing == .medium)
+        model.choose(.pen)
+        drag(from: CGPoint(x: 100, y: 100), to: CGPoint(x: 400, y: 300))
+        #expect(model.document.marks.first?.kind == .pen)
+        #expect(canvas.penGuide == nil)
+    }
+
     @Test func typingSurvivesTheToolbarAskingWhatToShare() {
         model.choose(.text)
         click(CGPoint(x: 400, y: 300))

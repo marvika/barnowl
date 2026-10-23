@@ -10,6 +10,8 @@ final class CaptureCards {
     struct Card: Identifiable {
         let id: UUID
         var thumbnail: NSImage
+        /// A picture, or a recording with its length.
+        var media = CaptureMedia.image
         var status: String
         /// Whether it's kept somewhere (copied or saved); otherwise the card is all there is.
         var kept: Bool
@@ -17,18 +19,28 @@ final class CaptureCards {
         var secrets = 0
         var secretTitle = ""
         var undo: (() -> Void)?
+        /// A second choice beside the status, like Keep as Video while a GIF is made.
+        var link: CardLink?
+    }
+
+    struct CardLink {
+        let title: String
+        let action: () -> Void
     }
 
     /// Newest last, at the bottom of the stack.
     private(set) var cards: [Card] = []
-    var hovered: UUID?
+    var hovered: UUID? {
+        // Pointing at a card may lead to a drag: have its file ready.
+        didSet { if let hovered, hovered != oldValue { coordinator?.prepareDragFile(hovered) } }
+    }
     @ObservationIgnored private weak var coordinator: CaptureCoordinator?
     @ObservationIgnored private var panel: CardPanel?
     @ObservationIgnored private var timers: [UUID: Task<Void, Never>] = [:]
     static let width: CGFloat = 236
     private static let shown = 3
 
-    init(coordinator: CaptureCoordinator) {
+    init(coordinator: CaptureCoordinator?) {
         self.coordinator = coordinator
     }
 
@@ -39,7 +51,7 @@ final class CaptureCards {
         let thumbnail = NSImage(cgImage: small, size: capture.pointSize)
         let kept = kept ?? (status != coordinator?.status(copied: false, saved: false))
         withAnimation(.spring(response: 0.4, dampingFraction: 0.85)) {
-            cards.append(Card(id: capture.id, thumbnail: thumbnail, status: status, kept: kept))
+            cards.append(Card(id: capture.id, thumbnail: thumbnail, media: capture.media, status: status, kept: kept))
         }
         while cards.count > Self.shown { remove(cards[0].id) }
         showPanel()
@@ -56,6 +68,17 @@ final class CaptureCards {
     }
 
     func has(_ id: UUID) -> Bool { cards.contains { $0.id == id } }
+
+    /// A GIF that couldn't be made is a video after all.
+    func update(_ id: UUID, media: CaptureMedia) {
+        guard let index = cards.firstIndex(where: { $0.id == id }) else { return }
+        cards[index].media = media
+    }
+
+    func update(_ id: UUID, link: CardLink?) {
+        guard let index = cards.firstIndex(where: { $0.id == id }) else { return }
+        cards[index].link = link
+    }
 
     /// A new picture (after hiding secrets), with an Undo for a few seconds.
     func update(_ id: UUID, image: CGImage, status: String, undo: (() -> Void)?) {
@@ -108,6 +131,9 @@ final class CaptureCards {
         remove(id)
     }
     func hide(_ id: UUID) { coordinator?.hideSecrets(id) }
+    func makeGIF(_ id: UUID) { coordinator?.makeGIF(id) }
+    func copyText(_ id: UUID) { coordinator?.copyText(id) }
+    func hasText(_ id: UUID) -> Bool { coordinator?.hasText(id) ?? false }
     func file(_ id: UUID) -> URL? { coordinator?.fileForDragging(id) }
     func isSaved(_ id: UUID) -> Bool { coordinator?.isSaved(id) ?? false }
 
@@ -200,10 +226,17 @@ private struct CardStack: View {
     }
 }
 
-private struct CaptureCardView: View {
+struct CaptureCardView: View {
     let card: CaptureCards.Card
     let cards: CaptureCards
-    @State private var hovering = false
+    @State private var hovering: Bool
+
+    /// `hovering`: drawn as if pointed at, for previews.
+    init(card: CaptureCards.Card, cards: CaptureCards, hovering: Bool = false) {
+        self.card = card
+        self.cards = cards
+        _hovering = State(initialValue: hovering)
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -242,9 +275,15 @@ private struct CaptureCardView: View {
             cards.hovered = inside ? card.id : (cards.hovered == card.id ? nil : cards.hovered)
         }
         .accessibilityElement(children: .contain)
-        .accessibilityLabel("Capture. \(card.status)")
+        .accessibilityLabel("\(card.media.isMovie ? "Recording" : "Capture"). \(card.status)")
         .accessibilityAction(named: "Edit") { cards.edit(card.id) }
         .accessibilityAction(named: "Copy") { cards.copy(card.id) }
+        .accessibilityActions {
+            // The rest of the hover row, for VoiceOver.
+            Button(cards.isSaved(card.id) ? "Show in Finder" : "Save") { cards.save(card.id) }
+            if card.media.isMovie && !card.media.isGIF { Button("Make GIF") { cards.makeGIF(card.id) } }
+            if !card.media.isMovie { Button("Pin") { cards.pin(card.id) } }
+        }
     }
 
     private var thumbnail: some View {
@@ -264,6 +303,9 @@ private struct CaptureCardView: View {
                 CardDragArea(url: { cards.file(card.id) }, image: card.thumbnail,
                              click: { cards.edit(card.id) }, dropped: { cards.remove(card.id) })
             }
+            .overlay(alignment: .bottomTrailing) {
+                if card.media.isMovie && !hovering { MovieBadge(media: card.media).padding(6).transition(.opacity) }
+            }
             .overlay(alignment: .bottom) {
                 if hovering { actions.transition(.opacity) }
             }
@@ -272,25 +314,51 @@ private struct CaptureCardView: View {
 
     private var actions: some View {
         HStack(spacing: 8) {
-            IconButton(symbol: "doc.on.doc", label: "Copy") { cards.copy(card.id) }
-            IconButton(symbol: cards.isSaved(card.id) ? "folder" : "square.and.arrow.down",
-                       label: cards.isSaved(card.id) ? "Show in Finder" : "Save") { cards.save(card.id) }
-            IconButton(symbol: "pin", label: "Pin") { cards.pin(card.id) }
-            IconButton(symbol: "pencil", label: "Edit", prominent: true) { cards.edit(card.id) }
+            if card.media.isMovie { movieActions } else { pictureActions }
         }
         .padding(.bottom, 8)
     }
 
+    /// A recording: copy or save the file, make a GIF of it, or edit it.
+    @ViewBuilder private var movieActions: some View {
+        IconButton(symbol: "doc.on.doc", label: "Copy") { cards.copy(card.id) }
+        IconButton(symbol: cards.isSaved(card.id) ? "folder" : "square.and.arrow.down",
+                   label: cards.isSaved(card.id) ? "Show in Finder" : "Save") { cards.save(card.id) }
+        if !card.media.isGIF {
+            IconButton(glyph: "GIF", label: "Make GIF") { cards.makeGIF(card.id) }
+        }
+        IconButton(symbol: "pencil", label: "Edit", prominent: true) { cards.edit(card.id) }
+    }
+
+    @ViewBuilder private var pictureActions: some View {
+            IconButton(symbol: "doc.on.doc", label: "Copy") { cards.copy(card.id) }
+            if cards.hasText(card.id) {
+                IconButton(symbol: "text.viewfinder", label: "Copy Text") { cards.copyText(card.id) }
+            }
+            IconButton(symbol: cards.isSaved(card.id) ? "folder" : "square.and.arrow.down",
+                       label: cards.isSaved(card.id) ? "Show in Finder" : "Save") { cards.save(card.id) }
+            IconButton(symbol: "pin", label: "Pin") { cards.pin(card.id) }
+            IconButton(symbol: "pencil", label: "Edit", prominent: true) { cards.edit(card.id) }
+    }
+
     private var statusRow: some View {
         HStack(spacing: 6) {
-            Image(systemName: card.kept ? "checkmark.circle.fill" : "exclamationmark.circle.fill")
-                .foregroundStyle(card.kept ? Color.green : Color.orange)
-                .font(.system(size: 11))
+            if card.status.hasSuffix("…") {
+                // Still working: saving, making a GIF, reading the text.
+                ProgressView().controlSize(.mini).frame(width: 11, height: 11)
+            } else {
+                Image(systemName: card.kept ? "checkmark.circle.fill" : "exclamationmark.circle.fill")
+                    .foregroundStyle(card.kept ? Color.green : Color.orange)
+                    .font(.system(size: 11))
+            }
             Text(card.status).font(.system(size: 11, weight: .medium)).foregroundStyle(.secondary)
                 .lineLimit(1)
             Spacer(minLength: 4)
             if let undo = card.undo {
                 Button("Undo", action: undo).buttonStyle(.link).font(.caption.weight(.semibold))
+            }
+            if let link = card.link {
+                Button(link.title, action: link.action).buttonStyle(.link).font(.caption.weight(.semibold))
             }
         }
         .padding(.horizontal, 4)
@@ -318,7 +386,9 @@ private struct CaptureCardView: View {
 
 /// A round button with a symbol, for the card's hover row.
 private struct IconButton: View {
-    let symbol: String
+    var symbol = ""
+    /// A few letters in place of a symbol, like GIF.
+    var glyph = ""
     let label: String
     var prominent = false
     let action: () -> Void
@@ -326,8 +396,15 @@ private struct IconButton: View {
 
     var body: some View {
         Button(action: action) {
-            Image(systemName: symbol)
-                .font(.system(size: 12, weight: .semibold))
+            Group {
+                if glyph.isEmpty {
+                    Image(systemName: symbol).font(.system(size: 12, weight: .semibold))
+                } else {
+                    Text(glyph).font(.system(size: 8.5, weight: .heavy, design: .rounded))
+                        .padding(.horizontal, 2.5).padding(.vertical, 1)
+                        .overlay { RoundedRectangle(cornerRadius: 3).strokeBorder(.white, lineWidth: 1.2) }
+                }
+            }
                 .foregroundStyle(.white)
                 .frame(width: 30, height: 30)
                 .background(prominent ? AnyShapeStyle(Brand.lavenderFill) : AnyShapeStyle(.black.opacity(hovering ? 0.6 : 0.45)),

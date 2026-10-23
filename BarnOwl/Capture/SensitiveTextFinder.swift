@@ -23,6 +23,76 @@ struct CaptureText: Sendable, Equatable {
     var findings: [SensitiveTextFinder.Finding] = []
 
     static let empty = CaptureText()
+
+    /// The text as you'd read it. `within` keeps only lines mostly inside it; words under
+    /// `covered` (redactions) are left out. Both are in the same pixels as the lines.
+    func plainText(within area: CGRect? = nil, excluding covered: [CGRect] = []) -> String {
+        func hidden(_ rect: CGRect) -> Bool { covered.contains { $0.contains(CGPoint(x: rect.midX, y: rect.midY)) } }
+        var kept: [Line] = []
+        for line in lines {
+            if let area {
+                let inside = line.rect.intersection(area)
+                guard !inside.isNull, inside.width * inside.height >= line.rect.width * line.rect.height * 0.5 else { continue }
+            }
+            if covered.isEmpty { kept.append(line); continue }
+            if line.words.isEmpty {
+                if !hidden(line.rect) { kept.append(line) }
+                continue
+            }
+            let words = line.words.filter { !hidden($0.rect) }
+            if words.count == line.words.count {
+                kept.append(line)
+            } else if !words.isEmpty {
+                kept.append(Line(rect: line.rect, text: words.map(\.text).joined(separator: " "), words: words))
+            }
+        }
+        return Self.readingOrder(kept)
+    }
+
+    /// Top to bottom. Short cells side by side on the same rows (labels and values, a table)
+    /// read across, joined by a tab; columns of longer lines (a sidebar beside a page, an
+    /// article in two columns) read one column after the other.
+    static func readingOrder(_ lines: [Line]) -> String {
+        let rows = rows(of: lines)
+        let sideBySide = rows.filter { $0.count > 1 }
+        let span = lines.reduce(CGRect.null) { $0.union($1.rect) }.width
+        let cells = sideBySide.flatMap { $0 }
+        let short = cells.isEmpty || cells.map(\.rect.width).reduce(0, +) / CGFloat(cells.count) < span * 0.4
+        if sideBySide.count * 10 >= rows.count * 6 && short {
+            return text(of: rows)
+        }
+        // Columns: lines that overlap left to right belong together.
+        var columns: [[Line]] = []
+        for line in lines.sorted(by: { $0.rect.minX < $1.rect.minX }) {
+            if let index = columns.firstIndex(where: { column in
+                column.contains { $0.rect.minX < line.rect.maxX && line.rect.minX < $0.rect.maxX }
+            }) {
+                columns[index].append(line)
+            } else {
+                columns.append([line])
+            }
+        }
+        guard columns.count > 1 else { return text(of: rows) }
+        return columns.map { text(of: Self.rows(of: $0)) }.joined(separator: "\n\n")
+    }
+
+    /// Lines grouped into rows: their middles within half a line of each other.
+    private static func rows(of lines: [Line]) -> [[Line]] {
+        var rows: [[Line]] = []
+        for line in lines.sorted(by: { $0.rect.midY < $1.rect.midY }) {
+            if let last = rows.last?.last, abs(last.rect.midY - line.rect.midY) < min(last.rect.height, line.rect.height) / 2 {
+                rows[rows.count - 1].append(line)
+            } else {
+                rows.append([line])
+            }
+        }
+        return rows
+    }
+
+    private static func text(of rows: [[Line]]) -> String {
+        rows.map { row in row.sorted { $0.rect.minX < $1.rect.minX }.map(\.text).joined(separator: "\t") }
+            .joined(separator: "\n")
+    }
 }
 
 /// Reads text with Vision and decides what's private. Nothing leaves the Mac.
@@ -90,11 +160,63 @@ enum SensitiveTextFinder {
 
     /// Reads the capture once. Throws rather than report "nothing private"
     /// when Vision fails.
-    static func scan(_ image: CGImage) async throws -> CaptureText {
+    /// `forReading`: for Copy Text, where words read best corrected; looking for keys and
+    /// addresses, which aren't words, never corrects them.
+    static func scan(_ image: CGImage, forReading: Bool = false) async throws -> CaptureText {
+        var text = CaptureText()
+        // A tall scrolling capture is read a strip at a time, so Vision never takes it whole.
+        for strip in strips(height: image.height) {
+            let part: CGImage
+            if strip.rows.count == image.height {
+                part = image
+            } else {
+                let rect = CGRect(x: 0, y: strip.rows.lowerBound, width: image.width, height: strip.rows.count)
+                guard let cropped = image.cropping(to: rect) else { continue }
+                part = cropped
+            }
+            let read = try await read(part, forReading: forReading)
+            let down = CGFloat(strip.rows.lowerBound)
+            // Each line once: from the strip whose own part its middle is in.
+            for line in read.lines where strip.keeps.contains(Int(line.rect.midY + down)) {
+                let words = line.words.map { CaptureText.Word(rect: $0.rect.offsetBy(dx: 0, dy: down), text: $0.text) }
+                text.lines.append(CaptureText.Line(rect: line.rect.offsetBy(dx: 0, dy: down), text: line.text, words: words))
+            }
+            for finding in read.findings where strip.keeps.contains(Int(finding.rect.midY + down)) {
+                let rect = finding.rect.offsetBy(dx: 0, dy: down)
+                text.findings.append(Finding(rect: rect, kind: finding.kind, text: finding.text))
+            }
+        }
+        text.blocks = blocks(of: text.lines.map(\.rect))
+        return text
+    }
+
+    /// Part of a tall picture that's read on its own: `rows`, of which it keeps the lines whose
+    /// middles are in `keeps`. Strips overlap, so a line cut by one's edge is whole in the next.
+    struct Strip: Equatable, Sendable {
+        let rows: Range<Int>
+        let keeps: Range<Int>
+    }
+
+    /// Strips at most `tallest` pixels high, overlapping by `overlap`; one for a picture that fits.
+    static func strips(height: Int, tallest: Int = 4_000, overlap: Int = 300) -> [Strip] {
+        guard height > tallest, tallest > overlap else { return [Strip(rows: 0..<max(height, 0), keeps: 0..<max(height, 0))] }
+        var strips: [Strip] = []
+        var top = 0
+        while true {
+            let bottom = min(height, top + tallest)
+            let last = bottom == height
+            let keepsFrom = strips.isEmpty ? 0 : top + overlap / 2
+            strips.append(Strip(rows: top..<bottom, keeps: keepsFrom..<(last ? height : bottom - overlap / 2)))
+            if last { return strips }
+            top = bottom - overlap
+        }
+    }
+
+    /// Reads one picture (or strip), in its own pixels.
+    private static func read(_ image: CGImage, forReading: Bool) async throws -> CaptureText {
         var request = RecognizeTextRequest()
         request.recognitionLevel = .accurate
-        // Keys and addresses aren't words: don't "correct" them.
-        request.usesLanguageCorrection = false
+        request.usesLanguageCorrection = forReading
         request.recognitionLanguages = languages(supported: request.supportedRecognitionLanguages)
         // The default skips text under 1/32 of the image's height: everything
         // on a full-screen Retina capture.
@@ -118,7 +240,6 @@ enum SensitiveTextFinder {
                                              text: String(string[range])))
             }
         }
-        text.blocks = blocks(of: text.lines.map(\.rect))
         return text
     }
 

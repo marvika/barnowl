@@ -102,7 +102,7 @@ private struct MarkOptions: View {
     }
 
     private var usesColour: Bool {
-        model.selectedMarks.allSatisfy { $0.kind != .spotlight && $0.kind != .image }
+        model.selectedMarks.allSatisfy { !$0.kind.isColourless }
     }
 
     @ViewBuilder private func sections(for kind: Mark.Kind) -> some View {
@@ -130,6 +130,7 @@ private struct MarkOptions: View {
         case .pen:
             ColourSection(model: model, kind: kind, actions: actions)
             SizeSection(model: model, kind: kind)
+            SmoothingSection(model: model)
             MoreButton(model: model, kind: kind)
         case .highlighter:
             ColourSection(model: model, kind: kind, actions: actions)
@@ -137,6 +138,8 @@ private struct MarkOptions: View {
             RedactSection(model: model, actions: actions)
         case .spotlight:
             SpotlightSection(model: model)
+        case .magnifier:
+            MagnifierSection(model: model)
         case .image:
             MoreButton(model: model, kind: kind)
         }
@@ -609,11 +612,11 @@ private struct RedactSection: View {
                 .pickerStyle(.segmented)
                 .labelsHidden()
                 .fixedSize()
-                if style.redact == .blur {
+                if style.redact != .solid {
                     Image(systemName: "info.circle")
                         .foregroundStyle(.secondary)
-                        .help("Blur can sometimes be reversed. Use Solid for keys and passwords.")
-                        .accessibilityLabel("Blur can sometimes be reversed. Use Solid for keys and passwords.")
+                        .help("Blur and pixelate can sometimes be reversed. Use Solid for keys and passwords.")
+                        .accessibilityLabel("Blur and pixelate can sometimes be reversed. Use Solid for keys and passwords.")
                 }
             }
             PrivateInfoButton(model: model)
@@ -638,6 +641,29 @@ private struct PrivateInfoButton: View {
     }
 }
 
+/// The pen's steadying: how far the line trails the pointer.
+private struct SmoothingSection: View {
+    let model: EditorModel
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Text("Smoothing").font(.system(size: 12)).foregroundStyle(.secondary)
+            // How new strokes are drawn: drawings already made keep their shape.
+            Picker("Smoothing", selection: Binding(get: { model.styleBook.style(for: .pen).smoothing }, set: { level in
+                model.updatePenSmoothing(level)
+            })) {
+                ForEach(PenSmoothing.allCases, id: \.self) { level in
+                    Text(level.title).tag(level)
+                }
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            .fixedSize()
+        }
+        .help("Steadies your hand: the line trails the pointer and smooths out wobbles")
+    }
+}
+
 private struct SpotlightSection: View {
     let model: EditorModel
 
@@ -653,6 +679,15 @@ private struct SpotlightSection: View {
             .pickerStyle(.segmented)
             .labelsHidden()
             .fixedSize()
+            Picker("Around it", selection: Binding(get: { style.spotlightEffect }, set: { effect in
+                model.updateStyle { $0.spotlightEffect = effect }
+            })) {
+                ForEach(SpotlightEffect.allCases, id: \.self) { Text($0.title).tag($0) }
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            .fixedSize()
+            .help("Dim or blur everything around the spotlight")
             HStack(spacing: 6) {
                 Text("Dim").font(.system(size: 12)).foregroundStyle(.secondary)
                 Slider(value: Binding(get: { style.dim }, set: { value in
@@ -666,6 +701,42 @@ private struct SpotlightSection: View {
                     .foregroundStyle(.secondary)
                     .frame(width: 30, alignment: .trailing)
             }
+        }
+    }
+}
+
+/// A magnifier's shape and how far it zooms. Its ring is always white, so there's no colour.
+private struct MagnifierSection: View {
+    let model: EditorModel
+
+    var body: some View {
+        let style = model.shownStyle
+        HStack(spacing: 14) {
+            Picker("Shape", selection: Binding(get: { style.spotlight }, set: { shape in
+                model.updateStyle { $0.spotlight = shape }
+            })) {
+                Image(systemName: "circle").accessibilityLabel("Circle").tag(SpotlightShape.ellipse)
+                Image(systemName: "rectangle").accessibilityLabel("Rectangle").tag(SpotlightShape.rectangle)
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            .fixedSize()
+            HStack(spacing: 6) {
+                Text("Zoom").font(.system(size: 12)).foregroundStyle(.secondary)
+                Picker("Zoom", selection: Binding<Double?>(get: { SizeLadder.zooms.first { abs($0 - style.zoom) < 0.01 } },
+                                                           set: { zoom in
+                    guard let zoom else { return }
+                    model.updateStyle("Change Zoom") { $0.zoom = zoom }
+                })) {
+                    ForEach(SizeLadder.zooms, id: \.self) { zoom in
+                        Text(SizeLadder.zoomTitle(zoom)).tag(Optional(zoom))
+                    }
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .fixedSize()
+            }
+            .help("Zoom ([ ] or − + step it)")
         }
     }
 }
@@ -863,8 +934,11 @@ private struct ReviewOptions: View {
         HStack(spacing: 10) {
             Text("Hide Private Info").font(.system(size: 12, weight: .medium)).foregroundStyle(.secondary)
             if review.items.isEmpty {
-                let read = model.insight?.textWasRead == true
-                Text(read ? "Nothing else here looks private." : "The text couldn't be read, so check it yourself.")
+                let insight = model.insight
+                let read = insight?.textWasRead == true
+                let looked = insight?.lookedForPrivateInfo != false
+                Text(!looked ? "Looking for private info is off in Settings › Capture, so check it yourself."
+                     : read ? "Nothing else here looks private." : "The text couldn't be read, so check it yourself.")
                     .font(.system(size: 12)).foregroundStyle(.secondary)
             }
             ForEach(review.categories, id: \.kind) { category in

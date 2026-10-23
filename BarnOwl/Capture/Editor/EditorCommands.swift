@@ -5,12 +5,12 @@ import AppKit
 struct EditorCommand {
     enum ID: String, CaseIterable {
         case copy, save, pin, done, close, revert
-        case undo, redo, cut, copyMarks, paste, delete, selectAll, duplicate
+        case undo, redo, cut, copyMarks, copyText, paste, delete, selectAll, duplicate
         case actualSize, zoomToFit, zoomIn, zoomOut, showFrame, shortcuts
         case bringToFront, sendToBack, bringForward, sendBackward
         case alignLeft, alignCentre, alignRight, alignTop, alignMiddle, alignBottom
         case select, arrow, line, rectangle, filled, ellipse, text, counter, highlighter, pen, redact, review
-        case spotlight, crop
+        case spotlight, magnifier, crop
         case colour1, colour2, colour3, colour4, colour5, colour6, colour7, colour8
         case smaller, bigger, pickColour
         case bold, fontBigger, fontSmaller, showFonts
@@ -97,6 +97,7 @@ struct EditorCommand {
         case .pen: .pen
         case .redact: .redact
         case .spotlight: .spotlight
+        case .magnifier: .magnifier
         case .crop: .crop
         }
     }
@@ -114,6 +115,7 @@ struct EditorCommand {
             EditorCommand(.redo, "Redo", key: "z", [.command, .shift], menu: .edit, action: #selector(EditorCanvas.redo(_:))),
             EditorCommand(.cut, "Cut", key: "x", .command, menu: .edit, action: #selector(NSText.cut(_:))),
             EditorCommand(.copyMarks, "Copy", key: "c", .command, menu: .edit, action: #selector(NSText.copy(_:))),
+            EditorCommand(.copyText, "Copy Text", key: "c", [.command, .option], menu: .edit),
             EditorCommand(.paste, "Paste", key: "v", .command, menu: .edit, action: #selector(NSText.paste(_:))),
             EditorCommand(.delete, "Delete", menu: .edit, action: #selector(NSText.delete(_:)), group: .marks),
             EditorCommand(.selectAll, "Select All", key: "a", .command, menu: .edit, action: #selector(NSText.selectAll(_:))),
@@ -149,6 +151,7 @@ struct EditorCommand {
             EditorCommand(.redact, "Redact", key: "b", menu: .tools, group: .tools),
             EditorCommand(.review, "Hide Private Info…", key: "B", .shift, menu: .tools, group: .tools),
             EditorCommand(.spotlight, "Spotlight", key: "s", menu: .tools, group: .tools),
+            EditorCommand(.magnifier, "Magnify", key: "m", menu: .tools, group: .tools),
             EditorCommand(.crop, "Crop", key: "c", menu: .tools, group: .tools),
         ]
         for (index, id) in colourKeys.enumerated() {

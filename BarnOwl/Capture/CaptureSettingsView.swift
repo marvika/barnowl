@@ -11,6 +11,7 @@ struct CapturePane: View {
     @AppStorage(PrefKey.captureThen) private var then = CaptureThen.card
     @AppStorage(PrefKey.captureAdjusts) private var adjusts = true
     @AppStorage(PrefKey.capturePrivateInfo) private var privateInfo = true
+    @AppStorage(PrefKey.captureHideStyle) private var hideStyle = RedactStyle.blur
     @AppStorage(PrefKey.captureKeepDays) private var keepDays = 30
     @State private var cleared = false
     @AppStorage(PrefKey.captureFolder) private var folder = ""
@@ -34,7 +35,7 @@ struct CapturePane: View {
                 Toggle(isOn: $enabled) {
                     BadgeLabel(title: "Screenshots and markup",
                                subtitle: "Capture an area, a window or the whole screen, then mark it up and hand it on.",
-                               symbol: "camera.viewfinder", color: Brand.amber)
+                               symbol: "camera.viewfinder", color: .red)
                 }
                 // Until it's allowed, the permission comes first.
                 if enabled && !model.screenRecordingAllowed {
@@ -53,6 +54,7 @@ struct CapturePane: View {
                 saving
                 inEveryCapture
                 card
+                RecordingSettingsSection(access: model.capture.recording.microphoneAccess)
             }
             .disabled(!enabled)
             Section {
@@ -62,17 +64,21 @@ struct CapturePane: View {
                     Text("Don't keep them").tag(0)
                 }
                 LabeledContent("Kept captures") {
-                    Button(cleared ? "Cleared" : "Clear Now") {
-                        CaptureLibrary.clear()
-                        cleared = true
+                    HStack(spacing: 8) {
+                        Button("Show History…") { model.capture.showHistory() }
+                        Button(cleared ? "Cleared" : "Clear Now") {
+                            // Not one open in the editor: its marks are still being made.
+                            CaptureLibrary.clear(keeping: model.capture.editingCaptures)
+                            cleared = true
+                        }
+                        .disabled(cleared)
                     }
-                    .disabled(cleared)
                 }
             } header: {
                 Text("History")
             } footer: {
                 Text(keepDays > 0
-                     ? "⌃⌥⌘E reopens your last capture with its marks still movable. To do that, Barn Owl keeps each original, as captured and before anything was hidden, in Application Support on your Mac."
+                     ? "⌃⌥⌘E and Capture History reopen captures with their marks still movable. To do that, Barn Owl keeps each original and its text, as captured and before anything was hidden, in Application Support on your Mac. Recordings are kept for up to 7 days, and 2 GB of them at most."
                      : "Barn Owl keeps nothing, so marks can't be moved again once you're done.")
             }
             .disabled(!enabled)
@@ -105,6 +111,10 @@ struct CapturePane: View {
             LabeledContent("Capture the whole screen") { KeyboardShortcuts.Recorder(for: .captureScreen) }
             LabeledContent("Capture the same area again") { KeyboardShortcuts.Recorder(for: .captureSameArea) }
             LabeledContent("Edit the last capture") { KeyboardShortcuts.Recorder(for: .editLastCapture) }
+            LabeledContent("Copy text from the screen") { KeyboardShortcuts.Recorder(for: .captureText) }
+            LabeledContent("Show capture history") { KeyboardShortcuts.Recorder(for: .captureHistory) }
+            LabeledContent("Record the screen") { KeyboardShortcuts.Recorder(for: .recordScreen) }
+            LabeledContent("Take a scrolling capture") { KeyboardShortcuts.Recorder(for: .captureScrolling) }
             Toggle(isOn: $appleKeys) {
                 Text("Also answer ⇧⌘4 and ⇧⌘3")
                 Text(systemKeysOn
@@ -133,10 +143,16 @@ struct CapturePane: View {
             Toggle(isOn: $privateInfo) {
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Look for private info in captures")
-                    Text("Reads the text on your Mac and offers to hide keys, passwords, emails and card numbers. Nothing is hidden without asking.")
+                    Text("Offers to hide keys, passwords, emails and card numbers it finds. Nothing is hidden without asking. Barn Owl reads each capture's text on your Mac either way, for Copy Text, search and smart marks.")
                         .font(.caption).foregroundStyle(.secondary)
                 }
             }
+            Picker("Hide with", selection: $hideStyle) {
+                Text("Blur").tag(RedactStyle.blur)
+                Text("Pixelate").tag(RedactStyle.pixelate)
+                Text("Solid bars").tag(RedactStyle.solid)
+            }
+            .disabled(!privateInfo)
         } header: {
             Text("After capturing")
         } footer: {

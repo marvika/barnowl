@@ -46,7 +46,7 @@ enum SettingsPane: String, CaseIterable, Identifiable {
         case .menuBar: .blue
         case .appearance: .pink
         case .clipboard: .teal
-        case .capture: Brand.amber
+        case .capture: .red
         case .keepAwake: .orange
         case .agents: .brown
         case .toggles: .green

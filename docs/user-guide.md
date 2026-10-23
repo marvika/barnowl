@@ -11,6 +11,7 @@
 - [Quick panel and toggles](#quick-panel-and-toggles)
 - [Search and commands](#search-and-commands)
 - [Clipboard history and the Nest](#clipboard-history-and-the-nest)
+- [Capture](#capture)
 - [The Barn: disk space](#the-barn-disk-space)
 - [Coding agents](#coding-agents)
 - [Appearance](#appearance)
@@ -28,8 +29,8 @@ Barn Owl asks for two permissions in **System Settings → Privacy & Security**:
 
 | Permission | What it's for | Without it |
 |---|---|---|
-| Accessibility | Listing, moving and opening menu bar icons | Hiding still works; the Perch, search, arranging and groups don't |
-| Screen Recording | Real pictures of hidden icons | You see app icons instead of the real icons |
+| Accessibility | Listing, moving and opening menu bar icons; Auto-Scroll in scrolling capture | Hiding still works; the Perch, search, arranging and groups don't, and Auto-Scroll doesn't scroll |
+| Screen Recording | Real pictures of hidden icons; [Capture](#capture), screenshots and recordings alike | You see app icons instead of the real icons, and Capture can't take pictures |
 
 macOS asks for a few more only when you first use something that needs them:
 
@@ -37,6 +38,7 @@ macOS asks for a few more only when you first use something that needs them:
 |---|---|---|
 | Automation: Terminal, iTerm | Bringing an agent's exact tab to the front when you choose Show or Answer | The app comes to the front, but not the tab |
 | Automation: System Events | The Dark Mode toggle | Dark Mode can't switch from Barn Owl |
+| Microphone | Your voice in a screen recording | Recordings have no microphone; asked only when you pick one |
 | Notifications | Telling you an agent needs you when the island can't, a keep-awake session ended, an update is ready, or the disk is nearly full | No notifications; the quick panel and the island still show everything |
 | Desktop, Documents | The Barn looking through them; finding the repository of an agent working there | The Barn skips them; an owlet is named after its folder rather than its repository |
 | Full Disk Access (optional) | The Barn looking in the Trash, Mail, Safari and iPhone backups | See [Full Disk Access](#full-disk-access) |
@@ -261,6 +263,7 @@ You can also type a command:
 | `mute` | Mute or unmute the microphone |
 | `desktop`, `hidden files`, `sleep` | The other toggles |
 | `clipboard` | Clipboard history |
+| `capture`, `screenshot`, `record`, `scroll`, `history` | The Capture commands, when Capture is on |
 | `roost`, `agents` | The Roost |
 | `arrange` | Settings → Layout |
 | `settings`, `rules`, `shortcuts`… | That Settings pane |
@@ -294,6 +297,405 @@ disk, and copies it to another disk (hold Option to copy instead). Files you
 move or delete elsewhere leave the Nest by themselves. The **Nest** tab in
 clipboard history shows the same files. Turn off the Nest or its tab in
 Settings → Clipboard.
+
+## Capture
+
+Barn Owl takes screenshots and lets you mark them up, records the screen with
+sound, makes GIFs, and captures pages longer than your screen. Every capture
+can be edited again later and found by the words in it. All of it happens on
+your Mac.
+
+Capture is optional, and off until you turn it on in Settings → Capture or in
+the setup guide. If CleanShot X, Shottr or another capture app is installed,
+Settings says so. Leave Capture off and Barn Owl takes none of its shortcuts.
+Capture needs the **Screen Recording** permission, the one the pictures of
+hidden icons use. macOS applies it after Barn Owl restarts, and Settings
+offers **Relaunch Barn Owl**.
+
+| Shortcut | Does |
+|---|---|
+| ⌃⌥⌘4 | Capture an area or a window |
+| ⌃⌥⌘3 | Capture the whole screen |
+| ⌃⌥⌘R | Capture the same area again |
+| ⌃⌥⌘T | Copy the text in an area |
+| ⌃⌥⌘E | Edit the last capture |
+| ⌃⌥⌘5 | Record the screen. Press it again to stop |
+| ⌃⌥⌘S | Scrolling capture. Press it again to finish |
+
+Capture History has no shortcut until you choose one. Change any of them in
+Settings → Capture → Shortcuts, where Barn Owl can also answer ⇧⌘4 and ⇧⌘3
+once macOS's own shortcuts are off. Search (⌃⌥⌘M) finds each of these by
+name, and each has a [link](#links).
+
+### Screenshots
+
+<!-- IMAGE: docs/images/capture-overlay.png (560 wide): the frozen screen with an adjustable selection, its handles, the loupe and the action bar. From the demo copy. -->
+
+Press **⌃⌥⌘4**. The screen freezes, so menus, tooltips and hover states stay
+put while you choose. The bar at the top switches between **Area** (A),
+**Window** (W) and **Screen** (F), and its slider menu chooses what to leave
+out of the picture: other apps' menu bar icons, your desktop icons and the
+pointer.
+
+- **An area:** drag it. It stays adjustable: drag a handle to resize, drag
+  inside to move. Hold ⇧ for a square, ⌥ to draw from the centre, and Space
+  while dragging to move it as you go. The arrow keys nudge it a point (⇧ for
+  ten), and ⌥ with the arrows resizes it. A loupe shows the pixels, where
+  they are and their colour.
+- **A window:** click it. It's captured on its own, with its shadow on a
+  clear background. Press Space before you start to switch between a window
+  and an area.
+- **The whole screen:** press F, then click the screen. ⌃⌥⌘3 takes the screen
+  your pointer is on at once, from anywhere.
+- **The last area again:** L brings it back in the overlay, and ⌃⌥⌘R takes it
+  again without asking.
+
+When you let go, the selection waits for you to adjust it. If you'd rather it
+captured the moment you let go, say so in Settings → Capture. Then:
+
+| Key | Does |
+|---|---|
+| Return | Copies and saves it, or just one of them, as Settings says |
+| ⌘C, ⌘S | Copy only, save only |
+| E | Opens the editor |
+| P | Pins it above your windows |
+| T | Copies the text in it |
+| R, G | Records the selection as a video, or as a GIF |
+| S | Scrolls through the selection |
+| Esc | One step back: the move, the selection, then the overlay |
+| ? | Shows every key |
+
+Every capture leaves out other apps' menu bar icons (the clock and Control
+Center stay), the icons on your desktop and the "screen is being recorded"
+dot. Nothing moves on screen. Switch any of these off in the overlay's slider
+menu or in Settings → Capture.
+
+A **pinned** capture floats above your windows, for comparing or copying
+from. Drag it anywhere, scroll to zoom, double-click to edit, right-click for
+Copy, Edit, Opacity and Close, and press Esc to close it.
+
+### The card
+
+Each capture shows a small **card** in a corner, with a picture of what you
+caught. It never takes the keyboard from the app you're in.
+
+- **Click it** to mark the capture up, or **drag it** into Slack, Mail, a
+  document or any other app.
+- **Point at it** for Copy, Copy Text, Save (Show in Finder, once it's saved),
+  Pin and Edit. The ✕ closes it.
+- If the capture shows a key, a token or another secret, the card says so and
+  offers to **Hide** it, with Undo.
+- It goes by itself after 8 seconds. Settings → Capture → Card sets the
+  corner and how long it stays.
+
+**Then** in Settings → Capture decides what follows a capture: the card, the
+editor straight away, or nothing.
+
+### The editor
+
+<!-- IMAGE: docs/images/capture-editor.png (560 wide): the editor with a curved arrow, numbered steps, a callout, a magnifier and a Frame on a gradient. -->
+
+Open it from the card, with E in the overlay, with ⌃⌥⌘E (the last capture),
+from Capture History or with Open With. Every mark stays movable and
+restylable until you're done.
+
+| Tool | Key | What it does |
+|---|---|---|
+| Select | V | Moves, resizes and restyles marks |
+| Arrow | A | Tapered and bendable, straight or curved |
+| Line | L | A plain line |
+| Rectangle, Filled Rectangle | R, F | Boxes |
+| Ellipse | O | Ovals |
+| Text | T | Four typefaces, three weights, five styles (plain, box, soft, outline and callout) and any size |
+| Counter | N | Numbered steps, with labels |
+| Highlighter | H | Follows lines of text |
+| Pen | P | Freehand, with smoothing |
+| Redact | B | Pixelates, blurs or covers |
+| Spotlight | S | Dims or blurs everything around it |
+| Magnify | M | A loupe on a detail |
+| Crop | C | Keeps part of the picture |
+
+- **One pen colour** is shared by arrows, shapes, text and steps. The keys 1
+  to 8 pick a colour, I picks one from the capture, and [ and ] change the
+  size. Each tool remembers how you last used it.
+- **Smart where it helps:** click a paragraph with Rectangle or Spotlight to
+  frame it, click a word with Redact to hide it, and drag the highlighter
+  across text so it follows the lines. Marks snap into line with each other
+  and the picture.
+- **Pen smoothing:** the line trails the pointer on a short string, shown
+  while you draw, so wobbles never reach it. Choose Off, Low, Medium or High
+  in the pen's options.
+- **Magnify:** drag over a detail, or click to place a loupe. Choose a circle
+  or a rectangle and a zoom of 1.5×, 2×, 3× or 4×. It enlarges your
+  redactions along with the picture, so it never shows what you've hidden.
+- **Spotlight** can dim or blur the rest of the picture.
+- **Redact** pixelates unless you pick Blur or Solid. Blur and pixelate can
+  sometimes be reversed, so use Solid for keys and passwords.
+
+**Done** (⌘Return) copies the capture and saves it over its file. Close
+without Done and your marks are kept; the card offers to copy or save them.
+⇧⌘C copies the image, ⌘S saves it, ⌥⌘P pins it, ⌘C and ⌘V copy marks from
+one capture to another, and **Revert to Original** starts over in one
+undoable step. Press ? for every key.
+
+### Frame
+
+Frame puts the capture on a background, ready to share. It's part of what you
+copy and save, and Barn Owl remembers your last look for the next capture.
+Open it from the toolbar or with ⌥⌘I.
+
+- **Backgrounds:** nine gradients (Mist, Glacier, Blossom, Dawn, Meadow,
+  Lagoon, Ember, Dusk and Graphite); gradients **matched to this capture**,
+  built from its own colours; plain white, cream or ink; your **desktop
+  picture**; or transparent.
+- **Yours:** the **+** makes a background of your own, and **Customise…**
+  starts from the one you have. Choose a colour, a gradient or a radial
+  gradient. Click the ramp to add a colour (two to four in all), drag one
+  off it to take it away, set the angle, reverse the colours, and turn on
+  soft light or grain. The capture's own colours are there as chips, and the
+  die **shuffles** a new gradient around them. What you make is kept under
+  Yours; right-click it to edit or delete it.
+- **Padding, Corners and Shadow:** how much room the capture gets, how round
+  its corners are, and how strong its shadow is. A window captured with its
+  own shadow keeps it and gets no second one.
+- **Inset:** carries the capture's own edge colour out around it, so it runs
+  on into a card of its own. Not offered for windows with their own shadow.
+- **Balance Margins:** appears when the space around what's in the capture is
+  uneven, and crops it even in one step.
+- **Aspect ratio:** Auto follows the capture. Or choose 16:9, 3:2, 4:3, 1:1,
+  4:5, 3:4, 9:16 for stories or 1.91:1 for link previews; each tooltip says
+  what it suits.
+- **Position:** with a ratio chosen, nine places for where the capture sits
+  in the frame.
+
+### Private info
+
+Barn Owl reads the text in each capture on your Mac, with Apple's Vision, and
+looks for what's private: API keys and tokens, passwords, card numbers,
+private keys, email addresses, phone numbers, bank account and ID numbers.
+It never hides anything without asking.
+
+- **On the card:** when a secret shows, the card offers **Hide**, and Undo
+  takes it back.
+- **In the editor:** a banner offers the same, and **Hide Private Info…**
+  (⇧B) lists what it found so you choose what to cover. Done asks once if a
+  key is still showing.
+- **Hide with** in Settings → Capture chooses how it's covered: a light
+  **Blur** (the default), **Pixelate** or **Solid bars**. The Redact tool is
+  separate and keeps its own style.
+- **Look for private info in captures** turns the offers off. Barn Owl still
+  reads each capture's text for Copy Text, search and the smart marks.
+
+Hidden things are ordinary redaction marks in the editor, so you can take them
+off again; the original Barn Owl keeps for editing stays as it was captured.
+
+### Copy Text
+
+Press **⌃⌥⌘T**, or T in the overlay, and drag over some text; its words go to
+the clipboard. Click a window for all the text in it. The same is on the
+card (Copy Text), in the editor (⌥⌘C) and in Capture History.
+
+Barn Owl reads in the order you would, columns one after the other and
+tables row by row, and corrects words it misreads. Words outside the crop or
+under a redaction are left out. The text is read on your Mac and goes nowhere
+else.
+
+### Capture History
+
+<!-- IMAGE: docs/images/capture-history.png (560 wide): Capture History with a search for one word and the screenshots that contain it. -->
+
+Capture History keeps every capture in one window, newest first, by day:
+Today, Yesterday, then the weekday and the date.
+
+Open it by searching for "history", from Settings → Capture → **Show
+History…**, with a shortcut you choose in Settings → Capture, or with
+`barnowl://capture?mode=history`.
+
+- **Search** finds a capture by the words in it, the app it came from or its
+  day. "Recording", "video" and "gif" find recordings.
+- **Return** or a double-click opens a capture in the editor, marks still
+  movable, or a recording in the video editor. ⌘ and ⇧ select several.
+- **Right-click** for Edit, Copy, Copy Text, Show in Finder, Pin to Screen and
+  **Remove from History** (⌘⌫), which leaves a saved file where it is.
+- **Drag** a tile into any app. Copying, pinning or dragging an edited
+  capture gives it with its marks.
+
+Captures stay editable for 30 days, or 7, or not at all: choose in Settings →
+Capture → History. Recordings are bigger, so Barn Owl keeps them for a week at
+most, and 2 GB in all. **Clear Now** lets everything go at once. Barn Owl
+keeps the originals, as captured and before anything was hidden, in
+`~/Library/Application Support/Barn Owl/Captures`.
+
+### Open With
+
+In Finder, right-click a PNG, JPEG or HEIC and choose **Open With → Barn
+Owl**. It opens in the editor.
+
+- A screenshot Barn Owl saved, and nobody has changed since, comes back with
+  its marks still movable, even if you've moved or renamed it.
+- Any other picture opens as a new capture. **Done** saves a copy instead of
+  writing over it. A photo taken in portrait opens the right way up.
+
+### Record the screen
+
+<!-- IMAGE: docs/images/capture-recording.png (560 wide): the record bar with the microphone menu, then the pill and border around an area being recorded. -->
+
+Press **⌃⌥⌘5** and select an area, a window or the whole screen, as for a
+screenshot. A bar under the selection chooses what to hear and what to make;
+Return starts. R after you select in the screenshot overlay goes straight to
+the countdown, with the sound choices from your Settings.
+
+- **Sound:** the **Sound** button records what your Mac plays, without Barn
+  Owl's own sounds. The **microphone** menu picks a microphone, and the
+  microphone stays off until you do. Barn Owl explains why before macOS asks,
+  and your choices are remembered.
+- **Video or GIF:** the switch beside Record. G in the overlay records a GIF.
+- **Countdown:** 3, 2, 1 gives you a moment to get ready. Return, Space or a
+  click starts at once, and Esc cancels.
+
+While you record, a small **pill** beside the area shows the time and lets
+you pause, carry on, **restart** or **discard** (press it twice). With a
+microphone it shows its level, and warns if it hears nothing. A thin ring
+marks the area, dashed while paused. In the menu bar a stop button shows the
+time: click it to stop, right-click for Pause, Restart and Discard. ⌃⌥⌘5
+stops too. Barn Owl's own controls never appear in the video, your screen
+stays on, and you can still take screenshots meanwhile.
+
+A recording gets a card with its length, and a place in Capture History. It's
+saved as a QuickTime movie in the screenshot folder (or where you choose),
+named "Screen Recording" and the time, with your Mac's sound and the
+microphone mixed into one track so every player plays it. The two tracks stay
+separate in Capture History, for the video editor. A recording shorter than a
+second is not kept, and Barn Owl needs 2 GB free to start, stopping below 1 GB.
+
+On the card: **Copy**, **Save**, **Make GIF** and **Edit**.
+
+### GIFs
+
+A GIF loops, has no sound, and runs at 15 frames a second, up to 800 pixels
+wide, never wider than the recording. Frames that don't change only last
+longer, so a still screen costs nothing.
+
+- **Straight to a GIF:** press G in the overlay, or choose GIF in the record
+  bar. Barn Owl records, then makes the GIF; the card says "Making GIF…" and
+  offers **Keep as Video** if you'd rather.
+- **From a recording:** **Make GIF** on its card saves one beside the video
+  and copies it. In the video editor, choose GIF as the format to pick the
+  width (480, 800 or 1200) and the frame rate (10, 15 or 24).
+
+GIFs are for short clips. The video editor warns when one is long and shows
+what an MP4 would weigh.
+
+### The video editor
+
+<!-- IMAGE: docs/images/video-editor.png (560 wide): the video editor with the filmstrip timeline, a split clip, the Computer and Mic lanes, and the Export inspector. -->
+
+Open a recording by clicking its card, or **Edit**, or from Capture History.
+The picture is on top, the timeline under it, and the inspector on the right
+(⌥⌘I). Edits are kept apart from the movie, so it is never changed, every
+step can be undone, and **Revert to Original** goes back to the start. They
+stay with the recording while it's kept.
+
+- **Timeline:** the clips as a filmstrip, and a lane for each sound track,
+  **Computer** and **Mic**. Click to move the playhead, which snaps to clip
+  edges. ⌘+ and ⌘− zoom, and ⌘9 fits.
+- **Trim, split, delete:** drag a clip's edge to trim it. ⌘B splits at the
+  playhead, or choose the Blade (B) and click a clip. I and O trim the start
+  or end to the playhead. Delete (⌫) takes a clip out, and the rest closes up.
+- **Speed:** a clip plays at 0.5×, 1×, 1.5×, 2× or 4×. [ and ] step it, and 0
+  brings it back to normal.
+- **Crop** (C): free, or 16:9, 4:3, 1:1 or 9:16.
+- **Sound:** each track has its own volume, up to double, and a mute button.
+  **Fade in and out** softens the start and the end.
+- **Playback:** Space plays, J, K and L shuttle, ← and → step a frame, ⇧ with
+  them a second. ? shows every key.
+
+**Export** is how Copy, Save and Done make the file: MP4, MOV or GIF; a size
+of Original, 1080p, 720p or 480p; and High, Standard or Small quality. Small
+uses HEVC for about half the size, and plays on Macs and iPhones; some
+websites want H.264. An estimate shows the size before you commit. **Export…**
+(⌘E) saves a copy wherever you choose. **Copy Video** (⇧⌘C) puts the file on
+the clipboard, **Save** (⌘S) writes it over the recording's file, or beside
+it if the format changed, and **Done** (⌘Return) copies and saves, as for a
+picture. **Edit Frame as Picture** (⇧⌘E) opens the frame under the playhead
+in the screenshot editor.
+
+### Scrolling capture
+
+<!-- IMAGE: docs/images/scrolling-capture.png (560 wide): a long page being captured, with the live preview growing beside it and the Auto-Scroll button. -->
+
+For a page, a chat or a list longer than your screen, press **⌃⌥⌘S**, or S
+after you select. Choose the part that scrolls and press Return.
+
+A bar appears under the area with a strip of the picture growing, its height
+in pixels, and what to do next. Barn Owl never takes the keyboard or the
+scrolling from the app you're in.
+
+- **Scroll down slowly,** or click **Auto-Scroll** and Barn Owl scrolls for
+  you, to the end. It stops at the end of the page, at the limit, or the
+  moment you move the pointer. Auto-Scroll needs Accessibility; the bar tells
+  you if it isn't on.
+- **Return, Done or ⌃⌥⌘S again** keeps the picture. **Esc** cancels and keeps
+  nothing.
+- A header or footer that stays put appears once, not on every screenful.
+  Scrolling back up adds nothing.
+- The picture can be up to 30,000 pixels tall. "Scroll a little slower" means
+  Barn Owl couldn't match a frame, and "Scroll down to carry on" means you've
+  gone above where the picture ends.
+
+You get an ordinary capture: a card, the clipboard, a saved file and a place
+in Capture History, to mark up, copy the text from and search. A scrolling
+capture never runs during a recording, and the other way round.
+
+### Settings → Capture
+
+- **Screenshots and markup:** the switch for Capture.
+- **Shortcuts:** every shortcut above, and **Also answer ⇧⌘4 and ⇧⌘3**. Switch
+  off macOS's own under Keyboard Shortcuts → Screenshots first; Barn Owl
+  notices by itself.
+- **After capturing:** **When you let go** (adjust it, or capture right away),
+  **Copy to the clipboard**, **Save to** a folder, **Then** (the card, the
+  editor, or nothing), **Look for private info** and **Hide with**.
+- **Saving:** the folder (where macOS saves screenshots, unless you choose
+  another), what names start with, whether to add the app's name, PNG, JPEG or
+  HEIC, and **Save Retina captures at their on-screen size** for smaller files.
+  Unless you choose otherwise, files are saved like macOS's own screenshots:
+  same folder, names and tags.
+- **In every capture:** a clean menu bar, no desktop icons, shadows on
+  windows, the pointer, and the camera sound.
+- **Card:** its corner, and how long it stays: 5, 8, 15 or 30 seconds, or
+  until you close it.
+- **Recording:** frame rate (30 or 60 a second), quality (Standard or High),
+  format (H.264 plays everywhere, HEVC makes smaller files), the pointer,
+  **Show clicks** (a ring where you click), the countdown, **Record computer
+  audio**, the microphone and where recordings are saved: with the
+  screenshots, in Movies, or anywhere.
+- **History:** how long captures stay editable, **Show History…** and
+  **Clear Now**.
+
+### Troubleshooting Capture
+
+**A shortcut does nothing.** Check that Capture is on in Settings → Capture,
+and that no other capture app is using the same keys; Settings names any it
+finds.
+
+**It says it needs Screen Recording.** Turn on Barn Owl in System Settings →
+Privacy & Security → Screen & System Audio Recording, then choose **Relaunch
+Barn Owl**.
+
+**My recording has no sound.** Computer audio is off until you turn on
+**Sound** in the record bar or **Record computer audio** in Settings. The
+microphone stays off until you pick one; if macOS refused it, Settings has a
+button to allow it in System Settings. "Mic is silent" in the pill means
+Barn Owl hears nothing from it: check that it isn't muted. Bluetooth
+headsets drop to phone quality while their microphone is on.
+
+**Auto-Scroll doesn't move the page.** It needs Accessibility, like hiding
+icons does. Allow it in System Settings → Privacy & Security → Accessibility.
+
+**A capture isn't in Capture History.** History keeps what Settings → Capture
+says: 30 days, 7 days or nothing, and recordings for a week. **Clear Now**
+lets everything go.
 
 ## The Barn: disk space
 
@@ -930,7 +1332,8 @@ For Raycast, Alfred, scripts and anything that can open a URL:
 | `barnowl://roost` | The Roost |
 | `barnowl://roost?session=<id>` | The Roost, with one session picked (the widget's links use this; ids look like `claude:<session id>`) |
 | `barnowl://presenter`, `?on=1`, `?on=0` | Presenter mode |
-| `barnowl://capture`, `?mode=window`, `?mode=screen`, `?mode=same` | Capture an area (or a window, the whole screen, or the last area again). Needs Capture on |
+| `barnowl://capture`, `?mode=window`, `?mode=screen`, `?mode=same`, `?mode=text` | Capture an area (or a window, the whole screen, the last area again, or copy the text in an area). Needs Capture on |
+| `barnowl://capture?mode=record`, `?mode=gif`, `?mode=scroll`, `?mode=history` | Record the screen, record a GIF, take a scrolling capture (or finish the one that's going), or open Capture History. Needs Capture on |
 | `barnowl://open?app=Mail` | Open an app's icon |
 | `barnowl://place?app=Mail&row=hidden` | Move an icon |
 | `barnowl://watch?app=Mail` (`&on=0` to stop) | Show when it changes |
@@ -988,4 +1391,4 @@ clipboard history and agent records are in
 `~/Library/Group Containers/2S5J2CYWPZ.io.github.marvika.BarnOwl`, and the
 backup of Claude Code's settings, if Barn Owl made one, is
 `~/.claude/settings.json.barnowl-backup`. Remove Barn Owl from Accessibility,
-Screen Recording and Automation in Privacy & Security.
+Screen Recording, Microphone and Automation in Privacy & Security.
