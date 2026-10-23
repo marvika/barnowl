@@ -21,6 +21,8 @@ enum AppCommand: Hashable, Sendable, Identifiable {
     case editLastCapture
     case captureText
     case captureHistory
+    case recordScreen
+    case captureScrolling
     case settings(SettingsPaneID)
 
     var id: Self { self }
@@ -47,6 +49,8 @@ enum AppCommand: Hashable, Sendable, Identifiable {
         case .editLastCapture: "Edit the last capture"
         case .captureText: "Copy text from the screen"
         case .captureHistory: "Capture history"
+        case .recordScreen: "Record the screen"
+        case .captureScrolling: "Scrolling capture"
         case .settings(let pane): pane == .layout ? "Arrange menu bar icons" : "\(pane.title) settings"
         }
     }
@@ -71,6 +75,8 @@ enum AppCommand: Hashable, Sendable, Identifiable {
         case .editLastCapture: "pencil.tip.crop.circle"
         case .captureText: "text.viewfinder"
         case .captureHistory: "photo.stack"
+        case .recordScreen: "record.circle"
+        case .captureScrolling: "rectangle.expand.vertical"
         case .settings(let pane): pane == .layout ? "square.grid.3x1.below.line.grid.1x2" : "gearshape"
         }
     }
@@ -97,6 +103,8 @@ enum AppCommand: Hashable, Sendable, Identifiable {
         case .editLastCapture: ["edit", "capture", "screenshot", "last", "markup", "annotate"]
         case .captureText: ["text", "copy", "ocr", "read", "recognize", "words", "capture"]
         case .captureHistory: ["capture", "history", "screenshots", "captures", "recent", "past", "find"]
+        case .recordScreen: ["record", "recording", "video", "screencast", "movie", "gif", "capture", "screen"]
+        case .captureScrolling: ["scrolling", "scroll", "capture", "screenshot", "long", "tall", "page"]
         case .settings(let pane): ["settings", "preferences", pane.rawValue.lowercased()] + pane.extraKeywords
         }
     }
@@ -127,7 +135,7 @@ enum SettingsPaneID: String, Sendable, CaseIterable {
         case .menuBar: ["menubar", "bar"]
         case .appearance: ["tint", "colour", "color", "spacing", "style", "look"]
         case .clipboard: []
-        case .capture: ["screenshots", "capture"]
+        case .capture: ["screenshots", "capture", "recording", "video", "gif", "microphone", "scrolling"]
         case .keepAwake: ["rules", "awake"]
         case .shortcuts: ["hotkeys", "keyboard"]
         case .general, .toggles: []
@@ -148,7 +156,7 @@ enum CommandParser {
                                      .hiddenFiles, .sleepDisplay, .clipboard, .barn, .showAllIcons]
         if Preferences.agentsEnabled { all.append(.roost) }
         if Preferences.captureEnabled { all += [.captureArea, .captureScreen, .captureSameArea, .editLastCapture, .captureText] }
-        if Preferences.captureEnabled { all.append(.captureHistory) }
+        if Preferences.captureEnabled { all += [.captureHistory, .recordScreen, .captureScrolling] }
         all += SettingsPaneID.allCases.map(AppCommand.settings)
 
         var results: [AppCommand] = []

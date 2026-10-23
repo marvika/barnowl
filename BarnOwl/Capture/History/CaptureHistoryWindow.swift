@@ -493,6 +493,7 @@ final class CaptureHistoryWindowController: NSWindowController, NSWindowDelegate
     /// Copy Text is offered while there may be words: as the host knows them, or not read yet
     /// (they're read when you choose it).
     private func mightHaveText(_ item: CaptureHistory.Item) -> Bool {
+        guard !item.media.isMovie else { return false }
         if item.text == nil, item.entry.textWasRead != true { return true }
         return host?.hasText(item.id) ?? (item.text != nil)
     }
@@ -504,7 +505,8 @@ final class CaptureHistoryWindowController: NSWindowController, NSWindowDelegate
     }
 
     @objc func pinSelection(_ sender: Any?) {
-        for item in selection.prefix(Self.most) { host?.pin(item.id) }
+        // Recordings don't pin.
+        for item in selection.filter({ !$0.media.isMovie }).prefix(Self.most) { host?.pin(item.id) }
     }
 
     @objc func removeFromHistory(_ sender: Any?) {
@@ -562,7 +564,8 @@ final class CaptureHistoryWindowController: NSWindowController, NSWindowDelegate
         case #selector(copy(_:)): return items.count == 1
         case #selector(copyText(_:)): return items.contains { mightHaveText($0) }
         case #selector(showInFinder(_:)): return items.contains(where: \.isSaved)
-        case #selector(openSelection(_:)), #selector(pinSelection(_:)): return !items.isEmpty
+        case #selector(openSelection(_:)): return !items.isEmpty
+        case #selector(pinSelection(_:)): return items.contains { !$0.media.isMovie }
         // Only from the grid: ⌘⌫ in the search field deletes text there.
         case #selector(removeFromHistory(_:)): return !items.isEmpty && grid.isFocused
         default: return true
@@ -589,9 +592,13 @@ final class CaptureHistoryWindowController: NSWindowController, NSWindowDelegate
         if items.contains(where: \.isSaved) {
             menu.addItem(ClosureMenuItem("Show in Finder") { [weak self] in self?.showInFinder(nil) })
         }
-        menu.addItem(ClosureMenuItem(single ? "Pin to Screen" : "Pin \(items.count) to Screen") { [weak self] in
-            for id in ids.prefix(Self.most) { self?.host?.pin(id) }
-        })
+        // Recordings don't pin.
+        let pinnable = items.filter { !$0.media.isMovie }.map(\.id)
+        if !pinnable.isEmpty {
+            menu.addItem(ClosureMenuItem(pinnable.count == 1 ? "Pin to Screen" : "Pin \(pinnable.count) to Screen") { [weak self] in
+                for id in pinnable.prefix(Self.most) { self?.host?.pin(id) }
+            })
+        }
         menu.addItem(.separator())
         let remove = ClosureMenuItem(single ? "Remove from History" : "Remove \(items.count) from History") { [weak self] in
             self?.remove(ids)

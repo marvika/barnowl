@@ -29,7 +29,7 @@ enum CaptureHistory {
             switch Capture.Kind(rawValue: entry.kind) {
             case .window: return "Window"
             case .screen: return "Screen"
-            default: return "Area"
+            default: return entry.kind == "gif" ? "GIF" : entry.kind == "video" ? "Recording" : "Area"
             }
         }
     }
@@ -118,7 +118,9 @@ enum CaptureHistory {
     }
 
     static func searchKey(for entry: CaptureLibrary.Entry, namer: DayNamer) -> String {
-        let parts: [String] = [entry.text ?? "", entry.appName ?? "", namer.searchWords(for: entry.date)]
+        // Recordings are found by what they are, too.
+        let kind = entry.kind == "video" ? "recording video movie" : entry.kind == "gif" ? "recording gif" : ""
+        let parts: [String] = [entry.text ?? "", entry.appName ?? "", namer.searchWords(for: entry.date), kind]
         return fold(parts.joined(separator: "\n"))
     }
 

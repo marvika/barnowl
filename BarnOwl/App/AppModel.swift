@@ -72,6 +72,7 @@ final class AppModel {
         presenter = PresenterMode(sections: sections, keepAwake: keepAwake, images: images, scanner: scanner,
                                   mover: mover, layout: layout)
         layout.temporarilyMoved = { [watcher] in Set(watcher.surfaced.keys) }
+        capture.showCaptureSettings = { [weak self] in self?.showSettings(.capture) }
         layout.isPaused = { [presenter] in presenter.isPresenting || presenter.isChanging }
         watcher.isPaused = { [presenter] in presenter.isPresenting || presenter.isChanging }
     }
@@ -99,6 +100,8 @@ final class AppModel {
         case .editLastCapture: capture.editLastCapture()
         case .captureText: capture.captureText()
         case .captureHistory: capture.showHistory()
+        case .recordScreen: capture.startRecording()
+        case .captureScrolling: capture.scrollingCapture()
         case .settings(let pane): showSettings(SettingsPane(rawValue: pane.rawValue))
         }
     }
