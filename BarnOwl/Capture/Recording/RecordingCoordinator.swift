@@ -34,6 +34,9 @@ final class RecordingCoordinator {
     private var silence = MicrophoneSilence()
     private var countdown: RecordingCountdown?
     private var pill: RecordingPanel?
+    /// Where the pill's middle belongs, and the room it has: it stays centred as it grows.
+    private var pillAnchor: (centre: CGFloat, edge: CGRect)?
+    private var pillResized: NSObjectProtocol?
     private var border: RecordingBorder?
     private var statusItem: RecordingStatusItem?
     private var ticker: Task<Void, Never>?
@@ -297,11 +300,17 @@ final class RecordingCoordinator {
             border.show()
             self.border = border
         }
-        let pill = RecordingPanel(rootView: RecordingPill(model: model, stop: { [weak self] in self?.stop() },
-                                                          togglePause: { [weak self] in self?.togglePause() },
-                                                          restart: { [weak self] in self?.restart() },
-                                                          discard: { [weak self] in self?.discard() }))
+        let controls = RecordingPill(model: model, stop: { [weak self] in self?.stop() },
+                                     togglePause: { [weak self] in self?.togglePause() },
+                                     restart: { [weak self] in self?.restart() },
+                                     discard: { [weak self] in self?.discard() })
+        let pill = RecordingPanel(rootView: controls.padding(RecordingPill.margin))
         place(pill, for: take)
+        // Saying Paused or Discard makes the pill wider; its panel grows to the right.
+        pillResized = NotificationCenter.default.addObserver(forName: NSWindow.didResizeNotification, object: pill,
+                                                             queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.recentrePill() }
+        }
         pill.orderFrontRegardless()
         self.pill = pill
         let item = RecordingStatusItem()
@@ -321,18 +330,32 @@ final class RecordingCoordinator {
     }
 
     /// Just below the area, or above it, or inside its bottom edge when it fills the screen.
+    /// The panel is the pill and the clear margin around it, for its shadow.
     private func place(_ pill: RecordingPanel, for take: Take) {
         let size = pill.fittingSize
+        let margin = RecordingPill.margin
         let screen = NSScreen.screens.first { $0.frame == take.screen }?.visibleFrame ?? take.screen
-        let x = min(max(take.area.midX - size.width / 2, screen.minX + 8), screen.maxX - size.width - 8)
-        let gap: CGFloat = 12 + RecordingBorder.inset
+        let edge = screen.insetBy(dx: 8 - margin, dy: 8 - margin)
+        let x = min(max(take.area.midX - size.width / 2, edge.minX), edge.maxX - size.width)
+        let gap: CGFloat = 12 + RecordingBorder.inset - margin
         var y = take.area.minY - size.height - gap
-        if y < screen.minY + 8 { y = take.area.maxY + gap }
-        if y + size.height > screen.maxY - 8 { y = max(take.area.minY, screen.minY) + 24 }
+        if y < edge.minY { y = take.area.maxY + gap }
+        if y + size.height > edge.maxY { y = max(take.area.minY, screen.minY) + 24 - margin }
         pill.setFrame(CGRect(x: x, y: y, width: size.width, height: size.height), display: false)
+        pillAnchor = (x + size.width / 2, edge)
+    }
+
+    private func recentrePill() {
+        guard let pill, let anchor = pillAnchor else { return }
+        let width = pill.frame.width
+        let x = min(max(anchor.centre - width / 2, anchor.edge.minX), anchor.edge.maxX - width).rounded()
+        if abs(x - pill.frame.minX) >= 1 { pill.setFrameOrigin(CGPoint(x: x, y: pill.frame.minY)) }
     }
 
     private func hideControls() {
+        if let pillResized { NotificationCenter.default.removeObserver(pillResized) }
+        pillResized = nil
+        pillAnchor = nil
         pill?.orderOut(nil)
         pill = nil
         border?.close()
@@ -399,7 +422,7 @@ final class RecordingCoordinator {
         host.showRecording(capture, status: take.options.makesGIF ? "Making GIF…" : "Saving…")
 
         var saved: URL?
-        var label = "Saved"
+        var label = ""
         if take.options.makesGIF {
             host.cards.update(take.id, link: CaptureCards.CardLink(title: "Keep as Video") { [weak self] in
                 self?.gifs[take.id]?.cancel()
@@ -411,7 +434,6 @@ final class RecordingCoordinator {
             host.cards.update(take.id, link: nil)
             if let gif, !making.isCancelled, let url = await Self.place(gif, date: take.date, appName: take.appName) {
                 saved = url
-                label = "GIF"
             } else {
                 capture.media = .video(duration: output.duration)
                 label = making.isCancelled ? "Kept as video" : "Saved as video"
@@ -438,13 +460,19 @@ final class RecordingCoordinator {
         if kept { movies[take.id] = CaptureLibrary.movie(take.id) }
 
         let bytes = saved.flatMap(CaptureLibrary.size(of:))
-        var status = saved == nil ? "Couldn't save · drag it from here" : RecordingTime.status(label, bytes: bytes)
+        var status = "Couldn't save · drag it from here"
+        if let saved { status = RecordingTime.status(label.isEmpty ? Self.savedLabel(saved) : label, bytes: bytes) }
         if let note = reason ?? take.note { status = "\(note) · \(status)" }
         host.cards.update(take.id, status: status, kept: saved != nil)
         NSAccessibility.post(element: NSApp as Any, notification: .announcementRequested,
                              userInfo: [.announcement: saved == nil ? "Recording couldn't be saved" : "Recording saved",
                                         .priority: NSAccessibilityPriorityLevel.high.rawValue])
         if Preferences.captureThen == .editor { host.openVideoEditor(take.id) }
+    }
+
+    /// "Saved to Desktop": where the file went, by its folder's name in Finder.
+    static func savedLabel(_ file: URL) -> String {
+        "Saved to \(FileManager.default.displayName(atPath: file.deletingLastPathComponent().path))"
     }
 
     /// The movie you're handed: the sounds mixed into one track, or the master as it is.
@@ -519,7 +547,8 @@ final class RecordingCoordinator {
             }
             CaptureLibrary.setFile(url, for: id)
             host?.recordingSaved(id, file: url, media: .video(duration: capture.media.duration ?? 0))
-            host?.cards.update(id, status: RecordingTime.status("Saved", bytes: CaptureLibrary.size(of: url)), kept: true)
+            host?.cards.update(id, status: RecordingTime.status(Self.savedLabel(url), bytes: CaptureLibrary.size(of: url)),
+                               kept: true)
         }
     }
 

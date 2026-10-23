@@ -1,3 +1,4 @@
+import KeyboardShortcuts
 import SwiftUI
 
 /// Under a selection made to record: what to hear, video or GIF, and Record. Your sound
@@ -40,15 +41,21 @@ struct RecordBar: View {
                 .accessibilityLabel("Start over")
             }
             if showsHint {
-                Text("Return records · drag the edges to adjust · Esc to start over")
+                Text(Self.hint)
                     .font(.system(size: 11))
                     .foregroundStyle(.white.opacity(0.7))
             }
         }
         .padding(5)
-        .glassEffect(.regular.tint(Brand.indigoDeep.opacity(0.5)), in: .rect(cornerRadius: 18))
+        .captureGlass(in: .rect(cornerRadius: 18))
         .environment(\.colorScheme, .dark)
         .fixedSize()
+    }
+
+    /// For your first recordings: how it starts, and how it stops.
+    static var hint: String {
+        let stop = KeyboardShortcuts.Name.recordScreen.keys.map { "\($0) again to stop" } ?? "stop it from the menu bar"
+        return "Return to record · \(stop) · Esc to start over"
     }
 
     /// The chosen microphone, if it may be heard and is plugged in.
@@ -104,7 +111,7 @@ struct RecordBar: View {
                 Image(systemName: systemAudio ? "speaker.wave.2.fill" : "speaker.slash")
                     .font(.system(size: 12, weight: .semibold))
                     .frame(width: 16)
-                Text("Sound").font(.system(size: 13, weight: .semibold))
+                Text("Computer Audio").font(.system(size: 13, weight: .semibold))
             }
             .foregroundStyle(.white.opacity(systemAudio ? 1 : 0.8))
             .padding(.horizontal, 10).frame(height: 30)
@@ -112,7 +119,8 @@ struct RecordBar: View {
             .contentShape(.capsule)
         }
         .buttonStyle(PressableStyle())
-        .help(systemAudio ? "Recording what your Mac plays" : "Not recording what your Mac plays")
+        .help(systemAudio ? "Recording what your Mac plays · click to leave it out"
+                          : "Click to record what your Mac plays, too")
         .accessibilityLabel("Computer audio")
         .accessibilityValue(systemAudio ? "On" : "Off")
     }

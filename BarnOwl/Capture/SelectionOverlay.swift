@@ -1,4 +1,5 @@
 import AppKit
+import KeyboardShortcuts
 import SwiftUI
 
 enum CaptureMode: String, CaseIterable, Identifiable {
@@ -729,7 +730,7 @@ final class SelectionView: NSView {
             keysSheet.removeFromSuperview()
             self.keysSheet = nil
         } else {
-            let sheet = NSHostingView(rootView: CaptureKeysSheet())
+            let sheet = NSHostingView(rootView: CaptureKeysSheet(records: recording != nil))
             addSubview(sheet)
             let size = sheet.fittingSize
             sheet.frame = CGRect(x: (bounds.width - size.width) / 2, y: (bounds.height - size.height) / 2,
@@ -1094,7 +1095,7 @@ struct CaptureModeBar: View {
             }
         }
         .padding(6)
-        .glassEffect(.regular.tint(Brand.indigoDeep.opacity(0.5)), in: .rect(cornerRadius: 20))
+        .captureGlass(in: .rect(cornerRadius: 20))
         .environment(\.colorScheme, .dark)
         .fixedSize()
     }
@@ -1144,13 +1145,15 @@ struct CaptureActionBar: View {
                 .accessibilityLabel("Start over")
             }
             if showsHint {
-                Text("Drag the edges to adjust · drag inside to move · Esc to start over")
+                // A scrolling capture's first time: what happens after Return.
+                Text(scrolls ? "Return to start, then scroll down slowly · Esc to start over"
+                             : "Drag the edges to adjust · drag inside to move · Esc to start over")
                     .font(.system(size: 11))
                     .foregroundStyle(.white.opacity(0.7))
             }
         }
         .padding(5)
-        .glassEffect(.regular.tint(Brand.indigoDeep.opacity(0.5)), in: .rect(cornerRadius: 18))
+        .captureGlass(in: .rect(cornerRadius: 18))
         .environment(\.colorScheme, .dark)
         .fixedSize()
     }
@@ -1206,51 +1209,130 @@ struct CaptureActionBar: View {
 struct KeyCap: View {
     let key: String
     var onAccent = false
+    /// The keys sheet's size, beside 12 pt text.
+    var large = false
 
-    init(_ key: String, onAccent: Bool = false) {
+    init(_ key: String, onAccent: Bool = false, large: Bool = false) {
         self.key = key
         self.onAccent = onAccent
+        self.large = large
     }
 
     var body: some View {
         Text(key)
-            .font(.system(size: 10.5, weight: .semibold, design: .rounded))
-            .padding(.horizontal, 4).padding(.vertical, 1)
-            .background(.white.opacity(onAccent ? 0.22 : 0.1), in: .rect(cornerRadius: 4))
-            .foregroundStyle(.white.opacity(0.8))
+            .font(.system(size: large ? 11.5 : 10.5, weight: .semibold, design: .rounded))
+            .padding(.horizontal, large ? 5 : 4).padding(.vertical, large ? 2 : 1)
+            .frame(minWidth: large ? 20 : 0)
+            .background(.white.opacity(onAccent ? 0.22 : large ? 0.14 : 0.1), in: .rect(cornerRadius: large ? 5 : 4))
+            .foregroundStyle(.white.opacity(large ? 0.92 : 0.8))
     }
 }
 
-/// Every key, on "?".
+/// Every key, on "?". Keys written in [brackets] are drawn as key caps, as on the bars.
 struct CaptureKeysSheet: View {
-    private let groups: [(String, [(String, String)])] = [
-        ("Choose", [("Drag", "an area"), ("Click", "a window, or the screen"), ("A · W · F", "area, window, screen"),
-                    ("Space", "switch area and window"), ("L", "the last area again")]),
-        ("Shape it", [("⇧ drag", "square"), ("⌥ drag", "from the centre"), ("Space while dragging", "move it"),
-                      ("Arrows", "nudge (⇧ 10 pt)"), ("⌥ Arrows", "resize")]),
-        ("Then", [("Return", SelectionView.primaryTitle.lowercased()), ("E", "edit"), ("P", "pin"), ("T", "copy its text"), ("⌘C · ⌘S", "copy only · save only"),
-                  ("R · G", "record a video · a GIF"), ("S", "scrolling capture"), ("Esc", "start over, then cancel")]),
-    ]
+    /// Selecting something to record: the picture's own keys are left out.
+    var records = false
+
+    private var groups: [(String, [(String, String)])] {
+        let then: [(String, String)] = records
+            ? [("[↩]", "record"), ("[R] [G]", "record a video · a GIF"), ("[Esc]", "start over, then cancel")]
+            : [("[↩]", SelectionView.primaryTitle.lowercased()), ("[E]", "edit"), ("[P]", "pin"), ("[T]", "copy its text"),
+               ("[⌘C] [⌘S]", "copy only · save only"), ("[R] [G]", "record a video · a GIF"), ("[S]", "scrolling capture"),
+               ("[Esc]", "start over, then cancel")]
+        return [
+            ("Choose", [("Drag", "an area"), ("Click", "a window, or the screen"), ("[A] [W] [F]", "area, window, screen"),
+                        ("[Space]", "switch area and window"), ("[L]", "the last area again")]),
+            ("Shape It", [("[⇧] drag", "square"), ("[⌥] drag", "from the centre"), ("[Space]", "move it while dragging"),
+                          ("[←] [→] [↑] [↓]", "nudge (⇧ 10 pt)"), ("[⌥] arrows", "resize")]),
+            ("Then", then),
+        ]
+    }
 
     var body: some View {
-        HStack(alignment: .top, spacing: 28) {
-            ForEach(groups, id: \.0) { group in
-                VStack(alignment: .leading, spacing: 7) {
-                    Text(group.0).font(.system(size: 12, weight: .bold)).foregroundStyle(.white.opacity(0.6))
-                    ForEach(group.1, id: \.0) { row in
-                        HStack(spacing: 10) {
-                            Text(row.0).font(.system(size: 12, weight: .semibold, design: .rounded))
-                                .frame(minWidth: 110, alignment: .leading)
-                            Text(row.1).font(.system(size: 12)).foregroundStyle(.white.opacity(0.8))
+        VStack(alignment: .leading, spacing: 18) {
+            HStack(alignment: .top, spacing: 32) {
+                ForEach(groups, id: \.0) { group in
+                    VStack(alignment: .leading, spacing: 8) {
+                        header(group.0)
+                        Grid(alignment: .leading, horizontalSpacing: 12, verticalSpacing: 7) {
+                            ForEach(group.1, id: \.0) { row in
+                                GridRow {
+                                    Self.keys(row.0).frame(minHeight: 20)
+                                    Text(row.1).font(.system(size: 12)).foregroundStyle(.white.opacity(0.8))
+                                        .fixedSize()
+                                }
+                            }
                         }
-                        .foregroundStyle(.white)
                     }
+                }
+            }
+            Rectangle().fill(.white.opacity(0.14)).frame(height: 0.5)
+            HStack(spacing: 22) {
+                if !anywhere.isEmpty {
+                    header("Anywhere")
+                    ForEach(anywhere, id: \.0) { item in
+                        HStack(spacing: 8) {
+                            Self.keys("[\(item.0)]")
+                            Text(item.1).font(.system(size: 12)).foregroundStyle(.white.opacity(0.8))
+                        }
+                    }
+                }
+                Spacer(minLength: 0)
+                HStack(spacing: 8) {
+                    Self.keys("[?]")
+                    Text("shows or hides these").font(.system(size: 12)).foregroundStyle(.white.opacity(0.6))
                 }
             }
         }
         .padding(22)
-        .glassEffect(.regular.tint(Brand.indigoDeep.opacity(0.6)), in: .rect(cornerRadius: 22))
+        .captureGlass(in: .rect(cornerRadius: 22), tint: 0.6)
         .environment(\.colorScheme, .dark)
         .fixedSize()
+    }
+
+    /// The shortcuts that work from any app, as you've set them.
+    private var anywhere: [(String, String)] {
+        var items: [(String, String)] = []
+        if let keys = KeyboardShortcuts.Name.recordScreen.keys { items.append((keys, "record, and again to stop")) }
+        if let keys = KeyboardShortcuts.Name.captureScrolling.keys { items.append((keys, "scrolling capture")) }
+        return items
+    }
+
+    private func header(_ title: String) -> some View {
+        Text(title).font(.system(size: 12, weight: .bold)).foregroundStyle(.white.opacity(0.6))
+    }
+
+    /// "[⇧] drag": a ⇧ key cap, then "drag".
+    static func keys(_ text: String) -> some View {
+        HStack(spacing: 4) {
+            ForEach(Array(tokens(text).enumerated()), id: \.offset) { _, token in
+                if token.isKey {
+                    KeyCap(token.text, large: true)
+                } else {
+                    Text(token.text).font(.system(size: 12, weight: .semibold))
+                }
+            }
+        }
+        .foregroundStyle(.white)
+    }
+
+    /// Splits "[⌥] arrows" into its key caps and words.
+    nonisolated static func tokens(_ text: String) -> [(text: String, isKey: Bool)] {
+        var tokens: [(text: String, isKey: Bool)] = []
+        var current = ""
+        var inKey = false
+        for character in text {
+            guard (character == "[" && !inKey) || (character == "]" && inKey) else {
+                current.append(character)
+                continue
+            }
+            let trimmed = current.trimmingCharacters(in: .whitespaces)
+            if !trimmed.isEmpty { tokens.append((trimmed, inKey)) }
+            current = ""
+            inKey.toggle()
+        }
+        let rest = current.trimmingCharacters(in: .whitespaces)
+        if !rest.isEmpty { tokens.append((rest, false)) }
+        return tokens
     }
 }

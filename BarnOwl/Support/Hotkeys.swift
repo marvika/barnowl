@@ -23,4 +23,7 @@ extension KeyboardShortcuts.Name {
     /// ⇧⌘4 and ⇧⌘3, set only while you've handed them over from macOS.
     static let captureAreaApple = Self("captureAreaApple")
     static let captureScreenApple = Self("captureScreenApple")
+
+    /// The keys as macOS writes them, like ⌃⌥⌘5; nil when there's no shortcut.
+    @MainActor var keys: String? { KeyboardShortcuts.getShortcut(for: self)?.description }
 }

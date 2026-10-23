@@ -58,13 +58,13 @@ final class ScrollingCaptureSession {
         guard !started else { return nil }
         started = true
         guard let screen = NSScreen.screens.first(where: { $0.displayID == displayID }) else {
-            failure = "That display is gone."
+            failure = "That display is gone"
             return nil
         }
         scale = screen.backingScaleFactor
         area = Self.pixelAligned(rect.intersection(screen.frame), scale: scale)
         guard area.width >= 16, area.height >= 16 else {
-            failure = "That area is too small to scroll."
+            failure = "That area is too small to scroll"
             return nil
         }
         isRunning = true
@@ -74,7 +74,7 @@ final class ScrollingCaptureSession {
         do {
             try await startStream(on: screen)
         } catch {
-            failure = "Barn Owl couldn't watch that area."
+            failure = "Barn Owl couldn't watch that area"
             await tearDown()
             return nil
         }
