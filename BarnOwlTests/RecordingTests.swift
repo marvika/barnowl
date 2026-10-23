@@ -510,3 +510,20 @@ struct RecordingLibraryTests {
         #expect(CaptureHistory.filter([item], query: "video").count == 1)
     }
 }
+
+@MainActor
+struct RecordingWordingTests {
+    @Test func cardSaysWhereARecordingWent() {
+        let file = URL(fileURLWithPath: "/tmp/Barn Owl Test Folder/Screen Recording.mov")
+        #expect(RecordingCoordinator.savedLabel(file) == "Saved to Barn Owl Test Folder")
+    }
+
+    @Test func keysSheetDrawsBracketedKeysAsCaps() {
+        let tokens = CaptureKeysSheet.tokens("[⌥] arrows")
+        #expect(tokens.map { $0.text } == ["⌥", "arrows"])
+        #expect(tokens.map { $0.isKey } == [true, false])
+        #expect(CaptureKeysSheet.tokens("[A] [W] [F]").map { $0.text } == ["A", "W", "F"])
+        #expect(CaptureKeysSheet.tokens("[⌃⌥⌘5]").map { $0.text } == ["⌃⌥⌘5"])
+        #expect(CaptureKeysSheet.tokens("Drag").map { $0.isKey } == [false])
+    }
+}

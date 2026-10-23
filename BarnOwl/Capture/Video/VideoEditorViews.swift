@@ -288,7 +288,7 @@ struct VideoInspector: View {
 
     private var exportSection: some View {
         VStack(alignment: .leading, spacing: 14) {
-            header("Export", "How Copy, Save and Done make the file.")
+            header("Export", "Copy, Save and Done use these too.")
             section("Format") {
                 Picker("Format", selection: Binding(get: { settings.format }, set: { format in
                     model.setExport { $0.format = format }
