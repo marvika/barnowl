@@ -297,10 +297,11 @@ final class RecordingCoordinator {
             border.show()
             self.border = border
         }
-        let pill = RecordingPanel(rootView: RecordingPill(model: model, stop: { [weak self] in self?.stop() },
-                                                          togglePause: { [weak self] in self?.togglePause() },
-                                                          restart: { [weak self] in self?.restart() },
-                                                          discard: { [weak self] in self?.discard() }))
+        let controls = RecordingPill(model: model, stop: { [weak self] in self?.stop() },
+                                     togglePause: { [weak self] in self?.togglePause() },
+                                     restart: { [weak self] in self?.restart() },
+                                     discard: { [weak self] in self?.discard() })
+        let pill = RecordingPanel(rootView: controls.padding(RecordingPill.margin))
         place(pill, for: take)
         pill.orderFrontRegardless()
         self.pill = pill
@@ -321,14 +322,17 @@ final class RecordingCoordinator {
     }
 
     /// Just below the area, or above it, or inside its bottom edge when it fills the screen.
+    /// The panel is the pill and the clear margin around it, for its shadow.
     private func place(_ pill: RecordingPanel, for take: Take) {
         let size = pill.fittingSize
+        let margin = RecordingPill.margin
         let screen = NSScreen.screens.first { $0.frame == take.screen }?.visibleFrame ?? take.screen
-        let x = min(max(take.area.midX - size.width / 2, screen.minX + 8), screen.maxX - size.width - 8)
-        let gap: CGFloat = 12 + RecordingBorder.inset
+        let edge = screen.insetBy(dx: 8 - margin, dy: 8 - margin)
+        let x = min(max(take.area.midX - size.width / 2, edge.minX), edge.maxX - size.width)
+        let gap: CGFloat = 12 + RecordingBorder.inset - margin
         var y = take.area.minY - size.height - gap
-        if y < screen.minY + 8 { y = take.area.maxY + gap }
-        if y + size.height > screen.maxY - 8 { y = max(take.area.minY, screen.minY) + 24 }
+        if y < edge.minY { y = take.area.maxY + gap }
+        if y + size.height > edge.maxY { y = max(take.area.minY, screen.minY) + 24 - margin }
         pill.setFrame(CGRect(x: x, y: y, width: size.width, height: size.height), display: false)
     }
 

@@ -44,7 +44,8 @@ struct ScrollingCaptureHUD: View {
 
     var body: some View {
         if glass {
-            bar.glassEffect(.regular.tint(Brand.indigoDeep.opacity(0.5)), in: .rect(cornerRadius: 18))
+            // Over the app you're scrolling, Barn Owl isn't active: floating glass stays legible.
+            bar.captureGlass(in: .rect(cornerRadius: 18), floating: true)
                 .environment(\.colorScheme, .dark)
                 .fixedSize()
         } else {
@@ -197,8 +198,8 @@ final class ScrollingHUDPanel: NSPanel {
         setContentSize(host.fittingSize)
     }
 
-    /// Clear space around the bar, for its glass edge.
-    static let margin: CGFloat = 10
+    /// Clear space around the bar, for its glass edge and shadow.
+    static let margin: CGFloat = 14
     /// From the area's edge to the bar.
     static let gap: CGFloat = 10
 

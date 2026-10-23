@@ -95,6 +95,35 @@ extension View {
             .glassEffect(.regular.tint(Brand.indigo.opacity(0.10)), in: .rect(cornerRadius: Theme.panelRadius))
             .shadow(color: .black.opacity(0.22), radius: 18, y: 8)
     }
+
+    /// What Capture's controls wear: the overlay bars' dusk-tinted glass, for white text.
+    /// `floating` is for controls over another app, like the recording pill: Barn Owl isn't
+    /// the active app there and macOS draws its glass nearly clear, so a deeper dusk fill
+    /// under the content, a hairline rim and a soft shadow keep it legible on any page.
+    @MainActor
+    func captureGlass<S: InsettableShape>(in shape: S, tint: Double = 0.5, floating: Bool = false) -> some View {
+        let backed = background {
+            if floating {
+                shape.fill(Brand.indigoDeep.opacity(0.7)).shadow(color: .black.opacity(0.3), radius: 10, y: 4)
+            }
+        }
+        .overlay { if floating { shape.strokeBorder(.white.opacity(0.14), lineWidth: 0.5) } }
+        return Group {
+            if CaptureGlass.drawsFlat {
+                backed.background(Brand.indigoDeep.opacity(0.84), in: shape)
+                    .overlay { shape.strokeBorder(.white.opacity(0.16), lineWidth: 0.5) }
+            } else {
+                backed.glassEffect(.regular.tint(Brand.indigoDeep.opacity(tint)), in: shape)
+            }
+        }
+    }
+}
+
+/// Switches for `captureGlass`.
+@MainActor
+enum CaptureGlass {
+    /// Offscreen previews can't draw glass: a flat stand-in instead.
+    static var drawsFlat = false
 }
 
 /// A dusk sky with a few softly twinkling stars.

@@ -1,4 +1,5 @@
 import AppKit
+import KeyboardShortcuts
 import SwiftUI
 
 /// What the controls show while recording.
@@ -68,26 +69,40 @@ struct RecordingPill: View {
     let restart: () -> Void
     let discard: () -> Void
 
+    /// Clear room around the pill in its panel, for its shadow.
+    static let margin: CGFloat = 14
+
     var body: some View {
         HStack(spacing: 2) {
             stopButton
             time
             Divider().frame(height: 18).padding(.horizontal, 5)
             PillButton(symbol: model.isPaused ? "play.fill" : "pause.fill",
-                       label: model.isPaused ? "Resume" : "Pause", action: togglePause)
-            PillButton(symbol: "arrow.counterclockwise", label: "Restart", action: restart)
+                       label: model.isPaused ? "Resume" : "Pause",
+                       help: model.isPaused ? "Resume recording" : "Pause recording", action: togglePause)
+            PillButton(symbol: "arrow.counterclockwise", label: "Restart", help: "Restart from the beginning", action: restart)
             discardButton
-            if model.makesGIF || model.hasMicrophone || model.hasSystemAudio {
+            if hears {
                 Divider().frame(height: 18).padding(.horizontal, 5)
                 hearing
             }
         }
-        .padding(.leading, 5).padding(.trailing, 8).padding(.vertical, 5)
-        .glassEffect(.regular.tint(Brand.indigoDeep.opacity(0.5)), in: .capsule)
+        // Round buttons at the ends sit concentric with the pill's ends.
+        .padding(.leading, 5).padding(.trailing, hears ? 10 : 5).padding(.vertical, 5)
+        .captureGlass(in: .capsule, floating: true)
         .environment(\.colorScheme, .dark)
         .fixedSize()
         .animation(.smooth(duration: 0.2), value: model.confirmingDiscard)
         .animation(.smooth(duration: 0.2), value: model.micSilent)
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("Recording controls")
+    }
+
+    private var hears: Bool { model.makesGIF || model.hasMicrophone || model.hasSystemAudio }
+
+    /// "Stop and save (⌃⌥⌘5)", with the shortcut you've set.
+    static var stopHelp: String {
+        KeyboardShortcuts.Name.recordScreen.keys.map { "Stop and save (\($0))" } ?? "Stop and save"
     }
 
     private var stopButton: some View {
@@ -101,8 +116,8 @@ struct RecordingPill: View {
             .contentShape(.circle)
         }
         .buttonStyle(PressableStyle())
-        .help("Stop and Save (⌃⌥⌘5)")
-        .accessibilityLabel("Stop recording")
+        .help(Self.stopHelp)
+        .accessibilityLabel("Stop and save")
     }
 
     private var time: some View {
@@ -135,10 +150,11 @@ struct RecordingPill: View {
                         .contentShape(.capsule)
                 }
                 .buttonStyle(PressableStyle())
-                .help("Throw this recording away")
+                .help("Click again to throw this recording away")
+                .accessibilityLabel("Confirm discard")
                 .transition(.opacity.combined(with: .scale(scale: 0.9)))
             } else {
-                PillButton(symbol: "trash", label: "Discard", action: discard)
+                PillButton(symbol: "trash", label: "Discard", help: "Discard this recording", action: discard)
             }
         }
     }
@@ -153,6 +169,7 @@ struct RecordingPill: View {
                     .padding(.horizontal, 5).padding(.vertical, 2)
                     .background(.white.opacity(0.14), in: .rect(cornerRadius: 4))
                     .help("Saved as a GIF when you stop")
+                    .accessibilityLabel("Saved as a GIF when you stop")
             }
             if model.hasSystemAudio {
                 Image(systemName: "speaker.wave.2.fill")
@@ -178,6 +195,8 @@ struct RecordingPill: View {
 private struct PillButton: View {
     let symbol: String
     let label: String
+    /// The tooltip; the label when there's nothing more to say.
+    var help: String?
     let action: () -> Void
     @State private var hovering = false
 
@@ -192,7 +211,7 @@ private struct PillButton: View {
         }
         .buttonStyle(PressableStyle())
         .onHover { hovering = $0 }
-        .help(label)
+        .help(help ?? label)
         .accessibilityLabel(label)
     }
 }
@@ -260,14 +279,14 @@ struct RecordingCountdownView: View {
                 .foregroundStyle(.white)
                 .contentTransition(.numericText(countsDown: true))
                 .frame(width: 128, height: 128)
-                .glassEffect(.regular.tint(Brand.indigoDeep.opacity(0.55)), in: .circle)
+                .captureGlass(in: .circle, tint: 0.55, floating: true)
             Text("Click to start now · Esc to cancel")
                 .font(.system(size: 11, weight: .medium))
                 .foregroundStyle(.white.opacity(0.8))
                 .padding(.horizontal, 10).padding(.vertical, 5)
-                .glassEffect(.regular.tint(Brand.indigoDeep.opacity(0.55)), in: .capsule)
+                .captureGlass(in: .capsule, tint: 0.55, floating: true)
         }
-        .padding(12)
+        .padding(16)
         .environment(\.colorScheme, .dark)
         .fixedSize()
         .contentShape(.rect)
@@ -409,10 +428,10 @@ struct RecordingToastView: View {
             Text(message).font(.system(size: 13, weight: .semibold)).foregroundStyle(.white)
         }
         .padding(.horizontal, 16).padding(.vertical, 10)
-        .glassEffect(.regular.tint(Brand.indigoDeep.opacity(0.55)), in: .capsule)
+        .captureGlass(in: .capsule, tint: 0.55, floating: true)
         .environment(\.colorScheme, .dark)
         .fixedSize()
-        .padding(8)
+        .padding(14)
     }
 }
 
