@@ -403,7 +403,7 @@ final class RecordingCoordinator {
         host.showRecording(capture, status: take.options.makesGIF ? "Making GIF…" : "Saving…")
 
         var saved: URL?
-        var label = "Saved"
+        var label = ""
         if take.options.makesGIF {
             host.cards.update(take.id, link: CaptureCards.CardLink(title: "Keep as Video") { [weak self] in
                 self?.gifs[take.id]?.cancel()
@@ -415,7 +415,6 @@ final class RecordingCoordinator {
             host.cards.update(take.id, link: nil)
             if let gif, !making.isCancelled, let url = await Self.place(gif, date: take.date, appName: take.appName) {
                 saved = url
-                label = "GIF"
             } else {
                 capture.media = .video(duration: output.duration)
                 label = making.isCancelled ? "Kept as video" : "Saved as video"
@@ -442,13 +441,19 @@ final class RecordingCoordinator {
         if kept { movies[take.id] = CaptureLibrary.movie(take.id) }
 
         let bytes = saved.flatMap(CaptureLibrary.size(of:))
-        var status = saved == nil ? "Couldn't save · drag it from here" : RecordingTime.status(label, bytes: bytes)
+        var status = "Couldn't save · drag it from here"
+        if let saved { status = RecordingTime.status(label.isEmpty ? Self.savedLabel(saved) : label, bytes: bytes) }
         if let note = reason ?? take.note { status = "\(note) · \(status)" }
         host.cards.update(take.id, status: status, kept: saved != nil)
         NSAccessibility.post(element: NSApp as Any, notification: .announcementRequested,
                              userInfo: [.announcement: saved == nil ? "Recording couldn't be saved" : "Recording saved",
                                         .priority: NSAccessibilityPriorityLevel.high.rawValue])
         if Preferences.captureThen == .editor { host.openVideoEditor(take.id) }
+    }
+
+    /// "Saved to Desktop": where the file went, by its folder's name in Finder.
+    static func savedLabel(_ file: URL) -> String {
+        "Saved to \(FileManager.default.displayName(atPath: file.deletingLastPathComponent().path))"
     }
 
     /// The movie you're handed: the sounds mixed into one track, or the master as it is.
@@ -523,7 +528,8 @@ final class RecordingCoordinator {
             }
             CaptureLibrary.setFile(url, for: id)
             host?.recordingSaved(id, file: url, media: .video(duration: capture.media.duration ?? 0))
-            host?.cards.update(id, status: RecordingTime.status("Saved", bytes: CaptureLibrary.size(of: url)), kept: true)
+            host?.cards.update(id, status: RecordingTime.status(Self.savedLabel(url), bytes: CaptureLibrary.size(of: url)),
+                               kept: true)
         }
     }
 

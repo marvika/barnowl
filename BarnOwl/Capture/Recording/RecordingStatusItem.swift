@@ -28,13 +28,16 @@ final class RecordingStatusItem: NSObject, NSMenuDelegate {
     func update(elapsed: TimeInterval, paused: Bool) {
         self.paused = paused
         guard let button = item.button else { return }
-        let symbol = paused ? "pause.circle.fill" : "stop.circle.fill"
-        button.image = NSImage(systemSymbolName: symbol, accessibilityDescription: nil)?
+        // Always a stop button, as a click stops; a paused recording's time goes grey.
+        button.image = NSImage(systemSymbolName: "stop.circle.fill", accessibilityDescription: nil)?
             .withSymbolConfiguration(.init(pointSize: 14, weight: .regular))
         button.image?.isTemplate = true
         let font = NSFont.monospacedDigitSystemFont(ofSize: NSFont.systemFontSize, weight: .medium)
-        button.attributedTitle = NSAttributedString(string: " " + RecordingTime.text(elapsed), attributes: [.font: font])
-        button.toolTip = paused ? "Recording paused · click to stop and save" : "Recording · click to stop and save"
+        var attributes: [NSAttributedString.Key: Any] = [.font: font]
+        if paused { attributes[.foregroundColor] = NSColor.secondaryLabelColor }
+        button.attributedTitle = NSAttributedString(string: " " + RecordingTime.text(elapsed), attributes: attributes)
+        button.toolTip = (paused ? "Recording paused" : "Recording")
+            + " · click to stop and save, right-click for more"
         button.setAccessibilityLabel(paused ? "Recording paused, \(RecordingTime.text(elapsed)). Stop recording"
                                             : "Recording, \(RecordingTime.text(elapsed)). Stop recording")
     }

@@ -1,3 +1,4 @@
+import KeyboardShortcuts
 import SwiftUI
 
 /// Settings › Capture › Recording: frames, quality, what's shown and heard, and where it goes.
@@ -59,7 +60,7 @@ struct RecordingSettingsSection: View {
         } header: {
             Text("Recording")
         } footer: {
-            Text("Record with R or G after selecting, or ⌃⌥⌘5; press it again to stop. Barn Owl's own controls never show up in a recording.")
+            Text(footer)
         }
         .task {
             // Plugged in, or allowed in System Settings, since the pane was last open.
@@ -113,6 +114,13 @@ struct RecordingSettingsSection: View {
             status = access.status
             microphone = allowed ? mic.id : ""
         }
+    }
+
+    /// How to start and stop, with the shortcut you've set.
+    private var footer: String {
+        let start = KeyboardShortcuts.Name.recordScreen.keys.map { "Press \($0) to record, and again to stop. " } ?? ""
+        return start + "While capturing, select something and press R to record it or G for a GIF. "
+            + "Barn Owl's own controls never show up in a recording."
     }
 
     private var folderTitle: String {

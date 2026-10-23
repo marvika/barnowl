@@ -278,6 +278,12 @@ struct CaptureCardView: View {
         .accessibilityLabel("\(card.media.isMovie ? "Recording" : "Capture"). \(card.status)")
         .accessibilityAction(named: "Edit") { cards.edit(card.id) }
         .accessibilityAction(named: "Copy") { cards.copy(card.id) }
+        .accessibilityActions {
+            // The rest of the hover row, for VoiceOver.
+            Button(cards.isSaved(card.id) ? "Show in Finder" : "Save") { cards.save(card.id) }
+            if card.media.isMovie && !card.media.isGIF { Button("Make GIF") { cards.makeGIF(card.id) } }
+            if !card.media.isMovie { Button("Pin") { cards.pin(card.id) } }
+        }
     }
 
     private var thumbnail: some View {
