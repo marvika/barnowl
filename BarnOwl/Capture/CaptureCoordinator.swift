@@ -793,14 +793,22 @@ final class CaptureCoordinator {
     private func loadForDragging(_ id: UUID) {
         // A recording drags its movie: nothing to draw.
         guard !loadingForDrag.contains(id), let kept = keptCapture(id, rendered: false), kept.media == .image else { return }
-        let document = storedDocument(id)
-        let renderer = document.map { renderer(for: kept.image, scale: kept.scale, document: $0) }
-        let saved = !kept.unsavedEdits && kept.fileURL.map { FileManager.default.fileExists(atPath: $0.path) } == true
+        let document: EditorDocument? = storedDocument(id)
+        let drawer: AnnotationRenderer? = if let document {
+            renderer(for: kept.image, scale: kept.scale, document: document)
+        } else {
+            nil
+        }
+        let saved: Bool = if !kept.unsavedEdits, let file = kept.fileURL {
+            FileManager.default.fileExists(atPath: file.path)
+        } else {
+            false
+        }
         loadingForDrag.insert(id)
         Task {
             let made = await Task.detached(priority: .userInitiated) { () -> (image: CGImage, url: URL?) in
                 var capture = kept
-                if let document, let drawn = renderer?.render(document) { capture.image = drawn }
+                if let document, let drawn = drawer?.render(document) { capture.image = drawn }
                 return (capture.image, saved ? nil : CaptureStore.temporaryFile(for: capture))
             }.value
             loadingForDrag.remove(id)
