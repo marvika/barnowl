@@ -35,12 +35,16 @@ final class RecordingWriter {
         let frames: Int
         /// The audio tracks, in the order they are in the file.
         let audio: [Source]
+        /// Sources left out partway, when their format changed mid-take.
+        var cutShort: [Source] = []
     }
 
     enum Failure: Error, Equatable {
         /// Stopped before the first frame arrived.
         case noFrames
         case couldNotWrite(String)
+        /// Finished or let go already: there's nothing more to finish.
+        case ended
     }
 
     /// One timescale everywhere, so trimming never meets a fractional tail.
@@ -67,6 +71,8 @@ final class RecordingWriter {
     /// Each source's format at the start. A mic that changes format mid-take (Bluetooth does) is
     /// left out from then on rather than risk the whole file.
     private var audioFormat: [Source: (rate: Float64, channels: UInt32)] = [:]
+    /// Sources whose format changed, left out since.
+    private(set) var cutShort: Set<Source> = []
     private var finished = false
     private(set) var frames = 0
     private(set) var droppedFrames = 0
@@ -167,7 +173,11 @@ final class RecordingWriter {
             audioFormat[source] = now
             return true
         }
-        return first.rate == now.rate && first.channels == now.channels
+        guard first.rate == now.rate, first.channels == now.channels else {
+            cutShort.insert(source)
+            return false
+        }
+        return true
     }
 
     private func inGap(_ time: CMTime) -> Bool {
@@ -212,8 +222,9 @@ final class RecordingWriter {
     }
 
     /// Finishes the file at `time` on the capture clock (or where the pause began, if paused).
+    /// `completion` is always called, with `.ended` if it was finished or let go already.
     func finish(at time: CMTime, completion: @escaping @Sendable (Result<Output, Failure>) -> Void) {
-        guard !finished else { return }
+        guard !finished else { return completion(.failure(.ended)) }
         finished = true
         guard let start else {
             writer.cancelWriting()
@@ -232,7 +243,8 @@ final class RecordingWriter {
         video.markAsFinished()
         for input in audio.values { input.markAsFinished() }
         let output = Output(url: url, duration: (end - start).seconds, frames: frames,
-                            audio: Source.allCases.filter { audio[$0] != nil })
+                            audio: Source.allCases.filter { audio[$0] != nil },
+                            cutShort: Source.allCases.filter { cutShort.contains($0) })
         lastFrame = nil
         heldFrame = nil
         nonisolated(unsafe) let writer = writer

@@ -10,6 +10,10 @@ import UserNotifications
 final class Updater: NSObject {
     @ObservationIgnored private var controller: SPUStandardUpdaterController?
     @ObservationIgnored private var observations: [NSKeyValueObservation] = []
+    /// Something that relaunching would lose is under way: a recording, or its save.
+    @ObservationIgnored var isBusy: () -> Bool = { false }
+    /// Calls the relaunch once that's done.
+    @ObservationIgnored var whenFree: (@escaping @MainActor () -> Void) -> Void = { $0() }
 
     /// False while Sparkle is already checking or showing an update.
     private(set) var canCheck = true
@@ -59,6 +63,17 @@ extension Updater: SPUUpdaterDelegate {
     // Quitting to install an update: keep awake carries on in the new version.
     nonisolated func updaterWillRelaunchApplication(_ updater: SPUUpdater) {
         MainActor.assumeIsolated { KeepAwakeController.saveSessionOnQuit = true }
+    }
+
+    // Never mid-recording: the update installs once it's stopped and saved.
+    nonisolated func updater(_ updater: SPUUpdater, shouldPostponeRelaunchForUpdate item: SUAppcastItem,
+                             untilInvokingBlock installHandler: @escaping () -> Void) -> Bool {
+        nonisolated(unsafe) let install = installHandler
+        return MainActor.assumeIsolated {
+            guard isBusy() else { return false }
+            whenFree { install() }
+            return true
+        }
     }
 
     #if DEBUG

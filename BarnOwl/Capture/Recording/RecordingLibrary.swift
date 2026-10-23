@@ -54,8 +54,10 @@ extension CaptureLibrary {
     }
 
     /// Keeps a recording: moves its movie in, with its first frame as the picture. Runs off
-    /// the main thread. Nothing is kept while history is off.
-    static func storeMovie(_ movie: URL, poster: CGImage, entry: Entry, days: Int = keepDays, in root: URL = folder) throws {
+    /// the main thread. Nothing is kept while history is off. Making room never lets go of
+    /// this recording, nor of those in `keeping` (open in an editor).
+    static func storeMovie(_ movie: URL, poster: CGImage, entry: Entry, days: Int = keepDays, bytes limit: Int64 = movieBytes,
+                           in root: URL = folder, keeping: Set<UUID> = []) throws {
         guard root != folder || isOn else { return }
         let dir = folder(for: entry.id, in: root)
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
@@ -64,7 +66,7 @@ extension CaptureLibrary {
         try FileManager.default.moveItem(at: movie, to: kept)
         try store(poster, entry: entry, in: root)
         storeThumbnail(poster, for: entry.id, in: root)
-        pruneMovies(days: days, in: root)
+        pruneMovies(days: days, bytes: limit, in: root, keeping: keeping.union([entry.id]))
     }
 
     /// Lets go of recordings past seven days (or sooner, if captures are kept for less),
@@ -123,6 +125,39 @@ enum RecordingStore {
         let folder = CaptureStore.temporaryFolder.appending(path: id.uuidString)
         try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         return folder.appending(path: "Recording \(UUID().uuidString.prefix(8)).mov")
+    }
+
+    /// Left in a take's folder once it's saved while history is off, which keeps its movie
+    /// there for the rest of the session: not something to recover.
+    static let savedMarker = "Saved"
+
+    static func markSaved(_ folder: URL) {
+        FileManager.default.createFile(atPath: folder.appending(path: savedMarker).path, contents: nil)
+    }
+
+    /// Takes a quit, crash or power cut left among the temporary copies, oldest first: each
+    /// take's newest movie. Folders of takes that were saved are let go of. Runs off the main
+    /// thread, at launch, before anything is recorded.
+    static func leftovers(in root: URL = CaptureStore.temporaryFolder) -> [URL] {
+        let manager = FileManager.default
+        let folders = (try? manager.contentsOfDirectory(at: root, includingPropertiesForKeys: nil)) ?? []
+        var found: [(url: URL, date: Date)] = []
+        for folder in folders where UUID(uuidString: folder.lastPathComponent) != nil {
+            let names = (try? manager.contentsOfDirectory(atPath: folder.path)) ?? []
+            if names.contains(savedMarker) {
+                try? manager.removeItem(at: folder)
+                continue
+            }
+            let masters = names.filter { $0.hasPrefix("Recording ") && $0.lowercased().hasSuffix(".mov") }
+                .map { folder.appending(path: $0) }
+                .map { (url: $0, date: modified($0)) }
+            if let newest = masters.max(by: { $0.date < $1.date }) { found.append(newest) }
+        }
+        return found.sorted { $0.date < $1.date }.map(\.url)
+    }
+
+    private static func modified(_ url: URL) -> Date {
+        (try? url.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate ?? .distantPast
     }
 
     /// Free space where recordings are written, in bytes.

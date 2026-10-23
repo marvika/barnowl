@@ -114,8 +114,10 @@ final class SelectionOverlay {
     /// `copiesText`: started to copy text, so Return copies the words in the selection.
     /// `recording`: started to record, so the selection gets the record bar and Return records.
     /// `scrolls`: started for a scrolling capture, so Return starts one.
+    /// `canRecord`: false while a recording is under way, so Record, GIF and Scroll aren't offered.
     init(snapshots: [DisplaySnapshot], targets: [WindowTarget], mode: CaptureMode, copiesText: Bool = false,
-         recording: RecordingSetup? = nil, scrolls: Bool = false, completion: @escaping (SelectionResult) -> Void) {
+         recording: RecordingSetup? = nil, scrolls: Bool = false, canRecord: Bool = true,
+         completion: @escaping (SelectionResult) -> Void) {
         self.mode = mode
         self.completion = completion
         let hints = Preferences.captureHintCount < 10
@@ -124,6 +126,7 @@ final class SelectionOverlay {
             window.selection.copiesText = copiesText
             window.selection.recording = recording
             window.selection.scrolls = scrolls
+            window.selection.canRecord = canRecord
             window.selection.onResult = { [weak self] in self?.finish($0) }
             window.selection.onMode = { [weak self] in self?.setMode($0) }
             window.selection.onSelect = { [weak self, weak window] in self?.selectionStarted(in: window) }
@@ -313,6 +316,8 @@ final class SelectionView: NSView {
     var scrolls = false {
         didSet { modeBar?.rootView = modeBarView }
     }
+    /// Nothing is being recorded: Record, GIF and Scroll are on offer.
+    var canRecord = true
 
     init(snapshot: DisplaySnapshot, targets: [WindowTarget], mode: CaptureMode, showsHints: Bool) {
         self.snapshot = snapshot
@@ -661,9 +666,9 @@ final class SelectionView: NSView {
         case ("e", false): if selection != nil, picture { act(.edit) }
         case ("p", false): if selection != nil, picture { act(.pin) }
         case ("t", false): if selection != nil, picture { act(.copyText) }
-        case ("r", false): if selection != nil { act(.record) }
-        case ("g", false): if selection != nil { act(.recordGIF) }
-        case ("s", false): if selection != nil, picture { act(.scroll) }
+        case ("r", false): if selection != nil, canRecord { act(.record) }
+        case ("g", false): if selection != nil, canRecord { act(.recordGIF) }
+        case ("s", false): if selection != nil, picture, canRecord { act(.scroll) }
         case ("a", false): onMode?(.area)
         case ("w", false): onMode?(.window)
         case ("f", false): onMode?(.screen)
@@ -877,7 +882,8 @@ final class SelectionView: NSView {
 
     private var actionBarView: CaptureActionBar {
         CaptureActionBar(primary: copiesText ? "Copy Text" : scrolls ? "Start Capture" : Self.primaryTitle,
-                         copiesText: copiesText, scrolls: scrolls, showsHint: showsHints) { [weak self] action in
+                         copiesText: copiesText, scrolls: scrolls, records: canRecord,
+                         showsHint: showsHints) { [weak self] action in
             if let action { self?.act(action) } else { self?.clearSelection() }
         }
     }
@@ -1112,6 +1118,8 @@ struct CaptureActionBar: View {
     var copiesText = false
     /// For a scrolling capture: the main action starts it, and nothing else is offered.
     var scrolls = false
+    /// Recording is possible: false while one is under way, so Record, GIF and Scroll are left out.
+    var records = true
     let showsHint: Bool
     /// nil closes the selection.
     let act: (CaptureAction?) -> Void
@@ -1126,11 +1134,13 @@ struct CaptureActionBar: View {
                 if !copiesText && !scrolls {
                     BarButton(title: "Text", symbol: "text.viewfinder", key: "T") { act(.copyText) }
                     Divider().frame(height: 18).padding(.horizontal, 2)
-                    BarButton(title: "Record", symbol: "record.circle", key: "R", compact: true) { act(.record) }
-                    BarButton(title: "Record a GIF", glyph: "GIF", key: "G", compact: true) { act(.recordGIF) }
-                    BarButton(title: "Scrolling Capture", symbol: "rectangle.expand.vertical", key: "S",
-                              compact: true) { act(.scroll) }
-                    Divider().frame(height: 18).padding(.horizontal, 2)
+                    if records {
+                        BarButton(title: "Record", symbol: "record.circle", key: "R", compact: true) { act(.record) }
+                        BarButton(title: "Record a GIF", glyph: "GIF", key: "G", compact: true) { act(.recordGIF) }
+                        BarButton(title: "Scrolling Capture", symbol: "rectangle.expand.vertical", key: "S",
+                                  compact: true) { act(.scroll) }
+                        Divider().frame(height: 18).padding(.horizontal, 2)
+                    }
                 }
                 BarButton(title: primary, symbol: primarySymbol, key: "↩", prominent: true) { act(.primary) }
                 Button { act(nil) } label: {

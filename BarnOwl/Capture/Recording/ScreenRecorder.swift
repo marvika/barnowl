@@ -50,7 +50,9 @@ final class ScreenRecorder {
     private var starting = false
     private var cancelled = false
     private var refresher: Task<Void, Never>?
-    /// Barn Owl's own windows when the filter was made; a new one means a new filter.
+    private var windowObserver: NSObjectProtocol?
+    private var refreshing = false
+    /// Barn Owl's own windows that the filter names, when it was made; a change means a new filter.
     private var ownWindows: Set<Int> = []
 
     init(request: Request) {
@@ -62,6 +64,8 @@ final class ScreenRecorder {
     func start() async throws {
         starting = true
         defer { starting = false }
+        // Taken before the content: a window that comes meanwhile means another look.
+        ownWindows = ownWindowNumbers()
         let content = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: false)
         try await stopIfCancelled()
         let (filter, size, area) = try filter(from: content)
@@ -78,12 +82,13 @@ final class ScreenRecorder {
         }, onLevel: { [weak self] level in
             Task { @MainActor in self?.onLevel?(level) }
         })
+        // Kept at once, so `cancel()` lets the file go if anything below fails.
+        self.sink = sink
         let stream = SCStream(filter: filter, configuration: configuration(size: size, area: area), delegate: sink)
+        self.stream = stream
         try stream.addStreamOutput(sink, type: .screen, sampleHandlerQueue: sink.queue)
         if options.systemAudio { try stream.addStreamOutput(sink, type: .audio, sampleHandlerQueue: sink.queue) }
         if options.microphoneID != nil { try stream.addStreamOutput(sink, type: .microphone, sampleHandlerQueue: sink.queue) }
-        self.stream = stream
-        self.sink = sink
         try await stream.startCapture()
         try await stopIfCancelled()
         // A still screen sends one frame at the start, then nothing until it changes.
@@ -101,7 +106,7 @@ final class ScreenRecorder {
     /// Finishes the file at this moment and ends the stream.
     func stop() async throws -> RecordingWriter.Output {
         let now = Self.now
-        refresher?.cancel()
+        stopWatchingWindows()
         guard let sink else { throw Failure.noFirstFrame }
         // The file first: frames that arrive after this moment aren't wanted.
         let output: RecordingWriter.Output
@@ -129,7 +134,7 @@ final class ScreenRecorder {
     }
 
     private func tearDown() async {
-        refresher?.cancel()
+        stopWatchingWindows()
         sink?.cancel()
         await endStream()
     }
@@ -147,7 +152,7 @@ final class ScreenRecorder {
         switch request.target {
         case .display(let id, let frame, let scale, let area):
             guard let display = content.displays.first(where: { $0.displayID == id }) else { throw Failure.noDisplay }
-            let filter = SCContentFilter(display: display, excludingWindows: excluded(in: content))
+            let filter = displayFilter(display, in: content)
             let points = area?.size ?? frame.size
             let size = RecordingGeometry.pixelSize(points: points, scale: request.atOneX ? 1 : scale, codec: codec)
             return (filter, size, area.map { RecordingGeometry.sourceRect(for: $0, on: frame) })
@@ -161,15 +166,48 @@ final class ScreenRecorder {
         }
     }
 
-    /// Barn Owl's own windows, apart from its desktop cover and pins, and whatever a clean
-    /// menu bar or hidden desktop icons leave out of screenshots.
-    private func excluded(in content: SCShareableContent) -> [SCWindow] {
-        ownWindows = Self.ownWindowNumbers()
-        return content.windows.filter { ScreenSnapshotter.leftOut($0, options: request.leftOut) }
+    /// How a display is filtered: Barn Owl as a whole, so no window it opens is ever in a
+    /// frame, or window by window when other apps' windows are left out too.
+    enum FilterKind: Equatable {
+        /// Barn Owl's app is left out, apart from its desktop cover and pins.
+        case leavesOutBarnOwl
+        /// A list of windows, kept current as Barn Owl's own come and go.
+        case listsWindows
     }
 
-    private static func ownWindowNumbers() -> Set<Int> {
-        Set(NSApp.windows.filter { $0.windowNumber > 0 }.map(\.windowNumber))
+    /// Barn Owl as a whole, unless a clean menu bar or hidden desktop icons leave out other
+    /// apps' windows too, which only a list of windows can.
+    static func filterKind(for leftOut: CaptureOptions) -> FilterKind {
+        let othersLeftOut = leftOut.cleanMenuBar || leftOut.hidesDesktopIcons || !leftOut.hiddenWindows.isEmpty
+        return othersLeftOut ? .listsWindows : .leavesOutBarnOwl
+    }
+
+    private var filterKind: FilterKind { Self.filterKind(for: request.leftOut) }
+
+    /// A display without Barn Owl's own windows, apart from its desktop cover and pins, and
+    /// without whatever a clean menu bar or hidden desktop icons leave out of screenshots.
+    private func displayFilter(_ display: SCDisplay, in content: SCShareableContent) -> SCContentFilter {
+        let own = ProcessInfo.processInfo.processIdentifier
+        let app = content.applications.filter { $0.processID == own }
+        if filterKind == .leavesOutBarnOwl, !app.isEmpty {
+            let kept = content.windows.filter { $0.owningApplication?.processID == own && Self.isInPicture($0.title) }
+            return SCContentFilter(display: display, excludingApplications: app, exceptingWindows: kept)
+        }
+        let excluded = content.windows.filter { ScreenSnapshotter.leftOut($0, options: request.leftOut) }
+        return SCContentFilter(display: display, excludingWindows: excluded)
+    }
+
+    /// Barn Owl's windows that belong in the picture: the desktop cover and pins.
+    private static func isInPicture(_ title: String?) -> Bool {
+        title == "BarnOwlDesktopCover" || title == CapturePin.windowTitle
+    }
+
+    /// The windows the filter names: all of Barn Owl's when it lists them, only the cover and
+    /// pins when it leaves out the app.
+    private func ownWindowNumbers() -> Set<Int> {
+        let listsAll = filterKind == .listsWindows
+        let named = NSApp.windows.filter { $0.windowNumber > 0 && (listsAll || Self.isInPicture($0.title)) }
+        return Set(named.map(\.windowNumber))
     }
 
     private func configuration(size: (width: Int, height: Int), area: CGRect?) -> SCStreamConfiguration {
@@ -205,24 +243,52 @@ final class ScreenRecorder {
         return config
     }
 
-    /// Keeps Barn Owl's windows out as they come and go: a card, a menu, a panel.
+    /// Keeps the filter current as Barn Owl's windows come and go: a card, a menu, a panel.
+    /// A window coming on screen updates it at once; a look every tenth of a second catches
+    /// the rest.
     private func keepFilterCurrent() {
+        windowObserver = NotificationCenter.default.addObserver(
+            forName: NSWindow.didChangeOcclusionStateNotification, object: nil, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { self?.ownWindowsMayHaveChanged() }
+        }
         refresher = Task { [weak self] in
             while !Task.isCancelled {
-                try? await Task.sleep(for: .seconds(1))
+                try? await Task.sleep(for: .milliseconds(100))
                 guard let self, !Task.isCancelled else { return }
-                guard Self.ownWindowNumbers() != self.ownWindows else { continue }
-                await self.refreshFilter()
+                self.ownWindowsMayHaveChanged()
             }
         }
     }
 
-    private func refreshFilter() async {
-        guard let stream, case .display(let id, _, _, _) = request.target,
-              let content = try? await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: false),
-              let display = content.displays.first(where: { $0.displayID == id }) else { return }
-        let filter = SCContentFilter(display: display, excludingWindows: excluded(in: content))
-        try? await stream.updateContentFilter(filter)
+    private func stopWatchingWindows() {
+        refresher?.cancel()
+        refresher = nil
+        if let windowObserver { NotificationCenter.default.removeObserver(windowObserver) }
+        windowObserver = nil
+    }
+
+    /// One refresh at a time; a change made during one is caught when it's done.
+    private func ownWindowsMayHaveChanged() {
+        guard !refreshing, stream != nil, ownWindowNumbers() != ownWindows else { return }
+        refreshing = true
+        Task {
+            let refreshed = await refreshFilter()
+            refreshing = false
+            if refreshed { ownWindowsMayHaveChanged() }
+        }
+    }
+
+    /// False when the windows couldn't be listed: the next look tries again.
+    private func refreshFilter() async -> Bool {
+        guard let stream, case .display(let id, _, _, _) = request.target else { return false }
+        let windows = ownWindowNumbers()
+        guard let content = try? await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: false),
+              let display = content.displays.first(where: { $0.displayID == id }),
+              self.stream === stream else { return false }
+        ownWindows = windows
+        try? await stream.updateContentFilter(displayFilter(display, in: content))
+        return true
     }
 }
 

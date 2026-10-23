@@ -15,6 +15,8 @@ final class RecordingModel {
     var makesGIF = false
     /// The bin was clicked once: a second click discards.
     var confirmingDiscard = false
+    /// Restart was clicked once, after the first few seconds: a second click starts again.
+    var confirmingRestart = false
 
     var isPaused: Bool { phase == .paused }
 
@@ -24,6 +26,7 @@ final class RecordingModel {
         micLevel = 0
         micSilent = false
         confirmingDiscard = false
+        confirmingRestart = false
     }
 }
 
@@ -75,7 +78,7 @@ struct RecordingPill: View {
             Divider().frame(height: 18).padding(.horizontal, 5)
             PillButton(symbol: model.isPaused ? "play.fill" : "pause.fill",
                        label: model.isPaused ? "Resume" : "Pause", action: togglePause)
-            PillButton(symbol: "arrow.counterclockwise", label: "Restart", action: restart)
+            restartButton
             discardButton
             if model.makesGIF || model.hasMicrophone || model.hasSystemAudio {
                 Divider().frame(height: 18).padding(.horizontal, 5)
@@ -87,6 +90,7 @@ struct RecordingPill: View {
         .environment(\.colorScheme, .dark)
         .fixedSize()
         .animation(.smooth(duration: 0.2), value: model.confirmingDiscard)
+        .animation(.smooth(duration: 0.2), value: model.confirmingRestart)
         .animation(.smooth(duration: 0.2), value: model.micSilent)
     }
 
@@ -139,6 +143,27 @@ struct RecordingPill: View {
                 .transition(.opacity.combined(with: .scale(scale: 0.9)))
             } else {
                 PillButton(symbol: "trash", label: "Discard", action: discard)
+            }
+        }
+    }
+
+    /// Asks before throwing away a take worth keeping, as Discard does.
+    private var restartButton: some View {
+        Group {
+            if model.confirmingRestart {
+                Button(action: restart) {
+                    Text("Restart")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 10).frame(height: 26)
+                        .background(Color(red: 1, green: 0.27, blue: 0.23), in: .capsule)
+                        .contentShape(.capsule)
+                }
+                .buttonStyle(PressableStyle())
+                .help("Throw this take away and record again")
+                .transition(.opacity.combined(with: .scale(scale: 0.9)))
+            } else {
+                PillButton(symbol: "arrow.counterclockwise", label: "Restart", action: restart)
             }
         }
     }
