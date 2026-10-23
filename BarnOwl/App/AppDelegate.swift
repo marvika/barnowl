@@ -159,7 +159,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
         }
         model.presenter.start()
+        // An update waits for a recording, and its save, before it relaunches Barn Owl.
+        model.updater.isBusy = { [weak self] in self?.model.capture.recording.hasWorkToFinish ?? false }
+        model.updater.whenFree = { [weak self] relaunch in self?.model.capture.recording.whenDone(relaunch) }
         if !DemoMode.isOn { model.updater.start() }
+        // Recordings a quit or crash left behind come back on cards.
+        model.capture.recoverAndTidy(recovers: !DemoMode.isOn)
         model.presenter.onChange = { [weak self] _ in
             self?.bar.close()
             self?.updateToggleIcon()
@@ -401,6 +406,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return nil
         }
         return minutes
+    }
+
+    /// Quitting, logging out or relaunching while recording: the recording is stopped and
+    /// saved first, and any recording or video still being written is finished, for up to
+    /// fifteen seconds. Whatever isn't saved by then comes back at the next launch.
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        guard let capture = model?.capture, capture.hasWorkToFinish else { return .terminateNow }
+        Task {
+            await capture.finishBeforeQuitting(within: .seconds(15))
+            sender.reply(toApplicationShouldTerminate: true)
+        }
+        return .terminateLater
     }
 
     func applicationWillTerminate(_ notification: Notification) {

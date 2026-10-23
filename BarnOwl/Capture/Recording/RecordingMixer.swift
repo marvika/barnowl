@@ -21,7 +21,11 @@ enum RecordingMixer {
         let formats = try await videoTrack.load(.formatDescriptions)
         let job = try MixJob(asset: asset, video: videoTrack, videoFormat: formats.first, audio: audioTracks,
                              destination: destination)
-        try await job.run()
+        try await withTaskCancellationHandler {
+            try await job.run()
+        } onCancel: {
+            job.cancel()
+        }
     }
 }
 
@@ -92,6 +96,11 @@ private final class MixJob: @unchecked Sendable {
         await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
             group.notify(queue: queue) { continuation.resume() }
         }
+        if reader.status == .cancelled {
+            writer.cancelWriting()
+            try? FileManager.default.removeItem(at: destination)
+            throw CancellationError()
+        }
         if reader.status == .failed {
             writer.cancelWriting()
             try? FileManager.default.removeItem(at: destination)
@@ -102,6 +111,11 @@ private final class MixJob: @unchecked Sendable {
             try? FileManager.default.removeItem(at: destination)
             throw RecordingMixer.Failure.couldNotWrite(writer.error?.localizedDescription ?? "")
         }
+    }
+
+    /// Stops reading: what's left is let go of, and `run` throws `CancellationError`.
+    func cancel() {
+        queue.async { self.reader.cancelReading() }
     }
 
     /// Moves samples from the reader to the writer as fast as the writer takes them.

@@ -6,9 +6,9 @@ import UniformTypeIdentifiers
 /// a frame when you edit one as a picture, and keeps the edit so the movie can be opened again
 /// with its cuts still editable.
 ///
-/// `file` is the edited movie or GIF in a temporary folder, named after the editor's title; or,
-/// when nothing was changed and the export settings match the movie, the movie itself. Copy it
-/// or move it; never delete the movie itself.
+/// `file` is the edited movie or GIF in a temporary folder, named after the editor's title. When
+/// nothing was changed and the export settings match the movie, it's the movie as it is, its
+/// sounds mixed into one track. Copy it or move it; it's never the movie itself.
 @MainActor
 protocol VideoEditorHost: AnyObject {
     /// Copy: put the file on the pasteboard.
@@ -231,17 +231,22 @@ final class VideoEditor {
             && settings.size == .original && settings.quality == .standard
     }
 
+    /// Writing a file: quitting waits for it.
+    var isWorking: Bool { rendering != nil || model.progress != nil }
+
     /// The edited file, made once per edit: the same file again if nothing changed since.
+    /// Always a file of its own in the temporary folder, named after the title, never the movie.
     func renderFile(_ verb: String) async -> URL? {
         let edit = model.edit
-        if isPassthrough(edit) { return model.info.url }
         if let rendered, rendered.edit == edit, FileManager.default.fileExists(atPath: rendered.url.path) { return rendered.url }
         if let rendering { return await rendering.value }
         let folder = Self.temporaryFolder.appending(path: UUID().uuidString)
         try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         let url = folder.appending(path: Self.fileName(title, format: edit.export.format))
+        let asItIs = isPassthrough(edit)
         let task = Task { [weak self] () -> URL? in
             guard let self else { return nil }
+            if asItIs { return await self.handOver(to: url, verb: verb) }
             return await self.write(edit, to: url, verb: verb)
         }
         rendering = task
@@ -249,6 +254,33 @@ final class VideoEditor {
         rendering = nil
         if let result { rendered = (edit, result) }
         return result
+    }
+
+    /// The movie as it is, at `url`: its sounds mixed into one track when it has several, as
+    /// the recording's own file is, so every player hears them; otherwise a copy, which takes
+    /// no room on the Mac's own disk.
+    private func handOver(to url: URL, verb: String) async -> URL? {
+        let source = model.info.url
+        let mixes = model.info.audioTracks.count > 1
+        let work = Task.detached(priority: .userInitiated) {
+            if mixes {
+                try await RecordingMixer.mix(source, to: url)
+            } else {
+                try FileManager.default.copyItem(at: source, to: url)
+            }
+        }
+        if mixes { model.beginProgress("\(verb)…") { work.cancel() } }
+        let result = await work.result
+        if mixes { model.endProgress() }
+        switch result {
+        case .success: return url
+        case .failure(let error):
+            if !(error is CancellationError || work.isCancelled) {
+                NSSound.beep()
+                model.showHint(error.localizedDescription)
+            }
+            return nil
+        }
     }
 
     /// Writes the edit to `url`, showing progress with Cancel.
@@ -293,11 +325,23 @@ final class VideoEditor {
 
     private func export(to url: URL) async {
         let edit = model.edit
-        // The movie as it is, if that's what was asked for.
+        // Never over the movie being edited: it's what everything here is made from.
+        guard !VideoExporter.isSameFile(url, model.info.url) else {
+            NSSound.beep()
+            model.showHint(VideoEditError.overSource.localizedDescription)
+            return
+        }
         if isPassthrough(edit) {
+            // The movie as it is, as Copy and Save hand it over, put in place only once it's whole.
+            guard let file = await renderFile("Exporting") else { return }
             do {
-                try? FileManager.default.removeItem(at: url)
-                try FileManager.default.copyItem(at: model.info.url, to: url)
+                let manager = FileManager.default
+                let temporary = try manager.url(for: .itemReplacementDirectory, in: .userDomainMask, appropriateFor: url,
+                                                create: true)
+                defer { try? manager.removeItem(at: temporary) }
+                let copy = temporary.appending(path: url.lastPathComponent)
+                try manager.copyItem(at: file, to: copy)
+                try VideoExporter.put(copy, at: url)
             } catch {
                 NSSound.beep()
                 model.showHint("Couldn't export · \(error.localizedDescription)")

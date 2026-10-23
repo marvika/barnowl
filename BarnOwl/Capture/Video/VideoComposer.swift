@@ -92,6 +92,8 @@ enum VideoEditError: LocalizedError {
     case cancelled
     case writeFailed(String?)
     case tooLongForGIF
+    /// Export… chose the movie being edited.
+    case overSource
 
     var errorDescription: String? {
         switch self {
@@ -100,6 +102,7 @@ enum VideoEditError: LocalizedError {
         case .cancelled: "Cancelled."
         case .writeFailed(let reason): reason.map { "Couldn't make the file: \($0)" } ?? "Couldn't make the file."
         case .tooLongForGIF: "Too long for a GIF. Trim it, or export a movie instead."
+        case .overSource: "That's the movie you're editing. Choose another name."
         }
     }
 }

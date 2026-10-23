@@ -90,10 +90,18 @@ final class CaptureCoordinator {
             MainActor.assumeIsolated { self?.pruneKept() }
         }
         applySettings()
-        Task.detached(priority: .background) {
-            CaptureStore.tidyTemporaryFiles()
-            // Removed from history but not let go of, if Barn Owl didn't get to quit.
-            CaptureLibrary.forgetRemoved()
+    }
+
+    /// At launch: recordings a quit or crash left unsaved come back on cards (if `recovers`),
+    /// then the temporary copies are tidied.
+    func recoverAndTidy(recovers: Bool = true) {
+        Task {
+            if recovers { await recording.recoverLeftovers() }
+            await Task.detached(priority: .background) {
+                CaptureStore.tidyTemporaryFiles()
+                // Removed from history but not let go of, if Barn Owl didn't get to quit.
+                CaptureLibrary.forgetRemoved()
+            }.value
         }
     }
 
@@ -153,7 +161,8 @@ final class CaptureCoordinator {
                 guard !snapshots.isEmpty else { isCapturing = false; return NSSound.beep() }
                 targets = WindowLocator.onScreenWindows()
                 let overlay = SelectionOverlay(snapshots: snapshots, targets: targets, mode: mode,
-                                               copiesText: copiesText, recording: setup, scrolls: scrolls) { [weak self] result in
+                                               copiesText: copiesText, recording: setup, scrolls: scrolls,
+                                               canRecord: !recording.isActive) { [weak self] result in
                     guard let self else { return }
                     self.overlay = nil
                     Task { await self.finish(result, appName: appName) }
@@ -576,11 +585,26 @@ final class CaptureCoordinator {
     // MARK: Recordings
 
     /// A finished recording, kept in memory and shown on a card like any capture. Its file
-    /// follows with `recordingSaved`.
-    func showRecording(_ capture: Capture, status: String) {
+    /// follows with `recordingSaved`. `onACard`: whatever the settings say, as for one recovered.
+    func showRecording(_ capture: Capture, status: String, onACard: Bool = false) {
         remember(capture)
         lastCaptureID = capture.id
-        if Preferences.captureThen == .card { cards.add(capture, status: status, kept: false) }
+        if onACard || Preferences.captureThen == .card { cards.add(capture, status: status, kept: false) }
+    }
+
+    /// A recording or a video being written: quitting waits for it.
+    var hasWorkToFinish: Bool {
+        recording.hasWorkToFinish || videoEditors.values.contains { $0.editor.isWorking }
+    }
+
+    /// Quitting: the recording is stopped and saved, and whatever the video editor is writing
+    /// is finished, for up to `limit` in all.
+    func finishBeforeQuitting(within limit: Duration = .seconds(15)) async {
+        let deadline = ContinuousClock.now + limit
+        await recording.finishBeforeQuitting(within: limit)
+        while videoEditors.values.contains(where: { $0.editor.isWorking }), ContinuousClock.now < deadline {
+            try? await Task.sleep(for: .milliseconds(50))
+        }
     }
 
     /// The recording's file is in place (nil: it couldn't be saved).
