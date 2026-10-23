@@ -15,10 +15,45 @@ enum VideoExporter {
         let duration: Double
     }
 
-    /// Exports `edit` of the movie at `info.url` to `url` (replaced if it exists), as the edit's
-    /// export settings say.
+    /// Exports `edit` of the movie at `info.url` to `url`, as the edit's export settings say.
+    /// It's written elsewhere first and only then takes the place of what's at `url`, so a
+    /// failed or cancelled export leaves that file as it was. Never over the movie itself.
     static func export(_ info: MovieInfo, edit: VideoEdit, to url: URL, progress: @escaping Progress = { _ in }) async throws -> Result {
-        try? FileManager.default.removeItem(at: url)
+        guard !isSameFile(url, info.url) else { throw VideoEditError.overSource }
+        let manager = FileManager.default
+        // On the same volume, so it moves into place at once.
+        let beside = try? manager.url(for: .itemReplacementDirectory, in: .userDomainMask, appropriateFor: url, create: true)
+        let folder = beside ?? manager.temporaryDirectory.appending(path: "Barn Owl Export \(UUID().uuidString)")
+        try manager.createDirectory(at: folder, withIntermediateDirectories: true)
+        defer { try? manager.removeItem(at: folder) }
+        let written = try await write(info, edit: edit, to: folder.appending(path: url.lastPathComponent), progress: progress)
+        try put(written.url, at: url)
+        return Result(url: url, byteCount: written.byteCount, pixelSize: written.pixelSize, duration: written.duration)
+    }
+
+    /// Whether two URLs name one file, however they're spelled.
+    static func isSameFile(_ one: URL, _ other: URL) -> Bool {
+        if one.standardizedFileURL.resolvingSymlinksInPath() == other.standardizedFileURL.resolvingSymlinksInPath() {
+            return true
+        }
+        let key = URLResourceKey.fileResourceIdentifierKey
+        guard let first = try? one.resourceValues(forKeys: [key]).fileResourceIdentifier,
+              let second = try? other.resourceValues(forKeys: [key]).fileResourceIdentifier else { return false }
+        return first.isEqual(second)
+    }
+
+    /// Moves a finished file into place, over whatever is there.
+    static func put(_ file: URL, at url: URL) throws {
+        let manager = FileManager.default
+        if manager.fileExists(atPath: url.path) {
+            _ = try manager.replaceItemAt(url, withItemAt: file)
+        } else {
+            try manager.moveItem(at: file, to: url)
+        }
+    }
+
+    private static func write(_ info: MovieInfo, edit: VideoEdit, to url: URL,
+                              progress: @escaping Progress) async throws -> Result {
         let settings = edit.export
         let crop = edit.crop ?? CGRect(origin: .zero, size: info.size)
         let pixelSize = settings.pixelSize(for: crop.size)

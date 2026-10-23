@@ -136,13 +136,11 @@ extension CaptureCoordinator: VideoEditorHost {
     }
 
     /// Puts the editor's file where the recording's goes: over its saved file when that's the
-    /// same kind, or anew in the recordings folder; history and the card follow. `file` may be
-    /// the movie itself, so it's only ever copied.
+    /// same kind, or anew in the recordings folder; history and the card follow. `file` is only
+    /// ever copied.
     func saveEditedVideo(_ file: URL, for id: UUID, edit: VideoEdit) async -> URL? {
         guard let capture = capture(id) else { return nil }
         let over = EditedVideo.overwrites(isSaved(id) ? capture.fileURL : nil, with: file)
-        // The movie itself, unchanged: its saved file is already the recording as it was.
-        if let over, file.standardizedFileURL == recording.movie(for: id)?.standardizedFileURL { return over }
         let fileExtension = file.pathExtension.lowercased()
         let url = over ?? RecordingStore.reserveURL(date: capture.date, appName: capture.appName, fileExtension: fileExtension)
         let reserved = over == nil
