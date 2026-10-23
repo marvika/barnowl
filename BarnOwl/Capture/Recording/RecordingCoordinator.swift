@@ -34,6 +34,9 @@ final class RecordingCoordinator {
     private var silence = MicrophoneSilence()
     private var countdown: RecordingCountdown?
     private var pill: RecordingPanel?
+    /// Where the pill's middle belongs, and the room it has: it stays centred as it grows.
+    private var pillAnchor: (centre: CGFloat, edge: CGRect)?
+    private var pillResized: NSObjectProtocol?
     private var border: RecordingBorder?
     private var statusItem: RecordingStatusItem?
     private var ticker: Task<Void, Never>?
@@ -303,6 +306,11 @@ final class RecordingCoordinator {
                                      discard: { [weak self] in self?.discard() })
         let pill = RecordingPanel(rootView: controls.padding(RecordingPill.margin))
         place(pill, for: take)
+        // Saying Paused or Discard makes the pill wider; its panel grows to the right.
+        pillResized = NotificationCenter.default.addObserver(forName: NSWindow.didResizeNotification, object: pill,
+                                                             queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.recentrePill() }
+        }
         pill.orderFrontRegardless()
         self.pill = pill
         let item = RecordingStatusItem()
@@ -334,9 +342,20 @@ final class RecordingCoordinator {
         if y < edge.minY { y = take.area.maxY + gap }
         if y + size.height > edge.maxY { y = max(take.area.minY, screen.minY) + 24 - margin }
         pill.setFrame(CGRect(x: x, y: y, width: size.width, height: size.height), display: false)
+        pillAnchor = (x + size.width / 2, edge)
+    }
+
+    private func recentrePill() {
+        guard let pill, let anchor = pillAnchor else { return }
+        let width = pill.frame.width
+        let x = min(max(anchor.centre - width / 2, anchor.edge.minX), anchor.edge.maxX - width).rounded()
+        if abs(x - pill.frame.minX) >= 1 { pill.setFrameOrigin(CGPoint(x: x, y: pill.frame.minY)) }
     }
 
     private func hideControls() {
+        if let pillResized { NotificationCenter.default.removeObserver(pillResized) }
+        pillResized = nil
+        pillAnchor = nil
         pill?.orderOut(nil)
         pill = nil
         border?.close()
