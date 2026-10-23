@@ -11,7 +11,8 @@ enum CaptureLibrary {
         let id: UUID
         let date: Date
         let scale: Double
-        let kind: String
+        /// "selection", "window" or "display"; a recording's is "video" or "gif", as its file is now.
+        var kind: String
         let appName: String?
         var fileURL: URL?
         var edited: Bool

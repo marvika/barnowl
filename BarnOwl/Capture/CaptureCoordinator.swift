@@ -19,11 +19,15 @@ final class CaptureCoordinator {
     /// Opens Settings › Capture.
     @ObservationIgnored var showCaptureSettings: () -> Void = {}
     @ObservationIgnored private var editors: [ObjectIdentifier: (editor: CaptureEditor, captureID: UUID)] = [:]
+    /// Recordings open in the video editor.
+    @ObservationIgnored var videoEditors: [ObjectIdentifier: VideoEditing] = [:]
+    /// Recordings whose editor is still reading the movie, so a second click doesn't open another.
+    @ObservationIgnored var openingVideos: Set<UUID> = []
     @ObservationIgnored private var pins: [CapturePin] = []
     /// Editors closed with Done, so their close isn't mistaken for leaving.
     @ObservationIgnored private var finished: Set<UUID> = []
     /// Captures that went to the clipboard.
-    @ObservationIgnored private var copied: Set<UUID> = []
+    @ObservationIgnored var copied: Set<UUID> = []
     /// The last few captures, in memory; older ones come back from the library.
     @ObservationIgnored private var captures: [UUID: Capture] = [:]
     @ObservationIgnored private var order: [UUID] = []
@@ -125,7 +129,9 @@ final class CaptureCoordinator {
     }
 
     /// Captures open in the editor: history and Clear Now leave them be while they are.
-    var editingCaptures: Set<UUID> { Set(editors.values.map(\.captureID)) }
+    var editingCaptures: Set<UUID> {
+        Set(editors.values.map(\.captureID)).union(videoEditors.values.map(\.captureID))
+    }
 
     // MARK: Capturing
 
@@ -223,7 +229,7 @@ final class CaptureCoordinator {
                               showsPointer: Preferences.captureShowsPointer)
     }
 
-    private func rememberFrontApp() {
+    func rememberFrontApp() {
         let front = NSWorkspace.shared.frontmostApplication
         previousApp = front == nil || front == .current ? lastOtherApp ?? previousApp : front
     }
@@ -412,7 +418,7 @@ final class CaptureCoordinator {
     /// Runs a capture's writes in the order they were asked for, so a quick
     /// Hide or edit never loses to the first save still encoding.
     @discardableResult
-    private func inOrder<T: Sendable>(_ id: UUID, _ work: @escaping @MainActor () async -> T) -> Task<T, Never> {
+    func inOrder<T: Sendable>(_ id: UUID, _ work: @escaping @MainActor () async -> T) -> Task<T, Never> {
         let previous = writes[id]
         let task = Task { @MainActor in
             await previous?.value
@@ -496,7 +502,7 @@ final class CaptureCoordinator {
         order.removeAll { $0 == capture.id }
         order.append(capture.id)
         // Three in memory; the library has the rest. Open editors and cards keep theirs.
-        let open = Set(editors.values.map(\.captureID))
+        let open = editingCaptures
         while order.count > 3, let oldest = order.first(where: { !open.contains($0) && !cards.has($0) && $0 != capture.id }) {
             order.removeAll { $0 == oldest }
             captures[oldest] = nil
@@ -520,7 +526,8 @@ final class CaptureCoordinator {
     /// just the original (the editor draws the marks itself).
     private func keptCapture(_ id: UUID, rendered: Bool) -> Capture? {
         guard let entry = CaptureLibrary.entry(id), let original = CaptureLibrary.original(id) else { return nil }
-        let document = rendered && entry.edited ? storedDocument(id) : nil
+        // A recording's document is its video edit, which the video editor plays.
+        let document = rendered && entry.edited && entry.media == .image ? storedDocument(id) : nil
         let image = document.flatMap { renderer(for: original, scale: entry.scale, document: $0).render($0) } ?? original
         var capture = Capture(id: id, image: image, scale: entry.scale, kind: Capture.Kind(rawValue: entry.kind) ?? .area,
                               date: entry.date, appName: entry.appName, fileURL: entry.fileURL)
@@ -529,7 +536,7 @@ final class CaptureCoordinator {
             if !stamp.matches(CaptureLibrary.FileStamp(of: file)) {
                 // Changed elsewhere, or gone: not this capture's to write over any more.
                 capture.fileURL = nil
-            } else if entry.edited, CaptureLibrary.documentIsNewer(than: stamp, for: id) {
+            } else if entry.edited, entry.media == .image, CaptureLibrary.documentIsNewer(than: stamp, for: id) {
                 // Marks changed after the file was written: dragging or saving uses the new look.
                 capture.unsavedEdits = true
             }
@@ -914,6 +921,10 @@ final class CaptureCoordinator {
                 CaptureLibrary.storeThumbnail(image, for: id)
             }
         }
+        for editing in videoEditors.values where editing.editor.model.isEdited {
+            guard let data = try? JSONEncoder().encode(editing.editor.edit) else { continue }
+            try? CaptureLibrary.storeDocument(data, for: editing.captureID)
+        }
     }
 
     // MARK: The editor
@@ -997,7 +1008,7 @@ final class CaptureCoordinator {
         // The editor draws the marks itself: no need to render them here.
         let inMemory = captures[id] != nil
         guard let capture = captures[id] ?? keptCapture(id, rendered: false) else { return }
-        if editors.isEmpty { rememberFrontApp() }
+        if editors.isEmpty, videoEditors.isEmpty { rememberFrontApp() }
         cards.remove(id)
         if let open = editors.values.first(where: { $0.captureID == id }) {
             open.editor.show()
@@ -1049,7 +1060,7 @@ final class CaptureCoordinator {
     func showHistory() {
         guard Preferences.captureEnabled else { return }
         overlay?.finish(.cancelled)
-        if editors.isEmpty, history?.isOpen != true { rememberFrontApp() }
+        if editors.isEmpty, videoEditors.isEmpty, history?.isOpen != true { rememberFrontApp() }
         let history = self.history ?? CaptureHistoryWindowController(host: self)
         history.onClose = { [weak self] in self?.becomeAccessoryWhenDone() }
         self.history = history
@@ -1058,12 +1069,12 @@ final class CaptureCoordinator {
     }
 
     /// A menu bar app again once no editor and no history window is open.
-    private func becomeAccessoryWhenDone() {
-        guard editors.isEmpty, history?.isOpen != true else { return }
+    func becomeAccessoryWhenDone() {
+        guard editors.isEmpty, videoEditors.isEmpty, history?.isOpen != true else { return }
         // Once the window has really gone, or Barn Owl still counts it as open.
         Task {
             try? await Task.sleep(for: .milliseconds(150))
-            guard editors.isEmpty, history?.isOpen != true else { return }
+            guard editors.isEmpty, videoEditors.isEmpty, history?.isOpen != true else { return }
             NSApp.setActivationPolicy(.accessory)
             giveFocusBack()
         }
