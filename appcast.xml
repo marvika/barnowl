@@ -10,6 +10,92 @@
         <language>en</language>
         <!-- Releases, newest first -->
         <item>
+            <title>Barn Owl 0.16.0</title>
+            <link>https://github.com/marvika/barnowl/releases/tag/v0.16.0</link>
+            <pubDate>Fri, 23 Oct 2026 06:42:27 +0000</pubDate>
+            <sparkle:version>24</sparkle:version>
+            <sparkle:shortVersionString>0.16.0</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>26.0</sparkle:minimumSystemVersion>
+            <sparkle:fullReleaseNotesLink>https://github.com/marvika/barnowl/releases/tag/v0.16.0</sparkle:fullReleaseNotesLink>
+            <description sparkle:format="markdown"><![CDATA[
+- **Record the screen.** Press ⌃⌥⌘5, or R after you select, to record an area,
+  a window or the whole screen. A 3, 2, 1 countdown gives you a moment (Return
+  skips it), and a small pill beside the area pauses, restarts, stops or throws
+  the take away. A ring marks the area, a stop button with the time sits in the
+  menu bar, and ⌃⌥⌘5 stops it too. Barn Owl's own controls never show up in the
+  video.
+  - **Computer audio** is one click away, on a track of its own. Barn Owl's own
+    sounds stay out of it.
+  - **Your microphone** stays off until you pick one. Barn Owl says why before
+    macOS asks, shows its level while you record, and tells you if it hears
+    nothing.
+  - **Options** in Settings › Capture: 30 or 60 frames a second, Standard or
+    High quality, H.264 or smaller HEVC files, the pointer, a ring around your
+    clicks, the countdown, and where recordings are saved.
+  - A recording gets a card, a place in Capture History and a saved movie. Barn
+    Owl keeps each one for a week, up to 2 GB in all, so you can edit it again.
+- **GIFs.** Press G instead of R, choose GIF in the record bar, or use Make
+  GIF on any recording's card. They loop at 15 frames a second, up to 800
+  pixels wide, and a still screen costs nothing.
+- **A video editor.** Click a recording's card to open it. Drag a clip's ends
+  to trim it, split it with ⌘B or the blade, delete a piece and the rest
+  closes up. Play a clip from half speed to four times as fast, crop it, and
+  fade the sound in and out. Computer and Mic each get a lane with their own volume and
+  mute. Export an MP4, a MOV or a GIF at the size and quality you need, with
+  an estimate first, or open the frame under the playhead as a picture. Every
+  step can be undone, and the movie itself is never changed.
+- **Scrolling capture.** Press ⌃⌥⌘S, or S after you select, then scroll
+  slowly or click Auto-Scroll and watch the picture grow beside the area. A
+  header or footer that stays put appears once. You get an ordinary capture,
+  up to 30,000 pixels tall, with a card, history and everything else.
+  Auto-Scroll needs Accessibility.
+- **Richer Frame.** More ways to dress a capture:
+  - **Backgrounds matched to the capture,** built from its own colours.
+  - **Backgrounds of your own:** a colour, a gradient or a radial gradient,
+    with two to four colours, an angle, soft light and grain. A die shuffles a
+    new gradient around the capture's colours. They're kept under Yours.
+  - **Shadow strength,** more aspect ratios and a position for the spare room.
+  - **Inset** carries the capture's own edge colour out around it, and
+    **Balance Margins** evens out the space around what's in it.
+  - Frame remembers your last look. A window keeps its own shadow instead of
+    getting a second one.
+- **Magnify (M):** a loupe on a detail, from 1.5× to 4×, round or
+  rectangular. It
+  enlarges your redactions along with the picture, so it never shows what
+  you've hidden.
+- **Spotlight can blur** what's around it, as well as dim it.
+- **Capture history:** every kept capture in one window, newest first, by
+  day. Search finds a capture by the words in it, its app or its day. Open it
+  to edit with its marks still movable, or copy, pin or drag it out. Search
+  for "history", or open it from Settings › Capture.
+- **Copy Text:** press T on a selection, ⌃⌥⌘T from anywhere, ⌥⌘C in the
+  editor, or the card's text button, and the words in the capture go to the
+  clipboard, read on your Mac. Words that are cropped or hidden are left out,
+  and columns are read in order.
+- **Open pictures with Barn Owl:** Finder's Open With now lists Barn Owl for
+  PNG, JPEG and HEIC. A screenshot Barn Owl saved comes back with its marks
+  still movable, wherever it's been moved; any other picture opens as a new
+  capture, the right way up, and Done saves a copy instead of writing over it.
+- **Pen smoothing:** the pen steadies your hand. The line trails the pointer
+  on a short string, shown while you draw, so wobbles never reach it. Choose
+  Off, Low, Medium or High in the pen's options.
+- **Redact pixelates** out of the box. Hide uses a light blur, or what you
+  choose in Settings › Capture › Hide with: Blur, Pixelate or Solid bars.
+- Copying, pinning or dragging an edited capture from history gives it with
+  its marks, and dragging a card out no longer waits while its file is made.
+- Fixed: presenter mode no longer takes Barn Owl's own recording for a screen
+  share.
+- Fixed: a capture open in the editor is never let go by Clear Now or the
+  clean-up of old captures, and Done still works; Edit Last Capture skips one
+  that has been let go; captures from 0.15.0 get their thumbnails and
+  searchable words in the background.
+- Fixed: stopping or restarting a recording that is still starting is steadier;
+  a microphone that changes format mid-recording is left out instead of
+  spoiling the file; a recording under a second says it was too short to keep.
+]]></description>
+            <enclosure url="https://github.com/marvika/barnowl/releases/download/v0.16.0/BarnOwl-0.16.0.zip" sparkle:edSignature="LNSS5D32shnsuLNrkm+lUT/T6sFs7acSYfmgua8WWmnQDhB5qo4rpaRT2+4g4uV6Zpct+AextqXu6U3RJnjQAA==" length="16260290" type="application/octet-stream"/>
+        </item>
+        <item>
             <title>Barn Owl 0.15.0</title>
             <link>https://github.com/marvika/barnowl/releases/tag/v0.15.0</link>
             <pubDate>Thu, 22 Oct 2026 06:55:26 +0000</pubDate>
