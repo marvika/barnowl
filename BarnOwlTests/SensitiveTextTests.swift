@@ -121,6 +121,17 @@ struct SensitiveTextTests {
         #expect(text.plainText(excluding: [CGRect(x: 0, y: 0, width: 400, height: 40)]).isEmpty)
     }
 
+    @Test func leavesOutAWordWhoseSecretPartIsHidden() {
+        // Only the value is covered, and the word's middle is on the label's side.
+        let words = [CaptureText.Word(rect: CGRect(x: 10, y: 10, width: 160, height: 20), text: "password=hunter2"),
+                     CaptureText.Word(rect: CGRect(x: 180, y: 10, width: 40, height: 20), text: "next")]
+        var text = CaptureText()
+        text.lines = [CaptureText.Line(rect: CGRect(x: 10, y: 10, width: 210, height: 20),
+                                       text: "password=hunter2 next", words: words)]
+        // The cover's padding just grazes the next word, which stays.
+        #expect(text.plainText(excluding: [CGRect(x: 100, y: 5, width: 85, height: 30)]) == "next")
+    }
+
     @Test func padsToTheWholeLine() {
         let word = CGRect(x: 100, y: 12, width: 40, height: 14)
         let line = CGRect(x: 0, y: 10, width: 300, height: 20)

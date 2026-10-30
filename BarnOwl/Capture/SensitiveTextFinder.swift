@@ -27,7 +27,14 @@ struct CaptureText: Sendable, Equatable {
     /// The text as you'd read it. `within` keeps only lines mostly inside it; words under
     /// `covered` (redactions) are left out. Both are in the same pixels as the lines.
     func plainText(within area: CGRect? = nil, excluding covered: [CGRect] = []) -> String {
-        func hidden(_ rect: CGRect) -> Bool { covered.contains { $0.contains(CGPoint(x: rect.midX, y: rect.midY)) } }
+        // Hidden once a redaction covers a fifth of it: a secret is often only part of a word
+        // ("password=hunter2"), and a word's middle can fall on the part left showing.
+        func hidden(_ rect: CGRect) -> Bool {
+            covered.contains { cover in
+                let overlap = cover.intersection(rect)
+                return !overlap.isNull && overlap.width * overlap.height >= rect.width * rect.height * 0.2
+            }
+        }
         var kept: [Line] = []
         for line in lines {
             if let area {

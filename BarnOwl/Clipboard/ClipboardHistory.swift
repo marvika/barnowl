@@ -15,6 +15,8 @@ struct ClipEntry: Identifiable, Codable, Hashable, Sendable {
     var date = Date()
     var sourceApp: String?
     var isPinned = false
+    /// For a capture Barn Owl copied: which one, so only its latest version stays.
+    var captureID: UUID?
 
     var preview: String {
         switch kind {
@@ -97,9 +99,16 @@ final class ClipboardHistory {
             forName: UserDefaults.didChangeNotification, object: nil, queue: .main) { [weak self] _ in
             MainActor.assumeIsolated { self?.applySettings() }
         }
+        // A capture's secrets were hidden: its uncovered picture goes from here too.
+        coverObserver = NotificationCenter.default.addObserver(
+            forName: .captureCovered, object: nil, queue: .main) { [weak self] note in
+            guard let id = note.userInfo?["id"] as? UUID else { return }
+            MainActor.assumeIsolated { self?.forgetCapture(id) }
+        }
     }
 
     @ObservationIgnored private var settingsObserver: NSObjectProtocol?
+    @ObservationIgnored private var coverObserver: NSObjectProtocol?
     @ObservationIgnored private var appliedSettings: (enabled: Bool, remember: Bool)?
 
     /// Looks at the clipboard twice a second, but only while the history is on.
@@ -164,10 +173,13 @@ final class ClipboardHistory {
         } else if let tiff = NSPasteboard.general.data(forType: .tiff) ?? NSImage(pasteboard: pasteboard)?.tiffRepresentation {
             // Turning a big screenshot into PNG takes a moment: not on the main thread.
             let source = app?.localizedName
+            let captureID = pasteboard.string(forType: CaptureStore.captureIDType).flatMap(UUID.init(uuidString:))
             Task { [weak self] in
-                guard let png = await Task.detached(operation: { Self.png(from: tiff) }).value else { return }
+                guard let png = await Task.detached(operation: { Self.png(from: tiff) }).value,
+                      Preferences.clipboardEnabled else { return }
                 var image = ClipEntry(kind: .image, image: png)
                 image.sourceApp = source
+                image.captureID = captureID
                 self?.add(image)
             }
             return
@@ -193,6 +205,12 @@ final class ClipboardHistory {
     }
 
     private func add(_ entry: ClipEntry) {
+        var entry = entry
+        // A capture copied again (edited, or its secrets hidden) replaces its older picture.
+        if let captureID = entry.captureID, let older = entries.firstIndex(where: { $0.captureID == captureID }) {
+            entry.isPinned = entries[older].isPinned
+            entries.removeAll { $0.captureID == captureID }
+        }
         // The same text again moves to the top instead of repeating.
         if let index = entries.firstIndex(where: { $0.kind == entry.kind && $0.text == entry.text
             && $0.files == entry.files && $0.image == entry.image }) {
@@ -257,6 +275,12 @@ final class ClipboardHistory {
         save()
     }
 
+    private func forgetCapture(_ id: UUID) {
+        guard entries.contains(where: { $0.captureID == id }) else { return }
+        entries.removeAll { $0.captureID == id }
+        save()
+    }
+
     func delete(_ entry: ClipEntry) {
         entries.removeAll { $0.id == entry.id }
         save()
@@ -296,6 +320,12 @@ final class ClipboardHistory {
 
     func clearShelf() {
         shelf = []
+        save(now: true)
+    }
+
+    /// Quitting: what's waiting for the half-second save is written now.
+    func saveBeforeQuitting() {
+        guard pendingSave != nil else { return }
         save(now: true)
     }
 

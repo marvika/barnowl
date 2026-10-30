@@ -10,7 +10,7 @@ import UserNotifications
 final class Updater: NSObject {
     @ObservationIgnored private var controller: SPUStandardUpdaterController?
     @ObservationIgnored private var observations: [NSKeyValueObservation] = []
-    /// Something that relaunching would lose is under way: a recording, or its save.
+    /// Something that relaunching would lose is under way: a recording, or a capture being saved.
     @ObservationIgnored var isBusy: () -> Bool = { false }
     /// Calls the relaunch once that's done.
     @ObservationIgnored var whenFree: (@escaping @MainActor () -> Void) -> Void = { $0() }

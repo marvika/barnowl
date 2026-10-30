@@ -71,7 +71,8 @@ final class AppModel {
                                 statusItems: sections.items)
         presenter = PresenterMode(sections: sections, keepAwake: keepAwake, images: images, scanner: scanner,
                                   mover: mover, layout: layout)
-        layout.temporarilyMoved = { [watcher] in Set(watcher.surfaced.keys) }
+        layout.temporarilyMoved = { [watcher, opener] in Set(watcher.surfaced.keys).union(opener.movedOutKeys) }
+        opener.onLeftOut = { [layout] key in layout.takeBack(key) }
         capture.showCaptureSettings = { [weak self] in self?.showSettings(.capture) }
         layout.isPaused = { [presenter] in presenter.isPresenting || presenter.isChanging }
         watcher.isPaused = { [presenter] in presenter.isPresenting || presenter.isChanging }
@@ -93,7 +94,7 @@ final class AppModel {
         case .clipboard: showClipboard()
         case .barn: showBarn()
         case .roost: showRoost(nil)
-        case .showAllIcons: sections.showAll()
+        case .showAllIcons: if !presenter.isPresenting { sections.showAll() }
         case .captureArea: capture.start(.area)
         case .captureScreen: capture.captureScreen()
         case .captureSameArea: capture.captureSameArea()
@@ -114,6 +115,8 @@ final class AppModel {
     /// Replaces an app's icon with one of your choosing: a one-icon group that
     /// opens the real icon's menu directly.
     func setCustomIcon(for item: MenuBarItem, symbol: String, label: String?) async {
+        // Its group would live in the always-hidden section.
+        guard item.isMovable else { return }
         let label = label?.trimmingCharacters(in: .whitespaces)
         if let existing = groups.group(containing: item.key), existing.opensDirectly {
             var changed = existing

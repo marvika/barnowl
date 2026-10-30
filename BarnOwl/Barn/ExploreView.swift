@@ -162,7 +162,8 @@ private struct ExploreResults: View {
         let node = scan.nodes[Int(index)]
         guard barn.canCollect(path), node.kind != .unreadable, !node.inCloud else { NSSound.beep(); return }
         withAnimation(.spring(duration: 0.3)) {
-            barn.collect(BarnModel.Item(path: path, name: node.name, size: node.reclaimable, modified: nil))
+            barn.collect(BarnModel.Item(path: path, name: node.name, size: node.reclaimable, modified: nil,
+                                        scanned: scan.finished.addingTimeInterval(-scan.duration)))
         }
     }
 

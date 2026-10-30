@@ -10,6 +10,9 @@ final class SectionController {
     var onStateChange: ((SectionState) -> Void)?
     /// Displays were connected, disconnected or rearranged.
     var onScreensChanged: (() -> Void)?
+    /// The apps with an icon in a hidden section, whose open menus keep the
+    /// icons showing.
+    var hiddenIconOwners: () -> Set<pid_t> = { [] }
 
     /// Keeps hidden icons showing, e.g. while setup or Settings asks the user
     /// to arrange them. Clearing it starts the auto-rehide timer again.
@@ -97,6 +100,7 @@ final class SectionController {
         guard Preferences.autoRehide, !holdOpen else { return }
         let delay = Preferences.autoRehideDelay
         rehideTask = Task { [weak self] in
+            var menuOpenSince: Date?
             while true {
                 try? await Task.sleep(for: .seconds(delay))
                 guard !Task.isCancelled, let self else { return }
@@ -104,8 +108,13 @@ final class SectionController {
                 // about to click one of the revealed items.
                 if self.isPointerInMenuBar() { continue }
                 // Nor while a menu from one of them is open: hiding its icon
-                // would leave the menu hanging from nothing, or close it.
-                if ItemOpener.anyMenuOpen() { continue }
+                // would leave the menu hanging from nothing, or close it. Five
+                // minutes at most, in case a window only looks like a menu.
+                if ItemOpener.anyMenuOpen(ownedBy: self.hiddenIconOwners()) {
+                    let since = menuOpenSince ?? Date()
+                    menuOpenSince = since
+                    if Date().timeIntervalSince(since) < 300 { continue }
+                }
                 self.collapse()
                 return
             }

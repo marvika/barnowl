@@ -15,8 +15,14 @@ final class StatusItems {
     static let alwaysHiddenName = "BarnOwlAlwaysHidden"
     static let curtainName = "BarnOwlPresenterCurtain"
 
-    /// While presenting on macOS 26: an invisible item right next to the arrow.
+    /// While presenting on macOS 26: an invisible item right next to the arrow,
+    /// or next to the owl when it sits beside the arrow.
     private(set) var curtain: NSStatusItem?
+    /// What the curtain was placed beside: the arrow or the owl.
+    private var curtainAnchor: NSStatusItem?
+    /// The owl, Barn Owl's own menu. It stays in view while presenting: it shows
+    /// nothing private, and its menu is where presenting is turned off.
+    var owl: () -> NSStatusItem? = { nil }
 
     init() {
         Self.seedPositions()
@@ -67,28 +73,69 @@ final class StatusItems {
     /// item is made directly left of the arrow and widened, pushing everything
     /// past it off screen, the way the "|" divider hides its section. Nothing is
     /// dragged, so the pointer stays where it is. Made afresh each time, so it
-    /// lands next to the arrow wherever the arrow is now. False if it can't be
-    /// placed (no remembered arrow position, or macOS 27, which ignores these).
-    func raiseCurtain(length: CGFloat) -> Bool {
+    /// lands next to the arrow wherever the arrow is now. When the owl sits right
+    /// beside the arrow, the curtain goes left of the owl instead, so its menu
+    /// stays in reach. False if it can't be placed (no remembered position, or
+    /// macOS 27, which ignores these).
+    func raiseCurtain(length: CGFloat, besideOwl: Bool = true) -> Bool {
         lowerCurtain()
         guard ProcessInfo.processInfo.operatingSystemVersion.majorVersion < 27 else { return false }
         let defaults = UserDefaults.standard
-        guard let toggle = defaults.object(forKey: Self.positionKey(Self.toggleName)) as? Double else { return false }
-        // Smaller is further right: just left of the arrow, before any other icon.
-        defaults.set(toggle + 0.5, forKey: Self.positionKey(Self.curtainName))
+        let anchor = besideOwl ? owlBesideArrow ?? toggle : toggle
+        guard let name = anchor.autosaveName,
+              let position = defaults.object(forKey: Self.positionKey(name)) as? Double else { return false }
+        // Smaller is further right, counted to an item's right edge: just left of the
+        // arrow, before any other icon. Beside the owl, halfway across it: presenting
+        // widens the arrow into an eye-slash, which moves the owl's right edge out
+        // past its remembered place, but not its left edge past halfway.
+        let offset = anchor === toggle ? 0.5 : max(0.5, (Self.frame(of: anchor)?.width ?? 0) / 2)
+        defaults.set(position + offset, forKey: Self.positionKey(Self.curtainName))
         let item = NSStatusBar.system.statusItem(withLength: 0)
         item.autosaveName = Self.curtainName
         item.button?.setAccessibilityElement(false)
         item.length = length
         curtain = item
+        curtainAnchor = anchor
         return true
     }
 
-    /// Whether the curtain is where it should be: left of the arrow, which is
-    /// still on screen.
-    var curtainIsLeftOfArrow: Bool {
+    /// Where the curtain, the owl and the arrow are, and the screens, for the log
+    /// when the curtain misses.
+    var curtainReport: String {
+        let describe = { (frame: CGRect?) in frame.map { "x \(Int($0.minX))–\(Int($0.maxX))" } ?? "none" }
+        let screens = NSScreen.screens.map { "x \(Int($0.frame.minX))–\(Int($0.frame.maxX))" }.joined(separator: ", ")
+        return "curtain \(describe(Self.layoutFrame(of: curtain))), owl \(describe(Self.layoutFrame(of: owl()))), "
+            + "arrow \(describe(Self.layoutFrame(of: toggle))), screens \(screens)"
+    }
+
+    /// Whether the curtain was placed beside the owl rather than the arrow.
+    var curtainIsBesideOwl: Bool { curtain != nil && curtainAnchor !== toggle }
+
+    /// The owl, when it's on screen right beside the arrow.
+    private var owlBesideArrow: NSStatusItem? {
+        guard let owl = owl(), let owlFrame = Self.frame(of: owl), let arrow = Self.frame(of: toggle),
+              Self.isBeside(owlFrame, arrow) else { return nil }
+        return owl
+    }
+
+    /// Whether the curtain is where it should be, with the arrow still on screen.
+    var curtainLanded: Bool {
         guard let arrow = Self.frame(of: toggle), let curtain = Self.layoutFrame(of: curtain) else { return false }
-        return curtain.maxX <= arrow.minX + 1
+        let owl = curtainIsBesideOwl ? Self.frame(of: curtainAnchor) : nil
+        if curtainIsBesideOwl, owl == nil { return false }
+        return Self.curtainLanded(curtain, arrow: arrow, owl: owl)
+    }
+
+    /// Left of the arrow; or, placed beside the owl, right against the owl with the
+    /// owl still against the arrow, so nothing of another app's shows between them.
+    nonisolated static func curtainLanded(_ curtain: CGRect, arrow: CGRect, owl: CGRect?) -> Bool {
+        guard let owl else { return curtain.maxX <= arrow.minX + 1 }
+        return isBeside(curtain, owl) && isBeside(owl, arrow)
+    }
+
+    /// Whether `left` ends where `right` starts, give or take a point or two.
+    nonisolated static func isBeside(_ left: CGRect, _ right: CGRect) -> Bool {
+        abs(right.minX - left.maxX) <= 2
     }
 
     /// Takes the curtain away, and its remembered place with it.
@@ -96,6 +143,7 @@ final class StatusItems {
         guard let item = curtain else { return }
         NSStatusBar.system.removeStatusItem(item)
         curtain = nil
+        curtainAnchor = nil
         UserDefaults.standard.removeObject(forKey: Self.positionKey(Self.curtainName))
     }
 

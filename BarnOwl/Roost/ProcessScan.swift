@@ -162,6 +162,11 @@ enum ProcessScan {
         bsdInfo(of: pid).map(startTime)
     }
 
+    /// Exited, but not yet reaped by its parent: gone, though its PID still answers.
+    static func isZombie(_ pid: Int32) -> Bool {
+        bsdInfo(of: pid)?.pbi_status == UInt32(SZOMB)
+    }
+
     private static func startTime(_ info: proc_bsdinfo) -> Date {
         Date(timeIntervalSince1970: TimeInterval(info.pbi_start_tvsec) + TimeInterval(info.pbi_start_tvusec) / 1_000_000)
     }

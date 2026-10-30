@@ -101,12 +101,14 @@ final class PresenterMode {
     }
 
     /// Moves every other app's visible icon into the hidden section, without
-    /// changing the saved layout. The clock and Control Center stay; macOS
-    /// won't move them.
+    /// changing the saved layout. macOS's own items stay: the clock and
+    /// Control Center can't move, and the rest (Battery, Wi‑Fi, Sound…) show
+    /// nothing private. A ⌘-drag of one of those is also how you take it off
+    /// the menu bar, so it isn't worth the risk.
     private func hideVisibleIcons() async {
         guard let divider = StatusItems.windowID(of: sections.items.separator) else { return }
         scanner.updateFrames()
-        for item in scanner.items where item.section == .visible && item.isMovable {
+        for item in scanner.items where Self.hidesForPresenting(item) {
             // Recorded first, so it's restored even if the move reports failure.
             // `scanner.items` runs left to right.
             movedKeys.append(item.key)
@@ -115,10 +117,16 @@ final class PresenterMode {
         scanner.updateFrames()
     }
 
+    nonisolated static func hidesForPresenting(_ item: MenuBarItem) -> Bool {
+        item.section == .visible && item.isMovable && !item.isSystem
+    }
+
     /// Each icon returns to the start of the visible section, so going from
     /// the rightmost to the leftmost keeps their order.
     private func restoreIcons() async {
         for key in movedKeys.reversed() { await layout.returnToRow(key) }
+        // Any the user was too busy for go back later, not stay where presenting put them.
+        for key in movedKeys { layout.takeBack(key) }
         movedKeys = []
     }
 

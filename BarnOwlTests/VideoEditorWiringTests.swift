@@ -41,6 +41,24 @@ struct VideoEditorWiringTests {
         #expect(names == ["Screen Recording.mov", "movie.mov"])
     }
 
+    @Test func neverSavesOverTheOnlyCopyOrAFileChangedElsewhere() throws {
+        let root = try folder()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let saved = root.appending(path: "Screen Recording.mov")
+        try Data([1, 2, 3]).write(to: saved)
+        let stamp = CaptureLibrary.FileStamp(of: saved)
+        let kept = root.appending(path: "kept.mov")
+        try Data([1, 2, 3]).write(to: kept)
+
+        #expect(EditedVideo.mayOverwrite(saved, stamp: stamp, source: kept))
+        #expect(EditedVideo.mayOverwrite(saved, stamp: nil, source: nil))
+        // The history's movie is gone, so the editor reads the saved file itself.
+        #expect(!EditedVideo.mayOverwrite(saved, stamp: stamp, source: saved))
+        // Trimmed in another app since.
+        try Data([9]).write(to: saved)
+        #expect(!EditedVideo.mayOverwrite(saved, stamp: stamp, source: kept))
+    }
+
     @Test func aMissingSourceLeavesTheSavedFileAlone() throws {
         let root = try folder()
         defer { try? FileManager.default.removeItem(at: root) }

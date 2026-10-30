@@ -53,21 +53,28 @@ final class LengthEngine: HidingEngine {
     }
 
     /// A divider can only hide what's left of it, so presenting widens a
-    /// curtain placed right of every icon, just left of the arrow. If it can't
-    /// be placed there, presenting moves the icons instead. Ending always
-    /// reports false, so icons moved that way are put back.
+    /// curtain placed right of every icon: just left of the owl when it sits
+    /// beside the arrow, so its menu stays in reach, else just left of the
+    /// arrow. If it can't be placed either way, presenting moves the icons
+    /// instead. Ending always reports false, so icons moved that way are put back.
     func setPresenting(_ presenting: Bool) async -> Bool {
         guard presenting else {
             items.lowerCurtain()
             return false
         }
-        guard items.raiseCurtain(length: collapsedLength) else { return false }
-        // The menu bar lays out on its next pass.
-        for _ in 0..<10 {
-            try? await Task.sleep(for: .milliseconds(50))
-            if items.curtainIsLeftOfArrow { return true }
+        var besideOwl = true
+        while items.raiseCurtain(length: collapsedLength, besideOwl: besideOwl) {
+            // The menu bar lays out on its next pass, which can take a second or
+            // more while it's also widening the divider and the arrow.
+            for _ in 0..<40 {
+                try? await Task.sleep(for: .milliseconds(50))
+                if items.curtainLanded { return true }
+            }
+            guard items.curtainIsBesideOwl else { break }
+            Log.menuBar.info("Presenter curtain didn't land beside the owl (\(self.items.curtainReport, privacy: .public)); trying beside the arrow")
+            besideOwl = false
         }
-        Log.menuBar.error("Presenter curtain didn't land left of the arrow; moving icons instead")
+        Log.menuBar.error("Presenter curtain didn't land left of the arrow (\(self.items.curtainReport, privacy: .public)); moving icons instead")
         items.lowerCurtain()
         return false
     }

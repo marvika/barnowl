@@ -33,13 +33,25 @@ struct MenuBarItem: Identifiable, Hashable, Sendable {
 
     /// The clock, Control Center and the camera/microphone/screen-recording
     /// indicator can't be moved, by hand or otherwise, and the indicator must
-    /// never be hidden.
+    /// never be hidden. Battery isn't Barn Owl's to move either, except to
+    /// keep it showing.
     var isMovable: Bool {
+        if alwaysShows { return false }
         guard bundleIdentifier == "com.apple.controlcenter" else { return true }
         if let windowName, windowName == "Clock" || windowName.hasPrefix("BentoBox")
             || windowName == "AudioVideoModule" { return false }
         let name = (title ?? "").split(separator: ",").first.map(String.init) ?? ""
         return !["Clock", "Control Center", "Audio and Video Controls"].contains(name)
+    }
+
+    /// Battery always shows: Barn Owl keeps it right of the arrow, where
+    /// neither divider nor the presenting curtain reaches, and never puts it
+    /// anywhere else. ⌘-dragging one of macOS's controls is also how it comes
+    /// off the menu bar, so the fewer drags the better.
+    var alwaysShows: Bool {
+        guard bundleIdentifier == "com.apple.controlcenter" else { return false }
+        if let windowName { return windowName == "Battery" }
+        return ItemKey.stem(of: title) == "Battery"
     }
 
     /// Items macOS draws itself (clock, Control Center, Wi‑Fi…).

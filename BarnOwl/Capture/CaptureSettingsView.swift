@@ -68,7 +68,7 @@ struct CapturePane: View {
                         Button("Show History…") { model.capture.showHistory() }
                         Button(cleared ? "Cleared" : "Clear Now") {
                             // Not one open in the editor: its marks are still being made.
-                            CaptureLibrary.clear(keeping: model.capture.editingCaptures)
+                            CaptureLibrary.clear(keeping: model.capture.capturesInUse)
                             cleared = true
                         }
                         .disabled(cleared)

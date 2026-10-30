@@ -236,7 +236,8 @@ final class LayoutController {
         if !isCorrection { limiter.reset(key) }
         guard let item = scanner.items.first(where: { $0.key == key }) else { return }
         guard item.isMovable else {
-            lastError = "\(item.name) can't be moved; macOS keeps it in place."
+            lastError = item.alwaysShows ? "\(item.name) always shows, right of the arrow."
+                : "\(item.name) can't be moved; macOS keeps it in place."
             return
         }
         isBusy = true
@@ -256,9 +257,28 @@ final class LayoutController {
             lastError = "Couldn't find where to put \(item.name)."
             return
         }
-        if !(await mover.move(item.windowID, to: destination, whenIdle: isCorrection)) {
+        if !(await move(item, to: destination, row: row, whenIdle: isCorrection)) {
             if !isCorrection { lastError = "Couldn't move \(item.name). Try again, or ⌘-drag it in the menu bar." }
         }
+    }
+
+    /// One of macOS's own icons goes into a hidden row with every row showing,
+    /// so the ⌘-drag ends on screen: one that ends off screen can take it off
+    /// the menu bar for good (Battery went that way).
+    @discardableResult
+    private func move(_ item: MenuBarItem, to destination: MoveDestination, row: LayoutRow,
+                      whenIdle: Bool) async -> Bool {
+        let before = sections.state
+        guard item.isSystem, row != .visible, before != .expandedAll else {
+            return await mover.move(item.windowID, to: destination, whenIdle: whenIdle)
+        }
+        // Not showing every icon while the user waits for a pause.
+        if whenIdle, !(await UserActivity.waitUntilIdle(timeout: 30)) { return false }
+        sections.showAll()
+        await Self.waitForMenuBarToSettle()
+        let moved = await mover.move(item.windowID, to: destination, whenIdle: whenIdle)
+        sections.set(before)
+        return moved
     }
 
     private func destination(for row: LayoutRow, before beforeKey: String?,
@@ -291,17 +311,36 @@ final class LayoutController {
         isReconciling = true
         defer { isReconciling = false }
         let skipped = temporarilyMoved()
+        // Icons Barn Owl left out of their row read as re-added: back they go,
+        // rather than their new place being learned as the user's.
+        let memory = remembered
+        displaced = displaced.filter { key in
+            guard let item = scanner.items.first(where: { $0.key == key }), let row = memory[key] else { return false }
+            return !isIn(item, row)
+        }
         let snapshot = scanner.items.filter { !skipped.contains($0.key) }.map {
             (key: $0.key, windowID: $0.windowID, row: LayoutRow($0.section), movable: $0.isMovable)
         }
         let result = LayoutKeeper.reconcile(items: snapshot, groupOf: { self.groups.group(containing: $0)?.id },
-                                            remembered: remembered, lastWindowIDs: lastWindowIDs,
+                                            remembered: remembered,
+                                            lastWindowIDs: lastWindowIDs.filter { !displaced.contains($0.key) },
                                             hasBaseline: hasBaseline, newIcons: Preferences.newIconPlacement)
         remembered = result.remembered
+        let previousWindowIDs = lastWindowIDs
         lastWindowIDs = Dictionary(snapshot.map { ($0.key, $0.windowID) }, uniquingKeysWith: { a, _ in a })
         hasBaseline = true
+        // A correction that wasn't made (the user was busy) or didn't land is tried
+        // again at the next scan. Recording its window now would have that scan
+        // take the wrong row for the user's own ⌘-drag, and keep it for good.
+        defer {
+            for move in result.moves where !limiter.givenUp.contains(move.key) {
+                guard let item = scanner.items.first(where: { $0.key == move.key }), !isIn(item, move.row) else { continue }
+                lastWindowIDs[move.key] = previousWindowIDs[move.key]
+            }
+        }
         // Corrections borrow the pointer for a moment: only while the user isn't using it.
-        guard !result.moves.isEmpty, UserActivity.isIdle else { return }
+        guard UserActivity.isIdle else { return }
+        await pinAlwaysShownIcons()
         for move in result.moves {
             if limiter.givenUp.contains(move.key) { continue }
             guard limiter.allow(move.key) else {
@@ -310,6 +349,37 @@ final class LayoutController {
             }
             Log.menuBar.info("Keeping \(move.key, privacy: .public) in \(move.row.storageValue, privacy: .public)")
             await place(move.key, in: move.row, isCorrection: true)
+        }
+    }
+
+    /// Icons Barn Owl moved out of their row and couldn't put back (an icon
+    /// opened from the Perch, presenting): the next reconcile moves them back.
+    @ObservationIgnored private var displaced: Set<String> = []
+
+    func takeBack(_ key: String) {
+        displaced.insert(key)
+    }
+
+    private func isIn(_ item: MenuBarItem, _ row: LayoutRow) -> Bool {
+        if case .group = row { return item.section == .alwaysHidden }
+        return LayoutRow(item.section) == row
+    }
+
+    /// Puts Battery back right of the arrow if it turns up anywhere else
+    /// (macOS re-adds it where it likes, or it was dragged), the one move
+    /// Barn Owl makes with it. macOS 27 never hides system items.
+    private func pinAlwaysShownIcons() async {
+        guard ProcessInfo.processInfo.operatingSystemVersion.majorVersion < 27,
+              let arrow = StatusItems.windowID(of: statusItems.toggle) else { return }
+        for item in scanner.items where item.alwaysShows {
+            let frames = ItemMover.frames()
+            guard let frame = frames[item.windowID], let arrowFrame = frames[arrow],
+                  frame.minX < arrowFrame.maxX - 2, limiter.allow(item.key) else { continue }
+            Log.menuBar.info("Keeping \(item.key, privacy: .public) right of the arrow")
+            isBusy = true
+            await mover.move(item.windowID, to: .rightOf(arrow), whenIdle: true)
+            isBusy = false
+            scanner.updateFrames()
         }
     }
 
@@ -364,7 +434,7 @@ final class LayoutController {
         guard let item = scanner.items.first(where: { $0.key == key }) else { return }
         let row = groups.group(containing: key).map { LayoutRow.group($0.id) } ?? remembered[key] ?? .hidden
         guard let destination = await destination(for: row, before: nil, moving: item) else { return }
-        await mover.move(item.windowID, to: destination, whenIdle: true)
+        await move(item, to: destination, row: row, whenIdle: true)
         scanner.updateFrames()
     }
 
@@ -403,17 +473,16 @@ final class LayoutController {
         lastWindowIDs = Dictionary(scanner.items.map { ($0.key, $0.windowID) }, uniquingKeysWith: { a, _ in a })
     }
 
-    /// First run: keep Battery and Wi‑Fi in the menu bar, since most people
-    /// want to see them. Everything else starts hidden.
+    /// First run: keep Wi‑Fi in the menu bar, since most people want to see
+    /// it (Battery always shows anyway). Everything else starts hidden.
     func applyFirstRunDefaults() async {
         let flag = "appliedDefaultLayout"
         guard !UserDefaults.standard.bool(forKey: flag), AccessibilityInventory.isTrusted,
               !scanner.items.isEmpty else { return }
         // macOS spells Wi‑Fi with a non-breaking hyphen.
-        let wanted = ["battery", "wi-fi"]
         func normalized(_ name: String) -> String { name.replacingOccurrences(of: "\u{2011}", with: "-").lowercased() }
-        for item in scanner.items where item.isSystem && item.section != .visible
-            && wanted.contains(normalized(item.name)) {
+        for item in scanner.items where item.isSystem && item.isMovable && item.section != .visible
+            && normalized(item.name) == "wi-fi" {
             await place(item.key, in: .visible)
         }
         UserDefaults.standard.set(true, forKey: flag)
