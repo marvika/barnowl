@@ -66,11 +66,32 @@ enum SystemConditions {
     /// File extensions browsers and download tools use for unfinished files.
     static let partialExtensions: Set<String> = ["download", "crdownload", "part", "partial", "opdownload", "tmp"]
 
-    /// Whether the Downloads folder has an unfinished download in it.
+    /// Whether the Downloads folder has an unfinished download in it that's
+    /// still being written. A cancelled download leaves its partial file
+    /// behind for good, and must not keep the Mac awake for good.
     static var isDownloading: Bool {
-        guard let folder = FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask).first,
-              let names = try? FileManager.default.contentsOfDirectory(atPath: folder.path) else { return false }
-        return names.contains { partialExtensions.contains(($0 as NSString).pathExtension.lowercased()) }
+        let fileManager = FileManager.default
+        guard let folder = fileManager.urls(for: .downloadsDirectory, in: .userDomainMask).first,
+              let urls = try? fileManager.contentsOfDirectory(at: folder, includingPropertiesForKeys: nil)
+        else { return false }
+        return urls.contains { url in
+            guard partialExtensions.contains(url.pathExtension.lowercased()) else { return false }
+            // Safari's .download is a folder; what grows is inside it.
+            let inside = (try? fileManager.contentsOfDirectory(at: url, includingPropertiesForKeys: nil)) ?? []
+            return isRecent(([url] + inside).compactMap(modificationDate).max())
+        }
+    }
+
+    /// A download that hasn't grown for this long has stalled or was abandoned.
+    static let stalledAfter: TimeInterval = 5 * 60
+
+    static func isRecent(_ date: Date?, now: Date = Date()) -> Bool {
+        guard let date else { return false }
+        return now.timeIntervalSince(date) < stalledAfter
+    }
+
+    private static func modificationDate(_ url: URL) -> Date? {
+        try? url.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate
     }
 
     // MARK: Apps

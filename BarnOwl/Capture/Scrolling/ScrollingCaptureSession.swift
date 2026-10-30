@@ -89,7 +89,12 @@ final class ScrollingCaptureSession {
         if autoScrollsAtStart { toggleAutoScroll() }
         let keep = await decided()
         await tearDown()
-        guard keep, let engine, let image = await engine.picture() else { return nil }
+        guard keep, let engine else { return nil }
+        guard let image = await engine.picture() else {
+            // Kept, but too big to put together: say so rather than vanish like a cancel.
+            failure = "Couldn't put the capture together"
+            return nil
+        }
         return (image, scale)
     }
 

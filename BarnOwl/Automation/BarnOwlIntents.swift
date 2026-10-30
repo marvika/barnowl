@@ -16,11 +16,13 @@ enum IntentBridge {
 enum IntentError: Error, CustomLocalizedStringResourceConvertible {
     case notRunning
     case iconNotFound(String)
+    case negativeMinutes
 
     var localizedStringResource: LocalizedStringResource {
         switch self {
         case .notRunning: "Barn Owl isn't running."
         case .iconNotFound(let name): "No menu bar icon called \(name)."
+        case .negativeMinutes: "Minutes can't be less than 0."
         }
     }
 }
@@ -50,7 +52,9 @@ struct KeepAwakeIntent: AppIntent {
 
     @MainActor
     func perform() async throws -> some IntentResult {
-        try IntentBridge.requireModel().keepAwake.start(minutes: max(0, minutes))
+        // A calculation gone below zero is a mistake, not "until you stop it".
+        guard minutes >= 0 else { throw IntentError.negativeMinutes }
+        try IntentBridge.requireModel().keepAwake.start(minutes: minutes)
         return .result()
     }
 }

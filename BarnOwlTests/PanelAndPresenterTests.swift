@@ -84,3 +84,13 @@ struct KeepAwakeConditionTests {
                                                      presenting: true))
     }
 }
+
+struct DownloadConditionTests {
+    @Test func onlyAPartialFileStillBeingWrittenCounts() {
+        let now = Date()
+        #expect(SystemConditions.isRecent(now.addingTimeInterval(-30), now: now))
+        // A cancelled download's leftover must not keep the Mac awake for good.
+        #expect(!SystemConditions.isRecent(now.addingTimeInterval(-3600), now: now))
+        #expect(!SystemConditions.isRecent(nil, now: now))
+    }
+}

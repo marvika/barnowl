@@ -312,3 +312,72 @@ struct CleanupEndToEndTests {
         #expect(exists("Documents/precious.txt"))
     }
 }
+
+/// What the Explore basket checks again just before trashing.
+@Suite(.serialized)
+struct BasketCheckTests {
+    let folder: String
+    private let fm = FileManager.default
+
+    init() throws {
+        // Under the real home's caches, not the temporary folder: that is in
+        // /private, which the basket never takes from.
+        folder = fm.homeDirectoryForCurrentUser.path + "/Library/Caches/BarnOwlTests-\(UUID().uuidString)"
+        try fm.createDirectory(atPath: folder + "/Projects/app/node_modules", withIntermediateDirectories: true)
+        try fm.createDirectory(atPath: folder + "/Elsewhere/node_modules", withIntermediateDirectories: true)
+        try Data("zip".utf8).write(to: URL(fileURLWithPath: folder + "/dataset.zip"))
+    }
+
+    private func item(_ path: String, scanned: Date?) -> BarnModel.Item {
+        BarnModel.Item(path: folder + "/" + path, name: path, size: 1, modified: nil, scanned: scanned)
+    }
+
+    @Test func trashesWhatIsAsTheScanSawIt() {
+        defer { try? fm.removeItem(atPath: folder) }
+        #expect(BarnModel.basketProblem(item("dataset.zip", scanned: Date()), home: "/Users/x") == nil)
+        #expect(BarnModel.basketProblem(item("Projects/app/node_modules", scanned: Date()), home: "/Users/x") == nil)
+    }
+
+    @Test func keepsWhatChangedOrWasReplacedSinceTheScan() throws {
+        defer { try? fm.removeItem(atPath: folder) }
+        let scanned = Date()
+        Thread.sleep(forTimeInterval: 0.05)
+        // Deleted and downloaded again under the same name.
+        try fm.removeItem(atPath: folder + "/dataset.zip")
+        try Data("another".utf8).write(to: URL(fileURLWithPath: folder + "/dataset.zip"))
+        #expect(BarnModel.basketProblem(item("dataset.zip", scanned: scanned), home: "/Users/x")
+                == "kept, it changed since the owl looked")
+        // Nothing to tell it apart by.
+        #expect(BarnModel.basketProblem(item("Projects/app/node_modules", scanned: nil), home: "/Users/x") != nil)
+    }
+
+    @Test func keepsWhatIsReachedThroughAFolderNowALink() throws {
+        defer { try? fm.removeItem(atPath: folder) }
+        let scanned = Date().addingTimeInterval(60)
+        // The project moved away, and a link to another folder took its name.
+        try fm.removeItem(atPath: folder + "/Projects/app")
+        try fm.createSymbolicLink(atPath: folder + "/Projects/app", withDestinationPath: folder + "/Elsewhere")
+        #expect(BarnModel.basketProblem(item("Projects/app/node_modules", scanned: scanned), home: "/Users/x")
+                == "kept, its folder is now somewhere else")
+        #expect(fm.fileExists(atPath: folder + "/Elsewhere/node_modules"))
+    }
+
+    @Test(arguments: [["node", "/opt/homebrew/bin/npm", "install"],
+                      ["/Users/x/.nvm/versions/node/v22.1.0/bin/node", "/x/lib/node_modules/npm/bin/npm-cli.js", "ci"],
+                      ["npm", "install"]])
+    func seesNpmRunning(_ arguments: [String]) {
+        #expect(CleanupRunner.runs("npm", arguments: arguments))
+    }
+
+    @Test func seesScriptToolsRunning() {
+        #expect(CleanupRunner.runs("brew", arguments: ["/bin/bash", "-p", "/opt/homebrew/bin/brew", "upgrade"]))
+        #expect(CleanupRunner.runs("brew", arguments: ["/opt/homebrew/Library/Homebrew/vendor/portable-ruby/current/bin/ruby",
+                                                       "-W1", "--disable=gems,rubyopt",
+                                                       "/opt/homebrew/Library/Homebrew/brew.rb", "upgrade"]))
+        #expect(CleanupRunner.runs("yarn", arguments: ["node", "/opt/homebrew/lib/node_modules/yarn/bin/yarn.js", "add"]))
+        #expect(CleanupRunner.runs("pnpm", arguments: ["node", "/x/pnpm/bin/pnpm.cjs", "install"]))
+        #expect(!CleanupRunner.runs("npm", arguments: ["vim", "npm"]))
+        #expect(!CleanupRunner.runs("npm", arguments: ["node", "/opt/homebrew/bin/claude"]))
+        #expect(!CleanupRunner.runs("npm", arguments: []))
+    }
+}

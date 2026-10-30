@@ -67,6 +67,9 @@ final class RecordingCoordinator {
     /// Recording, or saving a recording: quitting now would lose it.
     var hasWorkToFinish: Bool { machine.phase != .idle || !saving.isEmpty }
 
+    /// Recordings being saved or made into a GIF: their movie must stay in history meanwhile.
+    var inUse: Set<UUID> { saving.union(gifs.keys) }
+
     /// Long enough that losing it would hurt: Restart and the menu bar's Discard ask first.
     static let worthKeeping: TimeInterval = 5
 
@@ -218,17 +221,6 @@ final class RecordingCoordinator {
         let deadline = ContinuousClock.now + limit
         while hasWorkToFinish, ContinuousClock.now < deadline {
             try? await Task.sleep(for: .milliseconds(50))
-        }
-    }
-
-    /// Runs `action` once nothing is being recorded or saved: an update waits for that before
-    /// it relaunches Barn Owl.
-    func whenDone(_ action: @escaping @MainActor () -> Void) {
-        Task { [weak self] in
-            while self?.hasWorkToFinish == true {
-                try? await Task.sleep(for: .milliseconds(500))
-            }
-            action()
         }
     }
 
@@ -592,7 +584,7 @@ final class RecordingCoordinator {
         let entry = CaptureLibrary.Entry(id: capture.id, date: capture.date, scale: Double(capture.scale),
                                          kind: capture.media.libraryKind ?? "video", appName: capture.appName, fileURL: nil,
                                          edited: false, duration: capture.media.duration)
-        let keeping = (host?.editingCaptures ?? []).union(gifs.keys)
+        let keeping = (host?.capturesInUse ?? []).union(inUse)
         let kept = await Task.detached(priority: .userInitiated) { () -> URL? in
             do {
                 try CaptureLibrary.storeMovie(master, poster: poster, entry: entry, keeping: keeping)

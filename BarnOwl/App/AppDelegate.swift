@@ -5,7 +5,8 @@ import KeyboardShortcuts
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private var items: StatusItems!
     private var sections: SectionController!
-    private let keepAwake = KeepAwakeController(rules: RuleStore())
+    /// Made on first use, after migration has carried over Barkeep's rules.
+    private lazy var keepAwake = KeepAwakeController(rules: RuleStore())
     private var quickPanel: QuickPanelController!
     private var model: AppModel!
     private var settingsWindow: SettingsWindowController!
@@ -39,6 +40,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         sections = SectionController(items: items, engine: HidingEngineFactory.make(items: items))
         Log.app.info("Using hiding engine: \(self.sections.engine.displayName)")
         scanner = ItemScanner(statusItems: items)
+        sections.hiddenIconOwners = { [weak self] in
+            Set(self?.scanner.items.filter { $0.section != .visible }.map(\.pid) ?? [])
+        }
         let groups = GroupStore()
         model = AppModel(sections: sections, keepAwake: keepAwake, scanner: scanner, images: images,
                          mover: ItemMover(statusItems: items), groups: groups)
@@ -91,6 +95,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         barnWatch.start()
         quickPanel = QuickPanelController(model: model)
         quickPanel.syncOwlIcon()
+        // Presenting leaves the owl in view, so its menu can turn presenting off.
+        items.owl = { [weak self] in self?.quickPanel?.owlItem }
         model.capture.ownStatusWindows = { [weak self] in
             guard let self else { return [] }
             let own: [NSStatusItem?] = [self.items.toggle, self.items.separator, self.items.alwaysHidden,
@@ -159,9 +165,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
         }
         model.presenter.start()
-        // An update waits for a recording, and its save, before it relaunches Barn Owl.
-        model.updater.isBusy = { [weak self] in self?.model.capture.recording.hasWorkToFinish ?? false }
-        model.updater.whenFree = { [weak self] relaunch in self?.model.capture.recording.whenDone(relaunch) }
+        // An update waits for a recording, and any capture still being saved, before it relaunches Barn Owl.
+        model.updater.isBusy = { [weak self] in self?.model.capture.hasWorkToFinish ?? false }
+        model.updater.whenFree = { [weak self] relaunch in self?.model.capture.whenDone(relaunch) }
         if !DemoMode.isOn { model.updater.start() }
         // Recordings a quit or crash left behind come back on cards.
         model.capture.recoverAndTidy(recovers: !DemoMode.isOn)
@@ -202,7 +208,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         KeyboardShortcuts.onKeyUp(for: .togglePresenter) { [weak self] in
             Task { await self?.model.presenter.toggle() }
         }
-        KeyboardShortcuts.onKeyUp(for: .showAllItems) { [weak self] in self?.sections.showAll() }
+        KeyboardShortcuts.onKeyUp(for: .showAllItems) { [weak self] in self?.showAllIcons() }
         KeyboardShortcuts.onKeyUp(for: .toggleKeepAwake) { [weak self] in
             guard let self else { return }
             if self.keepAwake.session != nil {
@@ -379,8 +385,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             case ("show", _):
                 // Like the arrow, but never hides what's already showing.
                 if sections.state == .collapsed, !bar.isOpen { revealHiddenIcons() }
-            case ("toggle", _): sections.toggle()
-            case ("show-all", _): sections.showAll()
+            case ("toggle", _): model.presenter.isPresenting ? bar.toggle() : sections.toggle()
+            case ("show-all", _): showAllIcons()
             case ("hide", _): sections.collapse()
             case ("keep-awake", "/stop"): keepAwake.stop()
             case ("keep-awake", "/extend"):
@@ -422,6 +428,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationWillTerminate(_ notification: Notification) {
         model?.capture.keepOpenEditors()
+        model?.clipboard.saveBeforeQuitting()
         if KeepAwakeController.saveSessionOnQuit { keepAwake.saveSession() }
         keepAwake.stop()
         // Never leave the Mac unable to sleep after Barn Owl is gone. Keep
@@ -440,7 +447,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard !DemoMode.isOn else { return }
         Task { @MainActor in
             let stillOff = await Task.detached { ClosedLidMode.cleanUpLegacySilently() }.value
-            guard stillOff else { return }
+            // Asked once: someone who turned sleep off themselves meant it.
+            let declined = "declinedLegacySleepCleanup"
+            guard stillOff, !UserDefaults.standard.bool(forKey: declined) else { return }
             try? await Task.sleep(for: .seconds(2))
             NSApp.activate()
             let alert = NSAlert()
@@ -448,7 +457,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             alert.informativeText = "An earlier version of Barn Owl switched this setting with an administrator command, and it's still on. Closed-lid mode now works without one, but turning the old setting off needs your password once."
             alert.addButton(withTitle: "Turn Off")
             alert.addButton(withTitle: "Not Now")
-            if alert.runModal() == .alertFirstButtonReturn { ClosedLidMode.cleanUpLegacyWithPassword() }
+            if alert.runModal() == .alertFirstButtonReturn {
+                ClosedLidMode.cleanUpLegacyWithPassword()
+            } else {
+                UserDefaults.standard.set(true, forKey: declined)
+            }
         }
     }
 
@@ -463,7 +476,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             quickPanel.toggle(under: items.toggle.button?.window?.frame)
         } else if flags.contains(.option) {
             bar.close()
-            sections.showAll()
+            showAllIcons()
         } else {
             revealHiddenIcons()
         }
@@ -485,6 +498,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         } else {
             sections.toggle()
         }
+    }
+
+    /// Every icon, the always-hidden ones too. While presenting, the hidden rows
+    /// may hold the icons presenting tucked away, so the Perch shows them instead.
+    private func showAllIcons() {
+        guard !model.presenter.isPresenting else { return bar.toggle() }
+        sections.showAll()
     }
 
     /// After the dividers move: update where items are, and photograph the
@@ -563,7 +583,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard !model.presenter.isPresenting else {
             button.image = NSImage(systemSymbolName: "eye.slash.fill", accessibilityDescription: "Presenting")?
                 .withSymbolConfiguration(.init(pointSize: 13, weight: .semibold))
-            button.toolTip = "Presenting: menu bar icons are hidden\nClick for your icons on the Perch"
+            button.toolTip = "Presenting: menu bar icons are hidden\nClick for your icons on the Perch\nRight-click for the quick menu, to stop presenting"
             return
         }
         let collapsed = sections.state == .collapsed
