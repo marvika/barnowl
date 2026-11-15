@@ -26,7 +26,7 @@ The Xcode project is generated from `project.yml` with XcodeGen.
 
 ## Hiding
 
-Barn Owl owns three status items: the **arrow**, a `|` **divider**, and an
+Barn Owl owns the **arrow**. On macOS 26 it also owns a `|` **divider** and an
 optional `⋮` **always-hidden divider**.
 
 - **macOS 26** (`LengthEngine`): to hide, the divider's width grows to about
@@ -34,11 +34,15 @@ optional `⋮` **always-hidden divider**.
   This needs no permissions. On first launch Barn Owl seeds
   `NSStatusItem Preferred Position` so the arrow sits next to Control Center,
   never behind the notch.
-- **macOS 27** (`NativeVisibilityEngine`, untested): macOS drops over-wide
-  status items, so Barn Owl reads which apps sit left of the divider and asks
-  macOS to show only the others, through `MenuBarClientCore`'s
-  assessment-mode restriction (found by Hidden Bar). Hiding is per app there,
-  and system items always stay.
+- **macOS 27** (`NativeVisibilityEngine`): the whole menu bar is one window
+  of MenuBarAgent's, with no window per icon, so nothing can be pushed off
+  screen. Barn Owl tells macOS which apps may show their icons, through
+  `MenuBarClientCore`'s assessment-mode restriction (found by Hidden Bar).
+  Which apps comes from a saved table of apps (`AppRows`), made once from the
+  macOS 26 layout, not from where icons sit, so there are no dividers. Hiding
+  is per app. macOS's own Sound, Battery, Wi‑Fi, Control Center and clock
+  always show, and Now Playing hides whenever anything does. The restriction
+  ends by itself if Barn Owl quits, so icons are never left hidden.
 
 Both sit behind the `HidingEngine` protocol, so a future macOS only needs a
 new engine.
@@ -56,6 +60,12 @@ relaunches. Layouts and groups are stored by key.
 Sections are worked out from the dividers' real frames, even when a divider
 is off screen.
 
+macOS 27 has no status windows. The list there is what Accessibility says,
+macOS's own icons included: they belong to MenuBarAgent and say which they are
+in their identifier, such as `com.apple.menuextra.sound`. A hidden icon keeps
+reporting the place it last had, so `AgentBar` asks MenuBarAgent which icons
+are really in view. An icon's section comes from the table of apps.
+
 ## Pictures
 
 macOS 26 can't capture off-screen windows: ScreenCaptureKit refuses with
@@ -66,6 +76,10 @@ launch and when you reveal them. That picture includes only the status
 windows, so its background is transparent. Barn Owl crops it into one picture
 per icon and saves them to `~/Library/Application Support/Barn Owl/Icons`.
 **Refresh Pictures** briefly moves icons that have no picture into view.
+
+On macOS 27 the picture is of MenuBarAgent's window, cropped to the icons in
+view once the bar has stopped moving. Icons macOS keeps behind its own
+overflow button are let through a few at a time to be photographed.
 
 ## Moving icons
 
@@ -84,6 +98,10 @@ lifted icon's slot is reserved where the mouse-down lands. So Barn Owl's
 destinations are relative to the dividers, or right of a group or custom
 icon.
 
+macOS 27 has no icon windows to send a drag to, so Barn Owl moves nothing
+there. A row is a list of apps, and putting an icon in another row changes
+which apps macOS may show.
+
 ## Opening a hidden icon
 
 A hidden icon ignores presses, because its menu would open off screen.
@@ -92,6 +110,9 @@ Accessibility, and moves it back once its menu closes. Apps busy opening
 their menu often answer the press with "cannot complete" even though it
 worked, so Barn Owl checks for a menu window before falling back to a real
 click.
+
+On macOS 27 the icon's app is let through for as long as its menu is open:
+the icon shows where macOS keeps it, is pressed, and hides again.
 
 ## Keeping icons in place
 

@@ -83,6 +83,27 @@ Choose in Settings → Menu Bar:
   menu bar** (down shows, up hides). Both are off by default.
 - **New icons go:** hidden (the default) or in the menu bar.
 
+### On macOS 27
+
+macOS 27 draws the menu bar in a new way, and Barn Owl works with what it
+allows:
+
+- **There are no dividers.** Which icons are hidden is set in
+  Settings → Layout: drag an icon to another row and the menu bar follows at
+  once. The layout you had on macOS 26 carries over.
+- **An app's icons hide and show together.** An app with two icons has both
+  in the same row.
+- **macOS's own icons always show:** Sound, Battery, Wi‑Fi, Control Center and
+  the clock. To take one off the menu bar, use System Settings. Now Playing
+  hides whenever anything is hidden.
+- **An icon you open** from the Perch, search or a group shows in the menu bar
+  for as long as its menu is open, then hides again.
+- **The order of icons** is macOS's own; Barn Owl doesn't change it.
+- **Presenter mode** has to be started by hand: macOS 27 no longer says when
+  the screen is shared.
+- **A clean menu bar in captures** hides other apps' icons for a moment while
+  a picture is taken, and for as long as a recording runs.
+
 ## Arranging icons
 
 Open **Settings → Layout**, or click **Arrange** in the Perch.

@@ -422,7 +422,9 @@ The details are in [SECURITY.md](SECURITY.md).
 ## Install
 
 Barn Owl needs **macOS 26 Tahoe or later**, on Apple silicon or Intel. It's
-signed and notarized by Apple, so it opens like any other app.
+signed and notarized by Apple, so it opens like any other app. On macOS 27 an
+app's icons hide together and macOS's own always show: see
+[On macOS 27](docs/user-guide.md#on-macos-27) in the user guide.
 
 ### With Homebrew (recommended)
 
