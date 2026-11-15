@@ -135,6 +135,7 @@ struct SensitiveTextTests {
     @Test func padsToTheWholeLine() {
         let word = CGRect(x: 100, y: 12, width: 40, height: 14)
         let line = CGRect(x: 0, y: 10, width: 300, height: 20)
-        #expect(SensitiveTextFinder.padded(word, line: line) == CGRect(x: 95, y: 8, width: 50, height: 24))
+        // The line's height, and a quarter of it again on every side.
+        #expect(SensitiveTextFinder.padded(word, line: line) == CGRect(x: 95, y: 5, width: 50, height: 30))
     }
 }

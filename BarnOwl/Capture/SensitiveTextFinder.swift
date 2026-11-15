@@ -157,7 +157,7 @@ enum SensitiveTextFinder {
     }
 
     struct Finding: Sendable, Equatable {
-        /// In image pixels, from the top left, padded to cover the whole line height.
+        /// In image pixels, from the top left: the whole height of its line, and room around it.
         let rect: CGRect
         let kind: Kind
         let text: String
@@ -242,9 +242,14 @@ enum SensitiveTextFinder {
                 CaptureText.Word(rect: box(word.startIndex..<word.endIndex), text: String(word))
             }
             text.lines.append(CaptureText.Line(rect: lineRect, text: string, words: words))
-            for (range, kind) in classify(string) {
-                text.findings.append(Finding(rect: padded(box(range), line: lineRect), kind: kind,
-                                             text: String(string[range])))
+            let found = classify(string)
+            guard !found.isEmpty else { continue }
+            // Where the line's ink is: looked up once, for everything found on it.
+            let inked: CGRect = fitted(lineRect, in: image) ?? lineRect
+            for (range, kind) in found {
+                let reached: CGRect = reaching(box(range), on: inked, in: image)
+                let rect: CGRect = padded(reached, line: inked)
+                text.findings.append(Finding(rect: rect, kind: kind, text: String(string[range])))
             }
         }
         return text
@@ -263,12 +268,132 @@ enum SensitiveTextFinder {
         return result
     }
 
-    /// A box covering the whole height of its line, with a little room either
-    /// side: Vision's boxes for part of a line can leave descenders showing.
+    /// The box that hides `rect`, part of a line: the line's whole height, and a quarter of it
+    /// again on every side. That reaches the accents over capitals and the tails under the
+    /// line, and stops short of the lines above and below. `line` is best where the ink is
+    /// (see `fitted`): Vision's own box for a line can hug the glyphs or cut into them, by as
+    /// much as three pixels on small text, so the room is never less than that.
     static func padded(_ rect: CGRect, line: CGRect) -> CGRect {
-        let height = line.height
-        return CGRect(x: rect.minX - height * 0.25, y: line.minY - height * 0.1,
-                      width: rect.width + height * 0.5, height: height * 1.2)
+        let room: CGFloat = max(3, line.height * 0.25)
+        let width: CGFloat = rect.width + 2 * room
+        let height: CGFloat = line.height + 2 * room
+        return CGRect(x: rect.minX - room, y: line.minY - room, width: width, height: height)
+    }
+
+    /// The box that hides `rect`, a word or more of `line`, in `image`: fitted to the ink there,
+    /// with room around it. `rect` and `line` are Vision's boxes, as they came.
+    static func cover(_ rect: CGRect, line: CGRect, in image: CGImage) -> CGRect {
+        let inked: CGRect = fitted(line, in: image) ?? line
+        return padded(reaching(rect, on: inked, in: image), line: inked)
+    }
+
+    /// `line` with its top and bottom moved to the text's ink, read from the pixels: out past
+    /// glyphs the box cuts through, in over empty rows and bits of other lines it takes in.
+    /// Vision's boxes change with macOS (on macOS 27 they sit on a coarse grid: a few pixels
+    /// inside the glyphs here, into the next line there); the ink doesn't. In whole pixels.
+    /// Nil when the pixels don't say where the line is.
+    static func fitted(_ line: CGRect, in image: CGImage) -> CGRect? {
+        let bounds = CGRect(x: 0, y: 0, width: image.width, height: image.height)
+        let seed: CGRect = line.integral.intersection(bounds)
+        guard !seed.isNull, seed.width >= 3, seed.height >= 2 else { return nil }
+        // A little over half the box up and down: further than a box is off, even one that
+        // kept only the band of small letters.
+        let reach: CGFloat = max(6, (seed.height * 0.6).rounded(.up))
+        let window: CGRect = seed.insetBy(dx: 0, dy: -reach).intersection(bounds)
+        guard let edges = changes(in: image, window: window) else { return nil }
+        let first = Int(seed.minY - window.minY)
+        let last = Int(seed.maxY - window.minY) - 1
+        // A row has ink when something on it stands out a fifth as sharply as the text does.
+        let sharpest: Int = edges[first...last].max() ?? 0
+        let limit: Int = max(10, sharpest / 5)
+        // From the middle of the box, which is on the text if any of it is: the nearest row
+        // with ink, then up and down for as long as there's ink. The first empty row is the
+        // gap to the next line, however far into that line the box reached.
+        let middle: Int = (first + last) / 2
+        var start: Int?
+        for offset in 0...(last - first) {
+            let above: Int = middle - offset
+            let below: Int = middle + offset
+            if above >= first, edges[above] > limit { start = above; break }
+            if below <= last, edges[below] > limit { start = below; break }
+        }
+        guard let start else { return nil }
+        var top: Int = start
+        while top > 0, edges[top - 1] > limit { top -= 1 }
+        var bottom: Int = start
+        while bottom < edges.count - 1, edges[bottom + 1] > limit { bottom += 1 }
+        // Ink as far as was looked (a rule down through the line, a picture behind it, lines
+        // with no gap between them): no telling where the text ends, so Vision's edge stands.
+        if top == 0, window.minY > bounds.minY { top = first }
+        if bottom == edges.count - 1, window.maxY < bounds.maxY { bottom = last }
+        // The tails and tops of the lines either side may be in the box too. Half as much ink
+        // again is more than that: two lines read as one, perhaps, and no telling which is meant.
+        var elsewhere = 0
+        for row in first...last where (row < top || row > bottom) && edges[row] > limit { elsewhere += 1 }
+        let height: Int = bottom + 1 - top
+        guard elsewhere * 2 <= height else { return nil }
+        return CGRect(x: line.minX, y: window.minY + CGFloat(top), width: line.width, height: CGFloat(height))
+    }
+
+    /// `rect`, part of a line whose ink is `line`, with its ends moved out past any glyph they
+    /// cut through. Vision's boxes for words sit on the same coarse grid as its lines, coarser
+    /// the bigger the picture: on a whole screen an end can be a few pixels inside the first or
+    /// last letter. An end that's between letters stays where it is.
+    static func reaching(_ rect: CGRect, on line: CGRect, in image: CGImage) -> CGRect {
+        let bounds = CGRect(x: 0, y: 0, width: image.width, height: image.height)
+        // Two rows past the ink, so a stroke the whole height of the line still has ends.
+        let rows: CGRect = line.integral.insetBy(dx: 0, dy: -2)
+        let span = CGRect(x: rect.minX, y: rows.minY, width: rect.width, height: rows.height)
+        let seed: CGRect = span.integral.intersection(bounds)
+        guard !seed.isNull, seed.width >= 2, seed.height >= 3 else { return rect }
+        // As far as a wide letter.
+        let reach: CGFloat = max(6, (line.height * 0.6).rounded(.up))
+        let window: CGRect = seed.insetBy(dx: -reach, dy: 0).intersection(bounds)
+        guard let edges = changes(in: image, window: window, down: true) else { return rect }
+        let first = Int(seed.minX - window.minX)
+        let last = Int(seed.maxX - window.minX) - 1
+        let sharpest: Int = edges[first...last].max() ?? 0
+        let limit: Int = max(10, sharpest / 5)
+        var left: Int = first
+        if edges[left] > limit {
+            while left > 0, edges[left - 1] > limit { left -= 1 }
+            // Ink as far as was looked (an underline, letters that touch): the end stays.
+            if left == 0, window.minX > bounds.minX { left = first }
+        }
+        var right: Int = last
+        if edges[right] > limit {
+            while right < edges.count - 1, edges[right + 1] > limit { right += 1 }
+            if right == edges.count - 1, window.maxX < bounds.maxX { right = last }
+        }
+        let minX: CGFloat = left < first ? window.minX + CGFloat(left) : rect.minX
+        let maxX: CGFloat = right > last ? window.minX + CGFloat(right + 1) : rect.maxX
+        return CGRect(x: minX, y: rect.minY, width: maxX - minX, height: rect.height)
+    }
+
+    /// For each row of `window` (whole pixels, inside the image), the sharpest change along it;
+    /// with `down`, for each column, the sharpest change down it. Next to nothing on plain
+    /// background, high where glyphs cross. Taken two pixels apart, so the soft edge of
+    /// smoothed text counts and a slow gradient doesn't.
+    private static func changes(in image: CGImage, window: CGRect, down: Bool = false) -> [Int]? {
+        let width = Int(window.width)
+        let height = Int(window.height)
+        let bytes: [UInt8] = ImageSampler.rgba(in: image, rect: window)
+        guard width >= 1, height >= 1, bytes.count == width * height * 4 else { return nil }
+        guard (down ? height : width) >= 3 else { return nil }
+        var edges = [Int](repeating: 0, count: down ? width : height)
+        let back: Int = down ? 2 * width * 4 : 8
+        for y in (down ? 2 : 0)..<height {
+            for x in (down ? 0 : 2)..<width {
+                let here: Int = (y * width + x) * 4
+                let there: Int = here - back
+                let red: Int = abs(Int(bytes[here]) - Int(bytes[there]))
+                let green: Int = abs(Int(bytes[here + 1]) - Int(bytes[there + 1]))
+                let blue: Int = abs(Int(bytes[here + 2]) - Int(bytes[there + 2]))
+                let index: Int = down ? x : y
+                edges[index] = max(edges[index], red, green, blue)
+            }
+        }
+        return edges
     }
 
     /// Groups lines into blocks: same left edge (within half a line), and
