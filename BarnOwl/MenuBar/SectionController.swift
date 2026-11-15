@@ -76,17 +76,46 @@ final class SectionController {
         }
     }
 
-    /// Apps whose icons show for now whatever row they're in, by who asked
-    /// (an icon opened from the Perch, an icon that changed), so one doesn't
-    /// undo the other.
-    private var peeks: [String: Set<String>] = [:]
+    /// What shows or stays out of view for now, whatever the rows say.
+    private var temporary = TemporaryVisibility()
 
     /// macOS 27: shows these apps' icons until `reason` peeks at something
     /// else or at nothing. False where macOS can't show one app's icons on
     /// their own (macOS 26: the icon is moved instead).
     func peek(_ apps: Set<String>, for reason: String) async -> Bool {
-        peeks[reason] = apps.isEmpty ? nil : apps
-        return await engine.reveal(peeks.values.reduce(into: Set<String>()) { $0.formUnion($1) })
+        temporary.peek(apps, for: reason)
+        return await applyTemporary()
+    }
+
+    /// macOS 27: whether a capture has every other app's icon out of view,
+    /// for a clean menu bar.
+    var isCleanForCapture: Bool { temporary.isClean }
+    /// Whether `holdClean` can hide anything: only where macOS hides by app.
+    var canHoldClean: Bool { (engine as? NativeVisibilityEngine)?.isAvailable ?? false }
+    /// That started or ended.
+    var onCleanForCaptureChange: (() -> Void)?
+
+    /// macOS 27: takes every other app's icon out of view, the visible ones
+    /// included, until `endClean` is called for the same `reason`. The state,
+    /// presenting and peeks all carry on underneath, so when it ends the menu
+    /// bar is as they have it by then. If hiding fails the engine shows every
+    /// icon, and if Barn Owl quits macOS does: icons are never left hidden.
+    func holdClean(for reason: String) async {
+        let wasClean = temporary.isClean
+        temporary.holdClean(for: reason)
+        if !wasClean { onCleanForCaptureChange?() }
+        _ = await applyTemporary()
+    }
+
+    func endClean(for reason: String) async {
+        guard temporary.cleanFor.contains(reason) else { return }
+        temporary.endClean(for: reason)
+        if !temporary.isClean { onCleanForCaptureChange?() }
+        _ = await applyTemporary()
+    }
+
+    private func applyTemporary() async -> Bool {
+        await engine.reveal(temporary.revealed(opening: ItemOpener.peekReason), alone: temporary.isClean)
     }
 
     /// `byUser`: the user asked (clicked the arrow, pressed the hotkey), so

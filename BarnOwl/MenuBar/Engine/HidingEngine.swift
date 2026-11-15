@@ -27,10 +27,12 @@ protocol HidingEngine: AnyObject {
     func setPresenting(_ presenting: Bool) async -> Bool
 
     /// Shows these apps' icons for now, whatever row they're in, and stops
-    /// showing any revealed before. Returns false if the engine can't show
-    /// one app's icons on their own; the caller then moves the icon or
-    /// reveals its whole section.
-    func reveal(_ apps: Set<String>) async -> Bool
+    /// showing any revealed before. With `alone`, every other app's icon goes
+    /// out of view as well, the visible ones included: what a capture with a
+    /// clean menu bar asks for. Returns false if the engine can't show one
+    /// app's icons on their own; the caller then moves the icon or reveals
+    /// its whole section.
+    func reveal(_ apps: Set<String>, alone: Bool) async -> Bool
 }
 
 enum HidingEngineFactory {

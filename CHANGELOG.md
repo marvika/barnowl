@@ -18,7 +18,12 @@ before 1.0, a minor version can change behaviour.
   Now Playing hides whenever anything is hidden. Presenting can't start by
   itself when you share your screen, because macOS 27 no longer says when
   that happens: start it from the owl's menu or its shortcut. Clean Menu Bar
-  no longer leaves other apps' icons out of screenshots.
+  can't leave icons out of a capture unseen any more, so it hides other apps'
+  icons while a picture is taken and for as long as a recording runs, then
+  shows them again. A picture waits about a second for them to go, and not
+  at all when none is in view. Barn Owl's icons and macOS's own stay in the
+  picture, and while a menu hangs from an icon the menu bar is captured as
+  it is.
 - **Hidden icons hide again by themselves.** Since 0.14.1, icons you revealed
   stayed in the menu bar until you clicked the arrow: the check that waits
   for an open menu took the menu bar itself for one. It now waits only for a

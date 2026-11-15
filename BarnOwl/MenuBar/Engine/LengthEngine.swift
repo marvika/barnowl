@@ -58,7 +58,7 @@ final class LengthEngine: HidingEngine {
 
     /// A divider hides everything left of it or nothing: one icon is brought
     /// out by moving it instead.
-    func reveal(_ apps: Set<String>) async -> Bool { false }
+    func reveal(_ apps: Set<String>, alone: Bool) async -> Bool { false }
 
     /// A divider can only hide what's left of it, so presenting widens a
     /// curtain placed right of every icon: just left of the owl when it sits

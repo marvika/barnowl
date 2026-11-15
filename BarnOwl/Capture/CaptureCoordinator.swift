@@ -10,6 +10,9 @@ final class CaptureCoordinator {
     @ObservationIgnored private let scanner: ItemScanner
     /// Barn Owl's own menu bar items (the arrow, dividers, the owl), left out of a clean menu bar too.
     @ObservationIgnored var ownStatusWindows: () -> Set<CGWindowID> = { [] }
+    /// macOS 27: takes other apps' icons out of the menu bar while a capture is made. There
+    /// are no icon windows to leave out there.
+    @ObservationIgnored var cleanBar: CleanMenuBar?
     @ObservationIgnored private var overlay: SelectionOverlay?
     @ObservationIgnored lazy var cards = CaptureCards(coordinator: self)
     /// Screen recordings, from the countdown to the file.
@@ -167,7 +170,7 @@ final class CaptureCoordinator {
         Task { [weak self] in
             guard let self else { return }
             do {
-                let snapshots = try await ScreenSnapshotter.snapshots(options: options)
+                let snapshots = try await snapshots()
                 guard !snapshots.isEmpty else { isCapturing = false; return NSSound.beep() }
                 targets = WindowLocator.onScreenWindows()
                 let overlay = SelectionOverlay(snapshots: snapshots, targets: targets, mode: mode,
@@ -181,7 +184,7 @@ final class CaptureCoordinator {
                     guard let self else { return }
                     // New pictures with the new choices; Barn Owl's overlay isn't in them.
                     Task {
-                        if let fresh = try? await ScreenSnapshotter.snapshots(options: self.options) { overlay?.replace(fresh) }
+                        if let fresh = try? await self.snapshots() { overlay?.replace(fresh) }
                     }
                 }
                 self.overlay = overlay
@@ -206,7 +209,7 @@ final class CaptureCoordinator {
         targets = WindowLocator.onScreenWindows()
         Task {
             defer { isCapturing = false }
-            guard let snapshot = try? await ScreenSnapshotter.snapshots(of: display, options: options).first else {
+            guard let snapshot = try? await snapshots(of: display).first else {
                 return NSSound.beep()
             }
             deliver(Capture(image: snapshot.image, scale: snapshot.scale, kind: .screen, date: Date(), appName: appName),
@@ -227,11 +230,23 @@ final class CaptureCoordinator {
         targets = WindowLocator.onScreenWindows()
         Task {
             defer { isCapturing = false }
-            guard let snapshot = try? await ScreenSnapshotter.snapshots(of: screen.displayID, options: options).first,
+            guard let snapshot = try? await snapshots(of: screen.displayID, area: area).first,
                   let image = snapshot.crop(area) else { return NSSound.beep() }
             deliver(Capture(image: image, scale: snapshot.scale, kind: .area, date: Date(), appName: appName),
                     action: .primary, windows: windowRects(in: area, scale: snapshot.scale))
         }
+    }
+
+    /// The frozen pictures of every display, or of one. With a clean menu bar on macOS 27,
+    /// other apps' icons are out of view while they're taken, and back right after; not for
+    /// an `area` that doesn't reach the menu bar, which has none of them in it.
+    private func snapshots(of display: CGDirectDisplayID? = nil, area: CGRect? = nil) async throws -> [DisplaySnapshot] {
+        let options = options
+        let showsBar = area.map { CleanMenuBar.reachesMenuBar($0) } ?? true
+        guard options.cleanMenuBar, showsBar, let cleanBar else {
+            return try await ScreenSnapshotter.snapshots(of: display, options: options)
+        }
+        return try await cleanBar.during { try await ScreenSnapshotter.snapshots(of: display, options: options) }
     }
 
     /// What's left out of pictures, and recordings too.
@@ -239,7 +254,8 @@ final class CaptureCoordinator {
 
     private var options: CaptureOptions {
         var hidden: Set<CGWindowID> = []
-        if Preferences.captureCleanMenuBar {
+        // macOS 27 has no icon windows to leave out: `cleanBar` hides the icons instead.
+        if Preferences.captureCleanMenuBar, !MenuBarPlatform.hidesByApp {
             // Only the icons go; the clock and Control Center stay.
             hidden = Set(scanner.items.filter(\.isMovable).map(\.windowID)).union(ownStatusWindows())
         }

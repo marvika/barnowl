@@ -196,7 +196,9 @@ struct CapturePane: View {
         Section {
             Toggle(isOn: $cleanMenuBar) {
                 BadgeLabel(title: "A clean menu bar",
-                           subtitle: "Menu bar icons are left out of the picture; the clock and Control Center stay. Nothing moves on screen.",
+                           subtitle: MenuBarPlatform.hidesByApp
+                               ? "Other apps' icons hide for a moment while a picture is taken, and for as long as a recording runs. Barn\u{00A0}Owl's stay, as do macOS's own: Sound, Battery, Wi\u{2011}Fi, Control Center and the clock."
+                               : "Menu bar icons are left out of the picture; the clock and Control Center stay. Nothing moves on screen.",
                            symbol: "menubar.rectangle", color: .blue)
             }
             Toggle(isOn: $hidesDesktopIcons) {

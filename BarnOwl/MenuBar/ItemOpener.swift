@@ -61,7 +61,7 @@ final class ItemOpener {
     /// macOS 27: shows the icon's app, presses the icon, and hides the app
     /// again once its menu has closed.
     private func performByApp(_ item: MenuBarItem) async {
-        let hidden = !sections.shows(item.section) || sections.isPresenting()
+        let hidden = !sections.shows(item.section) || sections.isPresenting() || sections.isCleanForCapture
         guard hidden, !item.alwaysShows else { return await press(item) }
         guard let app = item.bundleIdentifier, await sections.peek([app], for: Self.peekReason) else {
             return await openRevealed(item)
@@ -73,7 +73,9 @@ final class ItemOpener {
         if !Task.isCancelled { _ = await sections.peek([], for: Self.peekReason) }
     }
 
-    private static let peekReason = "open"
+    /// The reason an icon being opened peeks for. A capture with a clean menu
+    /// bar still lets that one through.
+    static let peekReason = "open"
 
     /// macOS 27: waits for the icon to come into view once its app is let
     /// through, a second and a half at most.

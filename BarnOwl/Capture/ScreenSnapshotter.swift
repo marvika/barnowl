@@ -22,12 +22,15 @@ struct DisplaySnapshot {
 }
 
 /// What to leave out of the picture. Nothing on screen changes: the windows
-/// are simply not drawn into the capture.
+/// are simply not drawn into the capture. (Except for a clean menu bar on
+/// macOS 27, where icons have no windows: see `CleanMenuBar`.)
 struct CaptureOptions {
-    /// Other apps' menu bar icons, for a clean menu bar.
+    /// Other apps' menu bar icons, for a clean menu bar. Empty on macOS 27.
     var hiddenWindows: Set<CGWindowID> = []
     /// Leaves only the clock and Control Center in the menu bar: also the
     /// system's own icons and the dot that shows the screen is being captured.
+    /// On macOS 27 other apps' icons are hidden while the capture is made,
+    /// and macOS's own stay.
     var cleanMenuBar = false
     var hidesDesktopIcons = false
     var showsPointer = false
@@ -95,6 +98,13 @@ enum ScreenSnapshotter {
         if options.cleanMenuBar, window.windowLayer == Int(CGWindowLevelForKey(.statusWindow)),
            window.owningApplication?.bundleIdentifier == "com.apple.controlcenter",
            let title = window.title, !(title == "Clock" || title.hasPrefix("BentoBox")) {
+            return true
+        }
+        // macOS 27 draws the ring that shows the screen is being captured in a window of the
+        // Window Server's, at the end of the menu bar.
+        if options.cleanMenuBar, window.title == "StatusIndicator",
+           window.windowLayer > Int(CGWindowLevelForKey(.statusWindow)),
+           (window.owningApplication?.bundleIdentifier ?? "").isEmpty {
             return true
         }
         return options.hiddenWindows.contains(window.windowID)

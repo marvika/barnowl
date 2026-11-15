@@ -14,6 +14,7 @@ import AppKit
 ///   Owl holds one at a time, and swaps it for a new one without a gap.
 /// - The restriction ends by itself when Barn Owl quits or crashes, so icons
 ///   are never left hidden.
+/// - Barn Owl's own icons hide too unless it lists itself, so it always does.
 @MainActor
 final class NativeVisibilityEngine: HidingEngine {
     let displayName = "Per app (macOS 27)"
@@ -33,8 +34,14 @@ final class NativeVisibilityEngine: HidingEngine {
     private var state = SectionState.expandedAll
     private var presenting = false
     private var revealed: Set<String> = []
+    /// A capture wants a clean menu bar: only the revealed apps stay, beside
+    /// Barn Owl's own icons.
+    private var alone = false
     /// Bumped by every change, so a slow activation can't win over a newer one.
     private var generation = 0
+
+    /// Whether this macOS still has the restriction. A later one may drop it.
+    var isAvailable: Bool { BKNativeVisibilityIsAvailable() }
 
     func apply(_ state: SectionState, alwaysHiddenEnabled: Bool) async -> Bool {
         self.state = state
@@ -55,17 +62,31 @@ final class NativeVisibilityEngine: HidingEngine {
         return await update()
     }
 
-    func reveal(_ apps: Set<String>) async -> Bool {
+    func reveal(_ apps: Set<String>, alone: Bool) async -> Bool {
         revealed = apps
+        self.alone = alone
         return await update()
     }
 
     /// The apps to let through now, or nil for all of them.
     private var wanted: [String]? {
-        let own = Bundle.main.bundleIdentifier.map { [$0] } ?? []
-        if presenting { return Set(own).union(revealed).sorted() }
-        guard state != .expandedAll, let allowed = allowedApps(state) else { return nil }
-        return allowed.union(revealed).union(own).sorted()
+        let onlyOwn = presenting || alone
+        let rows = onlyOwn || state == .expandedAll ? nil : allowedApps(state)
+        return Self.appsToShow(own: Bundle.main.bundleIdentifier, onlyOwn: onlyOwn, revealed: revealed, rows: rows)
+    }
+
+    /// The apps macOS may show, or nil for all of them. Pure, so it can be tested.
+    ///
+    /// - `onlyOwn`: presenting, or a capture with a clean menu bar: every
+    ///   other app's icon is out of view, whatever the rows say.
+    /// - `revealed`: apps let through for now, either way.
+    /// - `rows`: what the rows in view allow, or nil when they hide nothing.
+    nonisolated static func appsToShow(own: String?, onlyOwn: Bool, revealed: Set<String>,
+                                       rows: Set<String>?) -> [String]? {
+        let own = own.map { [$0] } ?? []
+        if onlyOwn { return revealed.union(own).sorted() }
+        guard let rows else { return nil }
+        return rows.union(revealed).union(own).sorted()
     }
 
     private func update() async -> Bool {

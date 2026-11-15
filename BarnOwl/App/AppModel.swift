@@ -75,7 +75,11 @@ final class AppModel {
         opener.onLeftOut = { [layout] key in layout.takeBack(key) }
         capture.showCaptureSettings = { [weak self] in self?.showSettings(.capture) }
         layout.isPaused = { [presenter] in presenter.isPresenting || presenter.isChanging }
-        watcher.isPaused = { [presenter] in presenter.isPresenting || presenter.isChanging }
+        // Nor while a capture keeps the menu bar clean: a changed icon waits until it's over.
+        watcher.isPaused = { [presenter, sections] in
+            presenter.isPresenting || presenter.isChanging || sections.isCleanForCapture
+        }
+        if MenuBarPlatform.hidesByApp { capture.cleanBar = CleanMenuBar(sections: sections) }
         // macOS 27: icons come into view by letting their app through, and
         // their rows come from the layout's table.
         watcher.peek = { [sections] apps in _ = await sections.peek(apps, for: "changed") }

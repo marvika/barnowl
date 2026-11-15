@@ -416,8 +416,9 @@ final class LayoutController {
     /// collapsed, so there's room for them. `force` is for callers that are
     /// busy taking pictures themselves.
     func photographMissing(force: Bool = false) async {
+        // Not while a capture keeps the menu bar clean: nothing would come into view.
         guard MenuBarPlatform.hidesByApp, !DemoMode.isOn, let images, ItemImageCache.hasPermission,
-              force || !isBusy, !isPaused() else { return }
+              force || !isBusy, !isPaused(), !sections.isCleanForCapture else { return }
         // A collapse asked for a moment ago may still be on its way.
         for _ in 0..<10 where sections.state != .collapsed {
             try? await Task.sleep(for: .milliseconds(100))

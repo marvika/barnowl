@@ -41,6 +41,8 @@ final class RecordingCoordinator {
     private var pillResized: NSObjectProtocol?
     private var border: RecordingBorder?
     private var statusItem: RecordingStatusItem?
+    /// macOS 27: other apps' menu bar icons are out of view while this take records.
+    private var cleanBar: (bar: CleanMenuBar, hold: CleanMenuBar.Hold)?
     private var ticker: Task<Void, Never>?
     private var activity: NSObjectProtocol?
     private var keyMonitor: Any?
@@ -298,8 +300,15 @@ final class RecordingCoordinator {
         OwnCaptures.isRecording = true
         // Up before the stream, so its filter already knows them.
         showControls()
+        let cleaning = holdCleanMenuBar(for: take, leftOut: request.leftOut)
         Task {
             do {
+                // Other apps' icons are gone, and the bar at rest, before the first frame.
+                if let cleaning {
+                    await cleaning.bar.begin(cleaning.hold, lasting: true)
+                    // Stopped or restarted while the icons went: this take is over.
+                    guard self.recorder === recorder else { return }
+                }
                 try await recorder.start()
                 guard self.recorder === recorder else { return }
                 clock.start(at: Self.now)
@@ -364,7 +373,23 @@ final class RecordingCoordinator {
         }
     }
 
+    /// macOS 27, with a clean menu bar: claims the menu bar for this take, if the take has
+    /// one in it and doesn't hold it already (a restart keeps it). Returns the claim to begin.
+    private func holdCleanMenuBar(for take: Take, leftOut: CaptureOptions) -> (bar: CleanMenuBar, hold: CleanMenuBar.Hold)? {
+        guard cleanBar == nil, leftOut.cleanMenuBar, let bar = host?.cleanBar,
+              case .display(_, _, _, let area) = take.target,
+              area.map({ CleanMenuBar.reachesMenuBar($0) }) ?? true else { return nil }
+        let claim = (bar, CleanMenuBar.Hold())
+        cleanBar = claim
+        return claim
+    }
+
     private func tearDown() {
+        // The stream has ended by now: the icons come back.
+        if let cleanBar {
+            self.cleanBar = nil
+            Task { await cleanBar.bar.end(cleanBar.hold) }
+        }
         countdown?.close()
         countdown = nil
         hideControls()

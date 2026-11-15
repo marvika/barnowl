@@ -182,6 +182,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             button.action = #selector(toggleClicked)
             button.sendAction(on: [.leftMouseUp, .rightMouseUp])
         }
+        sections.onCleanForCaptureChange = { [weak self] in self?.updateToggleIcon() }
         sections.onStateChange = { [weak self] state in
             self?.model.sectionState = state
             self?.updateToggleIcon()
@@ -388,7 +389,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             case ("show", _):
                 // Like the arrow, but never hides what's already showing.
                 if sections.state == .collapsed, !bar.isOpen { revealHiddenIcons() }
-            case ("toggle", _): model.presenter.isPresenting ? bar.toggle() : sections.toggle()
+            case ("toggle", _):
+                model.presenter.isPresenting || sections.isCleanForCapture ? bar.toggle() : sections.toggle()
             case ("show-all", _): showAllIcons()
             case ("hide", _): sections.collapse()
             case ("keep-awake", "/stop"): keepAwake.stop()
@@ -489,8 +491,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// hidden icons in the menu bar or in the Perch.
     private func revealHiddenIcons() {
         // While presenting, never reveal icons on the shared screen by
-        // accident: the Perch is a deliberate second step.
-        if model.presenter.isPresenting {
+        // accident: the Perch is a deliberate second step. The same while a
+        // recording keeps the menu bar clean, where nothing would show anyway.
+        if model.presenter.isPresenting || sections.isCleanForCapture {
             bar.toggle()
         } else if bar.isOpen {
             bar.close()
@@ -506,7 +509,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Every icon, the always-hidden ones too. While presenting, the hidden rows
     /// may hold the icons presenting tucked away, so the Perch shows them instead.
     private func showAllIcons() {
-        guard !model.presenter.isPresenting else { return bar.toggle() }
+        guard !model.presenter.isPresenting, !sections.isCleanForCapture else { return bar.toggle() }
         sections.showAll()
     }
 
@@ -602,6 +605,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                                        keepAwake: keepAwake.isActive && !Preferences.showKeepAwakeIcon)
         var tip = collapsed ? "Click to show hidden icons" : "Click to hide icons"
         tip += "\nOption-click to show everything · Right-click for keep awake and toggles"
+        // macOS 27, a recording with a clean menu bar: the arrow can't bring icons back into it.
+        if sections.isCleanForCapture {
+            tip = "Other apps' icons are hidden while this is captured\nClick for your icons on the Perch"
+        }
         if keepAwake.isActive {
             tip += "\n" + KeepAwakeFormatter.status(of: keepAwake)
         }
