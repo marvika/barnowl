@@ -56,6 +56,18 @@ before 1.0, a minor version can change behaviour.
   The unhidden copy made for dragging is deleted, Copy Text leaves out a word
   whose secret part is hidden, and a late text scan can no longer offer Hide
   for the wrong places.
+- **Hide covers the whole of what it hides on macOS 27.** macOS 27 says less
+  exactly where the text in a picture is, so a cover could stop at the very
+  edge of the letters, sit too high, or run over the lines above and below.
+  Barn Owl now finds each line's letters in the picture itself: a cover takes
+  its line's full height and a little room, and stays on its own line. A
+  Redact click on a word does the same.
+- **Hide covers only the secret.** A password after its label
+  (`DB_PASSWORD=…`), your user name in a path, the password in a link: the
+  cover used to take the whole word, label, path and all. It now stops at the
+  gap between the secret and the rest, wherever the picture shows one. A long
+  key written as `NAME=value` is hidden without its name. Copy Text still
+  leaves the whole word out.
 - **Recordings are safer.** Save and Done in the video editor never write over
   a recording's only copy, or over a file you changed elsewhere; they save a
   new file instead. History no longer lets go of a recording while it's being
