@@ -27,18 +27,18 @@ final class LengthEngine: HidingEngine {
         items.curtain?.length = collapsedLength
         switch state {
         case .collapsed:
-            items.separator.length = collapsedLength
+            items.separator?.length = collapsedLength
             items.setDividerVisible(items.separator, false)
             alwaysHidden?.length = alwaysHiddenEnabled ? StatusItems.dividerLength : 0
         case .expanded:
-            items.separator.length = StatusItems.dividerLength
+            items.separator?.length = StatusItems.dividerLength
             items.setDividerVisible(items.separator, true)
             if let alwaysHidden {
                 alwaysHidden.length = alwaysHiddenEnabled ? collapsedLength : 0
                 items.setDividerVisible(alwaysHidden, false)
             }
         case .expandedAll:
-            items.separator.length = StatusItems.dividerLength
+            items.separator?.length = StatusItems.dividerLength
             items.setDividerVisible(items.separator, true)
             if let alwaysHidden {
                 alwaysHidden.length = alwaysHiddenEnabled ? StatusItems.dividerLength : 0
@@ -51,6 +51,14 @@ final class LengthEngine: HidingEngine {
     func invalidateLayout() {
         // Lengths are recomputed from the current screens on the next apply.
     }
+
+    func refresh() async {
+        // Icons hide by where they sit, which the layout keeper sees to.
+    }
+
+    /// A divider hides everything left of it or nothing: one icon is brought
+    /// out by moving it instead.
+    func reveal(_ apps: Set<String>) async -> Bool { false }
 
     /// A divider can only hide what's left of it, so presenting widens a
     /// curtain placed right of every icon: just left of the owl when it sits

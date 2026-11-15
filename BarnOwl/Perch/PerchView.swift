@@ -13,7 +13,8 @@ struct PerchView: View {
     private var behindNotch: [MenuBarItem] { scanner.items.filter(\.isBehindNotch) }
     /// While presenting, the menu bar's own icons are out of view too.
     private var behindCurtain: [MenuBarItem] {
-        model.presenter.iconsBehindCurtain ? model.layout.items(in: .visible).filter { !$0.isBehindNotch } : []
+        model.presenter.iconsBehindCurtain
+            ? model.layout.items(in: .visible).filter { !$0.isBehindNotch && !$0.alwaysShows } : []
     }
     private var isEmpty: Bool { hidden.isEmpty && alwaysHidden.isEmpty && behindNotch.isEmpty && behindCurtain.isEmpty }
 
@@ -86,7 +87,8 @@ struct PerchView: View {
                 .frame(width: 44, height: 44)
             VStack(alignment: .leading, spacing: 4) {
                 Text("Nothing on the perch yet").font(.headline)
-                Text("Drag icons into Hidden in Settings → Layout, or ⌘-drag them left of the | divider.")
+                Text(MenuBarPlatform.hidesByApp ? "Drag icons into Hidden in Settings → Layout."
+                     : "Drag icons into Hidden in Settings → Layout, or ⌘-drag them left of the | divider.")
                     .font(.callout).foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }

@@ -46,6 +46,12 @@ struct LayoutEditorView: View {
                 Label(error, systemImage: "exclamationmark.triangle.fill")
                     .font(.callout).foregroundStyle(.orange)
             }
+            if MenuBarPlatform.hidesByApp {
+                Label("An app's icons hide and show together. macOS always shows its own, like the clock and Battery.",
+                      systemImage: "info.circle")
+                    .font(.callout).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
         }
         .overlay(alignment: .topTrailing) {
             if layout.isBusy {
@@ -163,8 +169,7 @@ private struct ItemChip: View {
             }
         }
         .opacity(item.isMovable ? 1 : 0.55)
-        .help(item.isMovable ? item.displayName
-              : item.alwaysShows ? "\(item.name) always shows, right of the arrow" : "\(item.name) can't be moved")
+        .help(item.isMovable ? item.displayName : LayoutController.fixedNote(for: item))
         .accessibilityLabel(item.displayName)
         .modifier(DraggableIf(enabled: item.isMovable, key: item.key))
         .dropDestination(for: String.self) { keys, _ in
@@ -216,7 +221,7 @@ struct ItemContextMenu: View {
                 get: { model.watcher.isWatching(item.key) },
                 set: { model.watcher.setWatching(item.key, $0) }))
         } else {
-            Text("macOS keeps \(item.name) in place")
+            Text(MenuBarPlatform.hidesByApp ? "macOS always shows \(item.name)" : "macOS keeps \(item.name) in place")
         }
     }
 }

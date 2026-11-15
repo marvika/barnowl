@@ -5,7 +5,8 @@ import ApplicationServices
 ///
 /// On macOS 26 every item window is owned by Control Center, so the window
 /// list can't say which app an item belongs to. Each app's AXExtrasMenuBar
-/// children can.
+/// children can. On macOS 27 there are no item windows at all, and this is
+/// the only list there is.
 enum AccessibilityInventory {
     static var isTrusted: Bool { AXIsProcessTrusted() }
 
@@ -15,45 +16,51 @@ enum AccessibilityInventory {
         _ = AXIsProcessTrustedWithOptions(options)
     }
 
-    /// Walks every running app off the main thread. Takes about a second in
-    /// total, because each app has to answer an Accessibility round trip.
-    static func snapshot() async -> [InventoryItem] {
-        let ownPID = ProcessInfo.processInfo.processIdentifier
-        // Only app bundles own status items; skipping helpers and XPC services
-        // avoids sitting out their timeouts.
-        let apps = NSWorkspace.shared.runningApplications
-            .filter { $0.processIdentifier != ownPID && $0.bundleURL?.pathExtension == "app" }
-            .map { (pid: $0.processIdentifier, bundle: $0.bundleIdentifier) }
-        return await Task.detached(priority: .userInitiated) {
-            apps.flatMap { items(pid: $0.pid, bundle: $0.bundle) }
-        }.value
-    }
-
-    private nonisolated static func items(pid: pid_t, bundle: String?) -> [InventoryItem] {
-        let app = AXUIElementCreateApplication(pid)
-        // The default timeout is seconds per app; one hung app would stall everything.
-        AXUIElementSetMessagingTimeout(app, 0.1)
-        guard let bar: AXUIElement = attribute(app, "AXExtrasMenuBar"),
-              let children: [AXUIElement] = attribute(timed(bar), kAXChildrenAttribute) else { return [] }
-        return children.compactMap { child in
-            frame(of: timed(child)).map { InventoryItem(bundleIdentifier: bundle, frame: $0) }
-        }
-    }
-
     /// Every menu bar item of one app, with what's needed to name and press it.
     nonisolated static func entries(for app: AppRef) -> [AXMenuBarEntry] {
         let element = AXUIElementCreateApplication(app.pid)
         AXUIElementSetMessagingTimeout(element, 0.1)
         guard let bar: AXUIElement = attribute(element, "AXExtrasMenuBar"),
               let children: [AXUIElement] = attribute(timed(bar), kAXChildrenAttribute) else { return [] }
+        if app.bundle == MenuBarPlatform.agentBundle { return agentEntries(children, app: app) }
         return children.compactMap { child in
             guard let frame = frame(of: timed(child)) else { return nil }
-            let title: String? = attribute(child, kAXTitleAttribute)
-            let description: String? = attribute(child, kAXDescriptionAttribute)
-            let name = [title, description].compactMap { $0 }.first { !$0.isEmpty }
             return AXMenuBarEntry(pid: app.pid, bundleIdentifier: app.bundle, appName: app.name,
-                                  title: name.map(cleaned), frame: frame, element: AXElement(raw: child))
+                                  title: name(of: child), frame: frame, element: AXElement(raw: child))
         }
+    }
+
+    /// macOS 27: macOS's own icons (Sound, Battery, Wi‑Fi, Control Center, the
+    /// clock…) belong to MenuBarAgent. Each sits one level down, in a hosting
+    /// view, and says which it is in its identifier
+    /// ("com.apple.menuextra.sound"). Anything else there, such as the button
+    /// for macOS's own overflow, isn't an icon.
+    private nonisolated static func agentEntries(_ hosts: [AXUIElement], app: AppRef) -> [AXMenuBarEntry] {
+        hosts.flatMap { host -> [AXMenuBarEntry] in
+            let items: [AXUIElement] = attribute(timed(host), kAXChildrenAttribute) ?? []
+            return items.compactMap { item in
+                guard let identifier: String = attribute(timed(item), kAXIdentifierAttribute),
+                      let agentName = agentName(fromIdentifier: identifier),
+                      let frame = frame(of: item) else { return nil }
+                return AXMenuBarEntry(pid: app.pid, bundleIdentifier: app.bundle, appName: app.name,
+                                      title: name(of: item), frame: frame, element: AXElement(raw: item),
+                                      agentName: agentName)
+            }
+        }
+    }
+
+    /// "sound" from "com.apple.menuextra.sound"; nil for anything that isn't
+    /// one of macOS's menu extras.
+    nonisolated static func agentName(fromIdentifier identifier: String) -> String? {
+        let prefix = "com.apple.menuextra."
+        guard identifier.hasPrefix(prefix), identifier.count > prefix.count else { return nil }
+        return String(identifier.dropFirst(prefix.count))
+    }
+
+    private nonisolated static func name(of element: AXUIElement) -> String? {
+        let title: String? = attribute(element, kAXTitleAttribute)
+        let description: String? = attribute(element, kAXDescriptionAttribute)
+        return [title, description].compactMap { $0 }.first { !$0.isEmpty }.map(cleaned)
     }
 
     /// The item's current status text: its title, description or help (tooltip),

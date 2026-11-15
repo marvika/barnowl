@@ -443,7 +443,11 @@ private struct GeneralPane: View {
                 hint("cursorarrow.click", "Click the arrow to show or hide icons.")
                 hint("option", "Option-click the arrow to show every icon, including always-hidden ones.")
                 hint("moon.zzz", "Click the owl (or right-click the arrow) for Keep Awake and quick toggles.")
-                hint("command", "Hold ⌘ and drag icons across the | divider to hide or show them.")
+                if MenuBarPlatform.hidesByApp {
+                    hint("hand.draw", "Drag icons between the rows in Layout to hide or show them.")
+                } else {
+                    hint("command", "Hold ⌘ and drag icons across the | divider to hide or show them.")
+                }
             }
         }
     }
@@ -511,16 +515,24 @@ private struct MenuBarPane: View {
                     Text("Every 10 minutes").tag(10)
                 } label: {
                     BadgeLabel(title: "Look at icon-only items",
-                               subtitle: "Icons without status text are checked by sliding them into view for a moment.",
+                               subtitle: MenuBarPlatform.hidesByApp
+                                   ? "Icons without status text are checked by showing them for a moment."
+                                   : "Icons without status text are checked by sliding them into view for a moment.",
                                symbol: "eye", color: .blue)
                 }
             } header: {
                 Text("Show icons when they change")
             }
             Section {
-                Toggle(isOn: $presenterAutomatic) {
-                    BadgeLabel(title: "Start when you share your screen",
-                               subtitle: "And stop when sharing ends. Detected from macOS's own screen-recording indicator.",
+                if PresenterMode.canDetectSharing {
+                    Toggle(isOn: $presenterAutomatic) {
+                        BadgeLabel(title: "Start when you share your screen",
+                                   subtitle: "And stop when sharing ends. Detected from macOS's own screen-recording indicator.",
+                                   symbol: "rectangle.on.rectangle", color: .purple)
+                    }
+                } else {
+                    BadgeLabel(title: "Start it yourself on macOS 27",
+                               subtitle: "From the owl's menu or the shortcut below. macOS 27 no longer says when the screen is shared, so Barn Owl can't start it for you.",
                                symbol: "rectangle.on.rectangle", color: .purple)
                 }
                 Toggle(isOn: $presenterKeepAwake) {
@@ -535,7 +547,9 @@ private struct MenuBarPane: View {
             } header: {
                 Text("Presenter mode")
             } footer: {
-                Text("Hides every menu bar icon except the clock and Control Center. Click the arrow for your icons on the Perch.")
+                Text(MenuBarPlatform.hidesByApp
+                     ? "Hides every other app's icon; macOS's own stay. Click the arrow for your icons on the Perch."
+                     : "Hides every menu bar icon except the clock and Control Center. Click the arrow for your icons on the Perch.")
             }
             Section("Hiding") {
                 Picker(selection: $newIcons) {
@@ -572,7 +586,9 @@ private struct MenuBarPane: View {
                 }
                 Toggle(isOn: $alwaysHiddenEnabled) {
                     BadgeLabel(title: "Always-hidden section",
-                               subtitle: "Adds a ⋮ divider. Icons left of it only show with option-click.",
+                               subtitle: MenuBarPlatform.hidesByApp
+                                   ? "Icons in it only show with option-click."
+                                   : "Adds a ⋮ divider. Icons left of it only show with option-click.",
                                symbol: "eye.slash.fill", color: .indigo)
                 }
             }

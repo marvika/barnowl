@@ -248,6 +248,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 self.scanner.start()
                 await self.model.layout.updateProfile()
                 await self.model.layout.applyFirstRunDefaults()
+                // macOS 27: the icons macOS kept behind its own overflow just now.
+                try? await Task.sleep(for: .seconds(1))
+                await self.model.layout.photographMissing()
             }
         } else {
             // Setup's layout step shows the real icons, so take their pictures
@@ -335,7 +338,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                         ?? items.first(where: { $0.appName.lowercased() == app || $0.name.lowercased() == app })
                     else { return }
                     if value("reset") == "1" {
-                        if let group = model.groups.group(containing: item.key), group.opensDirectly {
+                        if let group = model.groups.group(containing: item), group.opensDirectly {
                             await model.deleteGroup(group.id)
                         }
                     } else {
@@ -512,8 +515,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func sectionsMoved(revealed: Bool) {
         Task {
             try? await Task.sleep(for: .milliseconds(350))
-            scanner.updateFrames()
-            if revealed { await images.capture(scanner.items) }
+            guard MenuBarPlatform.hidesByApp else {
+                scanner.updateFrames()
+                if revealed { await images.capture(scanner.items) }
+                return
+            }
+            // No windows to read frames from: look again, then photograph
+            // only what this state has in view.
+            let items = await scanner.freshItems()
+            if revealed { await images.capture(items.filter { sections.shows($0.section) }, pruning: false) }
         }
     }
 

@@ -2,12 +2,14 @@ import AppKit
 
 /// Owns Barn Owl's own status items: the toggle and the two dividers.
 /// Engines change their lengths but never create or remove them.
+/// macOS 27 hides by app rather than by position, so it has no dividers.
 @MainActor
 final class StatusItems {
     static let dividerLength: CGFloat = 14
 
     let toggle: NSStatusItem
-    let separator: NSStatusItem
+    /// The "|" divider. None on macOS 27.
+    let separator: NSStatusItem?
     private(set) var alwaysHidden: NSStatusItem?
 
     static let toggleName = "BarnOwlToggle"
@@ -31,9 +33,14 @@ final class StatusItems {
         // ⌘-drags them afterwards.
         toggle = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         toggle.autosaveName = Self.toggleName
-        separator = NSStatusBar.system.statusItem(withLength: Self.dividerLength)
-        separator.autosaveName = Self.separatorName
-        configureDivider(separator, symbol: "line.diagonal", label: "Barn Owl divider")
+        guard !MenuBarPlatform.hidesByApp else {
+            separator = nil
+            return
+        }
+        let divider = NSStatusBar.system.statusItem(withLength: Self.dividerLength)
+        divider.autosaveName = Self.separatorName
+        separator = divider
+        configureDivider(divider, symbol: "line.diagonal", label: "Barn Owl divider")
     }
 
     /// On a busy notched Mac, a new item lands left of every other icon, which
@@ -45,7 +52,7 @@ final class StatusItems {
     /// arrangement wins afterwards. macOS 27 ignores these keys.
     /// Seed values from Frost (MIT).
     private static func seedPositions() {
-        guard ProcessInfo.processInfo.operatingSystemVersion.majorVersion < 27 else { return }
+        guard !MenuBarPlatform.hidesByApp else { return }
         let seeds: [(String, Double)] = [(toggleName, 0), (separatorName, 1), (alwaysHiddenName, 10_000)]
         let defaults = UserDefaults.standard
         for (name, position) in seeds {
@@ -60,7 +67,7 @@ final class StatusItems {
     /// the "|" divider, where it shows, rather than left of everything and
     /// perhaps behind the notch. Only before the item first appears.
     static func seedVisiblePosition(for name: String) {
-        guard ProcessInfo.processInfo.operatingSystemVersion.majorVersion < 27 else { return }
+        guard !MenuBarPlatform.hidesByApp else { return }
         let defaults = UserDefaults.standard
         let key = "NSStatusItem Preferred Position \(name)"
         guard defaults.object(forKey: key) == nil else { return }
@@ -79,7 +86,7 @@ final class StatusItems {
     /// macOS 27, which ignores these).
     func raiseCurtain(length: CGFloat, besideOwl: Bool = true) -> Bool {
         lowerCurtain()
-        guard ProcessInfo.processInfo.operatingSystemVersion.majorVersion < 27 else { return false }
+        guard !MenuBarPlatform.hidesByApp else { return false }
         let defaults = UserDefaults.standard
         let anchor = besideOwl ? owlBesideArrow ?? toggle : toggle
         guard let name = anchor.autosaveName,
@@ -160,8 +167,8 @@ final class StatusItems {
         return item
     }
 
-    func setDividerVisible(_ item: NSStatusItem, _ visible: Bool) {
-        item.button?.alphaValue = visible ? 0.55 : 0
+    func setDividerVisible(_ item: NSStatusItem?, _ visible: Bool) {
+        item?.button?.alphaValue = visible ? 0.55 : 0
     }
 
     private func configureDivider(_ item: NSStatusItem, symbol: String, label: String) {

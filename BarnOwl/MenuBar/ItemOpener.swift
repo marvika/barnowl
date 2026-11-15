@@ -8,6 +8,10 @@ import ApplicationServices
 /// pressed there so its menu opens in the right place, and moved back once
 /// the menu closes. If moving fails, the item's whole section is revealed
 /// instead.
+///
+/// macOS 27 can't move icons, and doesn't need to: the icon's app is let
+/// through for as long as its menu is open, and the icon shows where macOS
+/// keeps it.
 @MainActor
 final class ItemOpener {
     private let sections: SectionController
@@ -37,6 +41,7 @@ final class ItemOpener {
     }
 
     private func perform(_ item: MenuBarItem, anchor: CGWindowID?) async {
+        guard !MenuBarPlatform.hidesByApp else { return await performByApp(item) }
         // While presenting, every icon is behind the curtain left of the arrow:
         // it comes out between the two, and goes back after. Battery sits
         // right of the arrow, out of the curtain's reach.
@@ -51,6 +56,44 @@ final class ItemOpener {
             return
         }
         await openRevealed(item)
+    }
+
+    /// macOS 27: shows the icon's app, presses the icon, and hides the app
+    /// again once its menu has closed.
+    private func performByApp(_ item: MenuBarItem) async {
+        let hidden = !sections.shows(item.section) || sections.isPresenting()
+        guard hidden, !item.alwaysShows else { return await press(item) }
+        guard let app = item.bundleIdentifier, await sections.peek([app], for: Self.peekReason) else {
+            return await openRevealed(item)
+        }
+        await waitUntilShowing(item)
+        await press(item)
+        await waitForMenuToClose(pid: item.pid)
+        // Another icon being opened instead takes the peek over.
+        if !Task.isCancelled { _ = await sections.peek([], for: Self.peekReason) }
+    }
+
+    private static let peekReason = "open"
+
+    /// macOS 27: waits for the icon to come into view once its app is let
+    /// through, a second and a half at most.
+    private func waitUntilShowing(_ item: MenuBarItem) async {
+        // The bar lays out on its next pass; until then the icon still
+        // reports the place it had when it was last in view.
+        try? await Task.sleep(for: .milliseconds(150))
+        for _ in 0..<27 {
+            if await Self.frameInView(of: item) != nil { return }
+            try? await Task.sleep(for: .milliseconds(50))
+        }
+    }
+
+    /// macOS 27: where the icon is, if MenuBarAgent has it in view.
+    private static func frameInView(of item: MenuBarItem) async -> CGRect? {
+        await Task.detached {
+            guard let frame = AccessibilityInventory.frame(of: item.element.raw),
+                  AgentBar.isShowing(pid: item.pid, frame: frame, among: AgentBar.iconsInView()) else { return nil }
+            return frame
+        }.value
     }
 
     private func openMovedOut(_ item: MenuBarItem, to destination: MoveDestination) async -> Bool {
@@ -105,12 +148,21 @@ final class ItemOpener {
         let mayHaveOpened = result == .success || result == .cannotComplete
         if mayHaveOpened, await menuAppears(for: item.pid) { return }
         Log.menuBar.info("Press didn't open \(item.appName); clicking instead")
-        let frame = ItemMover.frames()[item.windowID] ?? item.frame
+        let frame: CGRect
+        if MenuBarPlatform.hidesByApp {
+            // Only where the icon is known to be: a click at the place a
+            // hidden icon last had would land on another app's icon.
+            guard let inView = await Self.frameInView(of: item) else { return }
+            frame = inView
+        } else {
+            frame = ItemMover.frames()[item.windowID] ?? item.frame
+        }
         Self.click(at: CGPoint(x: frame.midX, y: frame.midY))
         _ = await menuAppears(for: item.pid)
     }
 
     private func waitUntilOnScreen(_ item: MenuBarItem) async {
+        guard !MenuBarPlatform.hidesByApp else { return await waitUntilShowing(item) }
         for _ in 0..<25 {
             if let frame = ItemMover.frames()[item.windowID], frame.minX >= 0 { return }
             try? await Task.sleep(for: .milliseconds(40))

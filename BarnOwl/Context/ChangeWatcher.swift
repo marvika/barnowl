@@ -32,6 +32,13 @@ final class ChangeWatcher {
     @ObservationIgnored private let defaultsKey = "watchedKeys"
     /// While presenting, nothing is surfaced.
     @ObservationIgnored var isPaused: () -> Bool = { false }
+    /// macOS 27: shows these apps' icons for now, in place of moving an icon
+    /// into view.
+    @ObservationIgnored var peek: (Set<String>) async -> Void = { _ in }
+    /// macOS 27: whether icons in a section are in view now.
+    @ObservationIgnored var shows: (MenuBarSection) -> Bool = { $0 == .visible }
+    /// macOS 27: the app whose icon is out for a look at its picture.
+    @ObservationIgnored private var lookingAt: String?
 
     init(scanner: ItemScanner, layout: LayoutController, mover: ItemMover, images: ItemImageCache,
          statusItems: StatusItems) {
@@ -120,16 +127,25 @@ final class ChangeWatcher {
     /// Photographs each watched icon: in place if it's showing, otherwise by
     /// sliding it into view for a moment. Surfaces the ones that look different.
     private func lookAtPictures(of items: [MenuBarItem]) async {
-        guard let divider = StatusItems.windowID(of: statusItems.separator) else { return }
+        let divider = StatusItems.windowID(of: statusItems.separator)
+        guard MenuBarPlatform.hidesByApp || divider != nil else { return }
         for item in items where surfaced[item.key] == nil {
             // The first look compares against the last saved picture.
             if pictures[item.key] == nil, let saved = images.image(for: item) {
                 pictures[item.key] = PictureSignature(saved)
             }
-            let visible = item.section == .visible && !item.isBehindNotch
+            let visible = MenuBarPlatform.hidesByApp ? shows(item.section)
+                : item.section == .visible && !item.isBehindNotch
             if !visible {
-                guard await mover.move(item.windowID, to: .rightOf(divider), whenIdle: true) else { continue }
+                if MenuBarPlatform.hidesByApp {
+                    lookingAt = item.bundleIdentifier
+                    await syncPeek()
+                    await LayoutController.waitForMenuBarToSettle()
+                } else if let divider {
+                    guard await mover.move(item.windowID, to: .rightOf(divider), whenIdle: true) else { continue }
+                }
             }
+            defer { lookingAt = nil }
             scanner.updateFrames()
             if let current = scanner.items.first(where: { $0.windowID == item.windowID }) {
                 await images.capture([current], pruning: false)
@@ -144,8 +160,22 @@ final class ChangeWatcher {
             } else if !visible {
                 await layout.returnToRow(item.key)
             }
+            if MenuBarPlatform.hidesByApp, !visible {
+                lookingAt = nil
+                await syncPeek()
+            }
         }
         scanner.updateFrames()
+    }
+
+    /// macOS 27: keeps in view the apps whose icons changed, and the one
+    /// being looked at.
+    private func syncPeek() async {
+        var apps = Set(surfaced.keys.compactMap { key in
+            scanner.items.first { $0.key == key }?.bundleIdentifier
+        })
+        if let lookingAt { apps.insert(lookingAt) }
+        await peek(apps)
     }
 
     /// Brings the icon next to the arrow for a while.
@@ -153,6 +183,14 @@ final class ChangeWatcher {
         let until = Date().addingTimeInterval(Preferences.changeShowDuration)
         if surfaced[item.key] != nil {
             surfaced[item.key] = until
+            return
+        }
+        if MenuBarPlatform.hidesByApp {
+            guard !shows(item.section), item.bundleIdentifier != nil else { return }
+            surfaced[item.key] = until
+            await syncPeek()
+            await LayoutController.waitForMenuBarToSettle()
+            if let frame = AccessibilityInventory.frame(of: item.element.raw) { onSurface?(frame) }
             return
         }
         guard item.section != .visible || item.isBehindNotch, item.isMovable,
@@ -172,14 +210,17 @@ final class ChangeWatcher {
 
     private func hideExpired() async {
         let now = Date()
+        var hidAny = false
         for (key, until) in surfaced where until <= now {
             // Leave it while its menu is open.
             if let item = scanner.items.first(where: { $0.key == key }), ItemOpener.hasOpenMenu(pid: item.pid) {
                 continue
             }
             surfaced[key] = nil
+            hidAny = true
             await layout.returnToRow(key)
         }
+        if MenuBarPlatform.hidesByApp, hidAny { await syncPeek() }
     }
 }
 

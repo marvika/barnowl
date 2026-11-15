@@ -13,6 +13,8 @@ final class SectionController {
     /// The apps with an icon in a hidden section, whose open menus keep the
     /// icons showing.
     var hiddenIconOwners: () -> Set<pid_t> = { [] }
+    /// Whether presenter mode has every other app's icon out of view.
+    var isPresenting: () -> Bool = { false }
 
     /// Keeps hidden icons showing, e.g. while setup or Settings asks the user
     /// to arrange them. Clearing it starts the auto-rehide timer again.
@@ -58,6 +60,35 @@ final class SectionController {
         set(state)
     }
 
+    /// The layout or the running apps changed. Unlike `refresh`, nothing is
+    /// announced and the rehide timer keeps running: the state is the same,
+    /// only which icons it hides may differ.
+    func layoutChanged() {
+        Task { await engine.refresh() }
+    }
+
+    /// Whether icons in `section` are in view now.
+    func shows(_ section: MenuBarSection) -> Bool {
+        switch state {
+        case .collapsed: section == .visible
+        case .expanded: section != .alwaysHidden || !Preferences.alwaysHiddenEnabled
+        case .expandedAll: true
+        }
+    }
+
+    /// Apps whose icons show for now whatever row they're in, by who asked
+    /// (an icon opened from the Perch, an icon that changed), so one doesn't
+    /// undo the other.
+    private var peeks: [String: Set<String>] = [:]
+
+    /// macOS 27: shows these apps' icons until `reason` peeks at something
+    /// else or at nothing. False where macOS can't show one app's icons on
+    /// their own (macOS 26: the icon is moved instead).
+    func peek(_ apps: Set<String>, for reason: String) async -> Bool {
+        peeks[reason] = apps.isEmpty ? nil : apps
+        return await engine.reveal(peeks.values.reduce(into: Set<String>()) { $0.formUnion($1) })
+    }
+
     /// `byUser`: the user asked (clicked the arrow, pressed the hotkey), so
     /// a problem is worth an alert. Collapses Barn Owl does by itself (the
     /// rehide timer, launch, a display change) only log it: a modal alert out
@@ -81,7 +112,8 @@ final class SectionController {
     }
 
     /// If the "|" divider ends up right of the toggle, collapsing would hide the
-    /// toggle too and leave only the hotkey to bring it back.
+    /// toggle too and leave only the hotkey to bring it back. macOS 27 has no
+    /// dividers to get out of order.
     func arrangementProblem() -> String? {
         guard let toggle = StatusItems.frame(of: items.toggle),
               let separator = StatusItems.frame(of: items.separator) else { return nil }

@@ -13,7 +13,9 @@ struct AXElement: @unchecked Sendable, Hashable {
 /// Another app's menu bar item, as Barn Owl knows it.
 struct MenuBarItem: Identifiable, Hashable, Sendable {
     /// The item's window. Stable while its app runs; a relaunch gets a new one.
-    let windowID: CGWindowID
+    /// macOS 27 has no item windows: there it's a number made from the item's
+    /// key (`ItemKey.stableID`), which only tells items apart.
+    var windowID: CGWindowID
     /// Screen frame in global coordinates with a top-left origin (as CGWindowList and Accessibility use).
     var frame: CGRect
     let pid: pid_t
@@ -35,6 +37,9 @@ struct MenuBarItem: Identifiable, Hashable, Sendable {
     /// indicator can't be moved, by hand or otherwise, and the indicator must
     /// never be hidden. Battery isn't Barn Owl's to move either, except to
     /// keep it showing.
+    ///
+    /// On macOS 27 "movable" means "can be put in another row": every other
+    /// app's icon can, none of macOS's own can.
     var isMovable: Bool {
         if alwaysShows { return false }
         guard bundleIdentifier == "com.apple.controlcenter" else { return true }
@@ -48,7 +53,11 @@ struct MenuBarItem: Identifiable, Hashable, Sendable {
     /// neither divider nor the presenting curtain reaches, and never puts it
     /// anywhere else. ⌘-dragging one of macOS's controls is also how it comes
     /// off the menu bar, so the fewer drags the better.
+    ///
+    /// macOS 27 keeps all of its own icons (Sound, Battery, Wi‑Fi, Control
+    /// Center, the clock) in view whatever Barn Owl asks for.
     var alwaysShows: Bool {
+        if bundleIdentifier == MenuBarPlatform.agentBundle { return true }
         guard bundleIdentifier == "com.apple.controlcenter" else { return false }
         if let windowName { return windowName == "Battery" }
         return ItemKey.stem(of: title) == "Battery"
@@ -96,6 +105,7 @@ struct MenuBarItem: Identifiable, Hashable, Sendable {
 
     static let systemBundles: Set<String> = [
         "com.apple.controlcenter", "com.apple.systemuiserver", "com.apple.Spotlight", "com.apple.TextInputMenuAgent",
+        MenuBarPlatform.agentBundle,
     ]
 }
 
@@ -116,6 +126,8 @@ struct AXMenuBarEntry: Sendable {
     let title: String?
     let frame: CGRect
     let element: AXElement
+    /// macOS 27: which of macOS's own icons this is ("sound", "battery"…).
+    var agentName: String?
 }
 
 enum ItemMatcher {
@@ -238,6 +250,18 @@ enum ItemKey {
             item.key = count == 1 ? base : "\(base)#\(count)"
             return item
         }
+    }
+
+    /// macOS 27: a number that stands in for the window ID an item no longer
+    /// has. The same key always gives the same number, so pictures and lists
+    /// keep track of an item from one scan to the next. The top bit keeps it
+    /// clear of real window IDs.
+    static func stableID(for key: String) -> CGWindowID {
+        var hash: UInt32 = 2_166_136_261
+        for byte in key.utf8 {
+            hash = (hash ^ UInt32(byte)) &* 16_777_619
+        }
+        return hash | 0x8000_0000
     }
 
     /// The part of a title that names the icon, before any state: "Wi-Fi"

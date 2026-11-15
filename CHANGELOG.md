@@ -5,6 +5,20 @@ before 1.0, a minor version can change behaviour.
 
 ## Unreleased
 
+- **Barn Owl works on macOS 27.** macOS 27 draws the menu bar in a new way:
+  icons can no longer be pushed off screen or moved by another app. That left
+  0.16.0 with an arrow that revealed nothing, and an empty Perch, search and
+  layout. Barn Owl now tells macOS which apps may show their icons instead.
+  The layout you had on macOS 26 carries over, the dividers are gone, and
+  dragging an icon to another row in Settings → Layout takes effect at once.
+  An icon opened from the Perch or search shows for as long as its menu is
+  open, then hides again.
+- **What macOS 27 doesn't allow.** An app's icons hide and show together.
+  macOS's own Sound, Battery, Wi‑Fi, Control Center and clock always show, and
+  Now Playing hides whenever anything is hidden. Presenting can't start by
+  itself when you share your screen, because macOS 27 no longer says when
+  that happens: start it from the owl's menu or its shortcut. Clean Menu Bar
+  no longer leaves other apps' icons out of screenshots.
 - **Hidden icons hide again by themselves.** Since 0.14.1, icons you revealed
   stayed in the menu bar until you clicked the arrow: the check that waits
   for an open menu took the menu bar itself for one. It now waits only for a

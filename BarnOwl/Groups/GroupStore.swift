@@ -36,6 +36,10 @@ struct MenuBarGroup: Codable, Identifiable, Hashable, Sendable {
         opensDirectly = try container.decodeIfPresent(Bool.self, forKey: .opensDirectly) ?? false
     }
 
+    /// The apps with an icon in the group. macOS 27 hides an app's icons
+    /// together, so there the whole app belongs to the group.
+    var memberApps: Set<String> { Set(memberKeys.map(AppRows.app(ofKey:))) }
+
     static let symbolChoices = [
         "briefcase.fill", "hammer.fill", "shield.lefthalf.filled", "network", "cloud.fill", "folder.fill",
         "star.fill", "bolt.fill", "gearshape.2.fill", "square.grid.2x2.fill", "music.note", "bubble.left.fill",
@@ -64,6 +68,33 @@ final class GroupStore {
     }
 
     var allMemberKeys: Set<String> { Set(groups.flatMap(\.memberKeys)) }
+
+    /// The group an icon is in. On macOS 27 that's the group its app has any
+    /// icon in, whichever icon was put there.
+    func group(containing item: MenuBarItem) -> MenuBarGroup? {
+        guard MenuBarPlatform.hidesByApp, let app = item.bundleIdentifier else { return group(containing: item.key) }
+        return groups.first { $0.memberApps.contains(app) }
+    }
+
+    var allMemberApps: Set<String> { Set(groups.flatMap(\.memberApps)) }
+
+    /// The group's icons among `items`, in the group's order.
+    func members(of group: MenuBarGroup, among items: [MenuBarItem]) -> [MenuBarItem] {
+        guard MenuBarPlatform.hidesByApp else {
+            let byKey = Dictionary(items.map { ($0.key, $0) }, uniquingKeysWith: { a, _ in a })
+            return group.memberKeys.compactMap { byKey[$0] }
+        }
+        let apps = group.memberKeys.map(AppRows.app(ofKey:))
+        return items.filter { $0.bundleIdentifier.map(apps.contains) ?? false }
+            .sorted { (apps.firstIndex(of: $0.bundleIdentifier ?? "") ?? 0) < (apps.firstIndex(of: $1.bundleIdentifier ?? "") ?? 0) }
+    }
+
+    /// Takes every icon of an app out of its group.
+    func removeApp(_ app: String, notify: Bool = true) {
+        guard allMemberApps.contains(app) else { return }
+        for index in groups.indices { groups[index].memberKeys.removeAll { AppRows.app(ofKey: $0) == app } }
+        if notify { save() }
+    }
 
     @discardableResult
     func create(name: String, symbol: String, label: String? = nil, opensDirectly: Bool = false) -> MenuBarGroup {

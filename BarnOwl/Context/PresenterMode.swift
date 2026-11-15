@@ -13,9 +13,12 @@ final class PresenterMode {
     private(set) var isChanging = false
     /// True when the current session started because screen sharing began.
     private(set) var startedAutomatically = false
-    /// True while the curtain keeps the visible icons out of view where they
-    /// are, rather than moved into the hidden section.
-    var iconsBehindCurtain: Bool { isPresenting && sections.items.curtain != nil }
+    /// True while the visible icons are kept out of view where they are (behind
+    /// the curtain, or by macOS 27 itself), rather than moved into the hidden
+    /// section.
+    var iconsBehindCurtain: Bool { isPresenting && (sections.items.curtain != nil || hidesInPlace) }
+    /// Whether the engine hid every other app's icon by itself.
+    private var hidesInPlace = false
     @ObservationIgnored var onChange: ((Bool) -> Void)?
 
     @ObservationIgnored private let sections: SectionController
@@ -47,7 +50,12 @@ final class PresenterMode {
         applySettings()
     }
 
+    /// macOS 27 no longer says in Control Center's description that the screen
+    /// is being shared, and nothing else readable has been found to say it.
+    static let canDetectSharing = !MenuBarPlatform.hidesByApp
+
     func applySettings() {
+        guard Self.canDetectSharing else { return }
         if Preferences.presenterAutomatic, task == nil {
             task = Task { [weak self] in
                 while !Task.isCancelled {
@@ -77,7 +85,7 @@ final class PresenterMode {
         Log.app.info("Presenter mode \(presenting ? "on" : "off")\(automatically ? " (screen sharing)" : "")")
         onChange?(presenting)
         sections.collapse()
-        let hidesInPlace = await sections.engine.setPresenting(presenting) && presenting
+        hidesInPlace = await sections.engine.setPresenting(presenting) && presenting
         if !hidesInPlace {
             presenting ? await hideVisibleIcons() : await restoreIcons()
         }
