@@ -36,10 +36,12 @@ struct BadgeLabel: View {
 }
 
 /// A small drawing of the right half of a menu bar, showing how the dividers
-/// split it. Used to explain hiding without words.
+/// split it (macOS 27 hides without dividers, so there are none to draw).
+/// Used to explain hiding without words.
 struct MenuBarDiagram: View {
     var collapsed: Bool
     var showsAlwaysHidden = false
+    var showsDividers = !MenuBarPlatform.hidesByApp
 
     private let alwaysHiddenIcons = ["externaldrive", "printer"]
     private let hiddenIcons = ["shield.lefthalf.filled", "network", "cloud", "shippingbox"]
@@ -57,11 +59,11 @@ struct MenuBarDiagram: View {
             if !collapsed {
                 if showsAlwaysHidden {
                     icons(alwaysHiddenIcons).opacity(0.35)
-                    divider("ellipsis", rotated: true)
+                    if showsDividers { divider("ellipsis", rotated: true) }
                 }
                 icons(hiddenIcons)
                     .transition(.move(edge: .trailing).combined(with: .opacity))
-                divider("line.diagonal", rotated: false)
+                if showsDividers { divider("line.diagonal", rotated: false) }
             }
             icons(visibleIcons)
             Image(nsImage: MenuBarOwl.image(openness: collapsed ? 0 : 1, height: 15))

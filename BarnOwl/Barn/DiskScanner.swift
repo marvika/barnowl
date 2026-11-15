@@ -172,7 +172,6 @@ final class DiskScanner: @unchecked Sendable {
     /// Scans `root` (by default the whole Data volume). Returns nil if cancelled.
     func scan(root: String = DiskScanner.dataVolume, workers: Int = 8, skipping: Set<String> = [],
               progress: @escaping @Sendable (Progress) -> Void) async -> DiskScan? {
-        Self.neverDownloadFromICloud()
         let start = Date()
         notEntered = skipping
         prepare(root: root, progress: progress)
@@ -182,6 +181,7 @@ final class DiskScanner: @unchecked Sendable {
                 for number in 0..<max(1, workers) {
                     group.enter()
                     let thread = Thread { [self] in
+                        Self.neverDownloadFromICloud()
                         work()
                         group.leave()
                     }
@@ -428,9 +428,10 @@ final class DiskScanner: @unchecked Sendable {
     }
 
     /// Reading a file's size never downloads it from iCloud, but just in case
-    /// anything ever opens one: fail instead of downloading.
+    /// anything ever opens one: fail instead of downloading. Only on the scan's
+    /// own threads; the rest of Barn Owl opens iCloud files as usual.
     private static func neverDownloadFromICloud() {
-        let typeMaterializeDataless: Int32 = 3, scopeProcess: Int32 = 0, materializeOff: Int32 = 1
-        _ = setiopolicy_np(typeMaterializeDataless, scopeProcess, materializeOff)
+        let typeMaterializeDataless: Int32 = 3, scopeThread: Int32 = 1, materializeOff: Int32 = 1
+        _ = setiopolicy_np(typeMaterializeDataless, scopeThread, materializeOff)
     }
 }

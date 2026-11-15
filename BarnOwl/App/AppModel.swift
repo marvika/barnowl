@@ -71,10 +71,22 @@ final class AppModel {
                                 statusItems: sections.items)
         presenter = PresenterMode(sections: sections, keepAwake: keepAwake, images: images, scanner: scanner,
                                   mover: mover, layout: layout)
-        layout.temporarilyMoved = { [watcher] in Set(watcher.surfaced.keys) }
+        layout.temporarilyMoved = { [watcher, opener] in Set(watcher.surfaced.keys).union(opener.movedOutKeys) }
+        opener.onLeftOut = { [layout] key in layout.takeBack(key) }
         capture.showCaptureSettings = { [weak self] in self?.showSettings(.capture) }
         layout.isPaused = { [presenter] in presenter.isPresenting || presenter.isChanging }
-        watcher.isPaused = { [presenter] in presenter.isPresenting || presenter.isChanging }
+        // Nor while a capture keeps the menu bar clean: a changed icon waits until it's over.
+        watcher.isPaused = { [presenter, sections] in
+            presenter.isPresenting || presenter.isChanging || sections.isCleanForCapture
+        }
+        if MenuBarPlatform.hidesByApp { capture.cleanBar = CleanMenuBar(sections: sections) }
+        // macOS 27: icons come into view by letting their app through, and
+        // their rows come from the layout's table.
+        watcher.peek = { [sections] apps in _ = await sections.peek(apps, for: "changed") }
+        watcher.shows = { [sections] in sections.shows($0) }
+        sections.isPresenting = { [presenter] in presenter.isPresenting }
+        scanner.sectionOf = { [layout] in layout.section(of: $0) }
+        (sections.engine as? NativeVisibilityEngine)?.allowedApps = { [layout] in layout.allowedApps(for: $0) }
     }
 
     @ObservationIgnored var showClipboard: () -> Void = {}
@@ -93,7 +105,7 @@ final class AppModel {
         case .clipboard: showClipboard()
         case .barn: showBarn()
         case .roost: showRoost(nil)
-        case .showAllIcons: sections.showAll()
+        case .showAllIcons: if !presenter.isPresenting { sections.showAll() }
         case .captureArea: capture.start(.area)
         case .captureScreen: capture.captureScreen()
         case .captureSameArea: capture.captureSameArea()
@@ -114,8 +126,10 @@ final class AppModel {
     /// Replaces an app's icon with one of your choosing: a one-icon group that
     /// opens the real icon's menu directly.
     func setCustomIcon(for item: MenuBarItem, symbol: String, label: String?) async {
+        // Its group would live in the always-hidden section.
+        guard item.isMovable else { return }
         let label = label?.trimmingCharacters(in: .whitespaces)
-        if let existing = groups.group(containing: item.key), existing.opensDirectly {
+        if let existing = groups.group(containing: item), existing.opensDirectly {
             var changed = existing
             changed.symbol = symbol
             changed.label = (label?.isEmpty ?? true) ? nil : label
@@ -188,9 +202,26 @@ final class AppModel {
             // No notch: assume the app's menus take about half the bar.
             available = (screen?.frame.width ?? 1440) * 0.5
         }
+        guard !MenuBarPlatform.hidesByApp else {
+            // What doesn't fit beside the notch goes behind macOS's own
+            // overflow button, where it's out of reach: count the room each
+            // icon really takes, Barn Owl's own two included.
+            let room = { (items: [MenuBarItem]) in items.map(Self.slotWidth).reduce(0, +) }
+            let visible = room(scanner.items.filter { $0.section == .visible }) + 80
+            let hidden = room(scanner.items.filter { $0.section == .hidden })
+            return HiddenIconsDisplay.usesBar(setting, visibleWidth: visible, hiddenWidth: hidden,
+                                              availableWidth: available - 50)
+        }
         let width = { (items: [MenuBarItem]) in items.map(\.frame.width).reduce(0, +) }
         let visible = width(scanner.items.filter { $0.section == .visible }) + 60
         let hidden = width(scanner.items.filter { $0.section == .hidden })
         return HiddenIconsDisplay.usesBar(setting, visibleWidth: visible, hiddenWidth: hidden, availableWidth: available)
+    }
+
+    /// macOS 27: the room an icon takes in the menu bar. Another app's icon
+    /// gets a slot at least 30 points wide; macOS's own get 8 points of air
+    /// on either side. Measured on macOS 27.0.
+    nonisolated static func slotWidth(of item: MenuBarItem) -> CGFloat {
+        item.alwaysShows ? item.frame.width + 16 : max(item.frame.width - 2, 30)
     }
 }

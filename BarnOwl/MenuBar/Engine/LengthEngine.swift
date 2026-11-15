@@ -27,18 +27,18 @@ final class LengthEngine: HidingEngine {
         items.curtain?.length = collapsedLength
         switch state {
         case .collapsed:
-            items.separator.length = collapsedLength
+            items.separator?.length = collapsedLength
             items.setDividerVisible(items.separator, false)
             alwaysHidden?.length = alwaysHiddenEnabled ? StatusItems.dividerLength : 0
         case .expanded:
-            items.separator.length = StatusItems.dividerLength
+            items.separator?.length = StatusItems.dividerLength
             items.setDividerVisible(items.separator, true)
             if let alwaysHidden {
                 alwaysHidden.length = alwaysHiddenEnabled ? collapsedLength : 0
                 items.setDividerVisible(alwaysHidden, false)
             }
         case .expandedAll:
-            items.separator.length = StatusItems.dividerLength
+            items.separator?.length = StatusItems.dividerLength
             items.setDividerVisible(items.separator, true)
             if let alwaysHidden {
                 alwaysHidden.length = alwaysHiddenEnabled ? StatusItems.dividerLength : 0
@@ -52,22 +52,37 @@ final class LengthEngine: HidingEngine {
         // Lengths are recomputed from the current screens on the next apply.
     }
 
+    func refresh() async {
+        // Icons hide by where they sit, which the layout keeper sees to.
+    }
+
+    /// A divider hides everything left of it or nothing: one icon is brought
+    /// out by moving it instead.
+    func reveal(_ apps: Set<String>, alone: Bool) async -> Bool { false }
+
     /// A divider can only hide what's left of it, so presenting widens a
-    /// curtain placed right of every icon, just left of the arrow. If it can't
-    /// be placed there, presenting moves the icons instead. Ending always
-    /// reports false, so icons moved that way are put back.
+    /// curtain placed right of every icon: just left of the owl when it sits
+    /// beside the arrow, so its menu stays in reach, else just left of the
+    /// arrow. If it can't be placed either way, presenting moves the icons
+    /// instead. Ending always reports false, so icons moved that way are put back.
     func setPresenting(_ presenting: Bool) async -> Bool {
         guard presenting else {
             items.lowerCurtain()
             return false
         }
-        guard items.raiseCurtain(length: collapsedLength) else { return false }
-        // The menu bar lays out on its next pass.
-        for _ in 0..<10 {
-            try? await Task.sleep(for: .milliseconds(50))
-            if items.curtainIsLeftOfArrow { return true }
+        var besideOwl = true
+        while items.raiseCurtain(length: collapsedLength, besideOwl: besideOwl) {
+            // The menu bar lays out on its next pass, which can take a second or
+            // more while it's also widening the divider and the arrow.
+            for _ in 0..<40 {
+                try? await Task.sleep(for: .milliseconds(50))
+                if items.curtainLanded { return true }
+            }
+            guard items.curtainIsBesideOwl else { break }
+            Log.menuBar.info("Presenter curtain didn't land beside the owl (\(self.items.curtainReport, privacy: .public)); trying beside the arrow")
+            besideOwl = false
         }
-        Log.menuBar.error("Presenter curtain didn't land left of the arrow; moving icons instead")
+        Log.menuBar.error("Presenter curtain didn't land left of the arrow (\(self.items.curtainReport, privacy: .public)); moving icons instead")
         items.lowerCurtain()
         return false
     }

@@ -217,7 +217,7 @@ enum ImageSampler {
     }
 
     /// The pixels in `rect` (image pixels, top left), row by row, as RGBA bytes on white.
-    private static func rgba(in image: CGImage, rect: CGRect) -> [UInt8] {
+    static func rgba(in image: CGImage, rect: CGRect) -> [UInt8] {
         guard let part = image.cropping(to: rect) else { return [] }
         let width = part.width
         let height = part.height

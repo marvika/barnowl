@@ -1,97 +1,108 @@
 import AppKit
 
-/// macOS 27: ask macOS to show only an allow-list of apps, through the private
+/// macOS 27: tell macOS which apps may show their icons, through the private
 /// restriction behind exam (assessment) mode. macOS hides the rest and reflows
-/// the bar itself. Adapted from Hidden Bar's engine (see THIRD_PARTY_NOTICES.md).
+/// the bar itself. The technique comes from Hidden Bar (see
+/// THIRD_PARTY_NOTICES.md); which apps to let through comes from Barn Owl's
+/// own table (`AppRows`), not from where icons sit.
 ///
-/// Limits of what macOS 27 exposes:
+/// What macOS 27.0 allows, measured on a Mac running it:
 /// - Hiding is per app: an app with several icons hides or shows them all.
-/// - System items (clock, Wi-Fi, Control Center…) always stay visible.
-/// - Sections can only be read while nothing is hidden, so an app launched
-///   while collapsed stays where macOS puts it until the next collapse.
-///
-/// Experimental: written against Hidden Bar's findings and not yet tested on
-/// macOS 27 hardware.
+/// - macOS's own Sound, Battery, Wi‑Fi, Control Center and clock always show,
+///   whatever the restriction lists. Now Playing hides whenever anything does.
+/// - Several restrictions add up: macOS shows what any of them allows. Barn
+///   Owl holds one at a time, and swaps it for a new one without a gap.
+/// - The restriction ends by itself when Barn Owl quits or crashes, so icons
+///   are never left hidden.
+/// - Barn Owl's own icons hide too unless it lists itself, so it always does.
 @MainActor
 final class NativeVisibilityEngine: HidingEngine {
-    let displayName = "Native visibility (macOS 27)"
+    let displayName = "Per app (macOS 27)"
     let needsAccessibility = true
 
-    /// System item IDs to keep. Unknown IDs are ignored, so a generous range
-    /// covers items a given Mac doesn't have.
-    private static let systemItemsToKeep = (0..<64).map { NSNumber(value: $0) }
+    /// The system-item list the restriction takes. It changes nothing on
+    /// macOS 27.0; the full range is passed in case a later release reads it.
+    private static let systemItems = (0..<64).map { NSNumber(value: $0) }
 
-    private let items: StatusItems
+    /// Which apps may show in a state, or nil when that state hides nothing.
+    /// The layout sets this once it exists.
+    var allowedApps: (SectionState) -> Set<String>? = { _ in nil }
+
     private var assertion: AnyObject?
-    private var layout: SectionLayout?
-    /// Bumped by every apply, so a slow activation can't win over a newer one.
+    /// What the restriction in force allows.
+    private var active: [String]?
+    private var state = SectionState.expandedAll
+    private var presenting = false
+    private var revealed: Set<String> = []
+    /// A capture wants a clean menu bar: only the revealed apps stay, beside
+    /// Barn Owl's own icons.
+    private var alone = false
+    /// Bumped by every change, so a slow activation can't win over a newer one.
     private var generation = 0
 
-    init(items: StatusItems) {
-        self.items = items
-    }
+    /// Whether this macOS still has the restriction. A later one may drop it.
+    var isAvailable: Bool { BKNativeVisibilityIsAvailable() }
 
     func apply(_ state: SectionState, alwaysHiddenEnabled: Bool) async -> Bool {
-        generation += 1
-        let generation = self.generation
-        let alwaysHidden = alwaysHiddenEnabled ? items.ensureAlwaysHiddenItem() : items.alwaysHidden
-        alwaysHidden?.length = alwaysHiddenEnabled ? StatusItems.dividerLength : 0
+        self.state = state
+        return await update()
+    }
 
-        if state == .expandedAll || (state == .expanded && !alwaysHiddenEnabled) {
-            release()
-            items.setDividerVisible(items.separator, true)
-            return true
-        }
-        guard BKNativeVisibilityIsAvailable() else {
-            Log.menuBar.error("Native visibility API is not available on this macOS")
-            return false
-        }
-        guard AccessibilityInventory.isTrusted else {
-            AccessibilityInventory.requestTrust()
-            Log.menuBar.error("Accessibility permission is needed to read the menu bar sections")
-            return false
-        }
-        guard let layout = await currentLayout(alwaysHiddenEnabled: alwaysHiddenEnabled),
-              generation == self.generation else { return false }
-
-        let sections: Set<MenuBarSection> = state == .collapsed ? [.visible] : [.visible, .hidden]
-        let allowed = [Bundle.main.bundleIdentifier].compactMap { $0 } + layout.bundles(in: sections)
-        let ok = await activate(allowing: allowed, generation: generation)
-        if ok {
-            items.setDividerVisible(items.separator, state != .collapsed)
-        }
-        return ok
+    func refresh() async {
+        _ = await update()
     }
 
     func invalidateLayout() {
-        if assertion == nil { layout = nil }
+        // Nothing here depends on the displays.
     }
 
-    /// Only Barn Owl's own items (and the system's) stay.
+    /// Only Barn Owl's own icons (and macOS's) stay.
     func setPresenting(_ presenting: Bool) async -> Bool {
+        self.presenting = presenting
+        return await update()
+    }
+
+    func reveal(_ apps: Set<String>, alone: Bool) async -> Bool {
+        revealed = apps
+        self.alone = alone
+        return await update()
+    }
+
+    /// The apps to let through now, or nil for all of them.
+    private var wanted: [String]? {
+        let onlyOwn = presenting || alone
+        let rows = onlyOwn || state == .expandedAll ? nil : allowedApps(state)
+        return Self.appsToShow(own: Bundle.main.bundleIdentifier, onlyOwn: onlyOwn, revealed: revealed, rows: rows)
+    }
+
+    /// The apps macOS may show, or nil for all of them. Pure, so it can be tested.
+    ///
+    /// - `onlyOwn`: presenting, or a capture with a clean menu bar: every
+    ///   other app's icon is out of view, whatever the rows say.
+    /// - `revealed`: apps let through for now, either way.
+    /// - `rows`: what the rows in view allow, or nil when they hide nothing.
+    nonisolated static func appsToShow(own: String?, onlyOwn: Bool, revealed: Set<String>,
+                                       rows: Set<String>?) -> [String]? {
+        let own = own.map { [$0] } ?? []
+        if onlyOwn { return revealed.union(own).sorted() }
+        guard let rows else { return nil }
+        return rows.union(revealed).union(own).sorted()
+    }
+
+    private func update() async -> Bool {
         generation += 1
         let generation = self.generation
-        if presenting {
-            return await activate(allowing: [Bundle.main.bundleIdentifier].compactMap { $0 }, generation: generation)
+        guard let wanted else {
+            release()
+            return true
         }
-        release()
-        return true
-    }
-
-    /// Fresh from an unrestricted bar; while a restriction is active, hidden
-    /// items report stale positions, so the cached layout stands in.
-    private func currentLayout(alwaysHiddenEnabled: Bool) async -> SectionLayout? {
-        if assertion != nil, let layout { return layout }
-        guard let separatorFrame = StatusItems.frame(of: items.separator) else { return nil }
-        let alwaysHiddenFrame = alwaysHiddenEnabled ? StatusItems.frame(of: items.alwaysHidden) : nil
-        let inventory = await AccessibilityInventory.snapshot()
-        let resolved = SectionLayoutResolver.resolve(items: inventory,
-                                                     separatorFrame: separatorFrame,
-                                                     alwaysHiddenFrame: alwaysHiddenFrame,
-                                                     excluding: Bundle.main.bundleIdentifier)
-        Log.menuBar.info("Sections: visible \(resolved.bundles(in: [.visible])), hidden \(resolved.bundles(in: [.hidden])), always hidden \(resolved.bundles(in: [.alwaysHidden]))")
-        layout = resolved
-        return resolved
+        if assertion != nil, wanted == active { return true }
+        guard BKNativeVisibilityIsAvailable() else {
+            Log.menuBar.error("The menu bar restriction isn't available on this macOS")
+            release()
+            return false
+        }
+        return await activate(allowing: wanted, generation: generation)
     }
 
     /// Activates the new restriction before dropping the old one, so switching
@@ -103,7 +114,7 @@ final class NativeVisibilityEngine: HidingEngine {
             // The private API's callback could come twice (an error after a
             // result); resuming a continuation twice crashes.
             let once = OnceFlag()
-            BKNativeVisibilityActivate(Self.systemItemsToKeep, bundles) { assertion, error in
+            BKNativeVisibilityActivate(Self.systemItems, bundles) { assertion, error in
                 guard once.claim() else { return }
                 continuation.resume(returning: ActivationResult(assertion: assertion as AnyObject?,
                                                                 error: error?.localizedDescription))
@@ -115,19 +126,22 @@ final class NativeVisibilityEngine: HidingEngine {
         }
         guard let newAssertion = result.assertion else {
             // Fail open: never leave icons hidden after an error.
-            Log.menuBar.error("Native visibility activation failed: \(result.error ?? "unknown error")")
+            Log.menuBar.error("Hiding icons failed: \(result.error ?? "unknown error", privacy: .public)")
             release()
             return false
         }
         let old = assertion
         assertion = newAssertion
+        active = bundles
         if let old { BKNativeVisibilityInvalidate(old) }
+        Log.menuBar.info("Showing \(bundles.count) apps' icons, hiding the rest")
         return true
     }
 
     private func release() {
         if let assertion { BKNativeVisibilityInvalidate(assertion) }
         assertion = nil
+        active = nil
     }
 }
 

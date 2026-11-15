@@ -26,6 +26,10 @@ struct ClaudeSessionFileTests {
         #expect(ClaudeSource.projectFolderName(for: "/Users/me/code/priv/macos-menubar")
                 == "-Users-me-code-priv-macos-menubar")
         #expect(ClaudeSource.projectFolderName(for: "/a/b.c d_e") == "-a-b-c-d-e")
+        // As JavaScript counts them: an emoji is two units, a separate accent mark one more.
+        #expect(ClaudeSource.projectFolderName(for: "/x/My 🦉 App") == "-x-My----App")
+        #expect(ClaudeSource.projectFolderName(for: "/x/l\u{E5}ve") == "-x-l-ve")
+        #expect(ClaudeSource.projectFolderName(for: "/x/la\u{30A}ve") == "-x-la-ve")
     }
 
     @Test func keyFilesAreNeverListed() throws {
@@ -173,6 +177,31 @@ struct ClaudeLogTests {
         #expect(log.failures == 1)
     }
 
+    @Test func aHugePromptStartsATurn() {
+        var log = ClaudeSource.LogState()
+        log.consume(toolUse("1", "Bash", command: "make", at: "2026-10-19T08:00:00.000Z"))
+        log.consume(endTurn(at: "2026-10-19T08:00:30.000Z"))
+        // A prompt with a pasted screenshot.
+        let picture = String(repeating: "A", count: 300_000)
+        let prompt = #"{"isSidechain":false,"type":"user","message":{"role":"user","content":[{"type":"image","source":{"data":""#
+            + picture + #""}},{"type":"text","text":"why?"}]},"uuid":"u","timestamp":"2026-10-19T10:00:00.000Z"}"#
+        log.consume(Substring(prompt))
+        #expect(log.turnStarted == ClaudeSource.LogState.date(from: "2026-10-19T10:00:00.000Z"))
+        #expect(log.turnEnded == nil)
+        #expect(log.pending.isEmpty)
+    }
+
+    @Test func aHugeFileBeingWrittenIsTheCurrentTool() {
+        var log = ClaudeSource.LogState()
+        let content = String(repeating: "x", count: 300_000)
+        let write = #"{"type":"assistant","message":{"content":[{"type":"tool_use","id":"w1","name":"Write","input":{"file_path":"/p/big.json","content":""#
+            + content + #""}}],"stop_reason":"tool_use"},"timestamp":"2026-10-19T10:00:00.000Z"}"#
+        log.consume(Substring(write))
+        #expect(log.pending["w1"] == "Write")
+        #expect(log.editedFiles == ["/p/big.json"])
+        #expect(log.requests["w1"]?.text == "big.json")
+    }
+
     @Test func aBusySessionSilentForHoursIsNotWorking() {
         var log = ClaudeSource.LogState()
         log.consume(toolUse("1", "Bash", command: "sleep 9999", at: "2026-10-19T08:00:00.000Z"))
@@ -221,6 +250,11 @@ struct ClaudeLogTests {
         reused.pid = getpid()
         reused.procStart = "Thu Jan  1 00:00:00 2015"
         #expect(!ClaudeSource.isLive(reused))
+        // Another PID namespace (a container sharing ~/.claude): not this Mac's process.
+        var elsewhere = file(status: "busy")
+        elsewhere.pid = getpid()
+        elsewhere.pidDomain = "linux"
+        #expect(!ClaudeSource.isLive(elsewhere))
     }
 
     @Test func subagentRecordsAreIgnoredInTheMainLog() {
@@ -262,6 +296,21 @@ struct CodexLogTests {
         #expect(log.state(now: hit.addingTimeInterval(16 * 60)).state != .teaBreak)
         log.consume(event("token_count", ["rate_limits": ["rate_limit_reached_type": NSNull()]]))
         #expect(log.state(now: Date()).state != .teaBreak)
+    }
+
+    @Test func aTurnFollowedFromItsMiddleIsWork() {
+        var log = CodexSource.LogState()
+        // Its start is further back than the first read went.
+        log.consume(["type": "response_item", "timestamp": "2026-10-19T10:00:00.000Z",
+                     "payload": ["type": "function_call", "name": "exec_command"]])
+        let soon = ClaudeSource.LogState.date(from: "2026-10-19T10:00:10.000Z")!
+        #expect(log.state(now: soon).state == .running)
+        // Quiet since: not at work after all.
+        let later = ClaudeSource.LogState.date(from: "2026-10-19T10:05:00.000Z")!
+        #expect(!log.state(now: later).state.isWorking)
+        // Once a turn's end is seen, that decides.
+        log.consume(event("task_complete"))
+        #expect(!log.state(now: soon).state.isWorking)
     }
 }
 
@@ -513,9 +562,11 @@ struct PlanLimitTests {
     }
 
     @Test func theRelayKeepsYourStatusLineSettings() {
-        let line = StatusLineRelay.relayLine(replacing: ["type": "command", "command": "~/bin/line", "padding": 2],
+        let line = StatusLineRelay.relayLine(replacing: ["type": "command", "command": "~/bin/line", "padding": 2,
+                                                         "someNewSetting": true],
                                              binary: "/Applications/Barn Owl.app/Contents/MacOS/Barn Owl")
         #expect(line["padding"] as? Int == 2)
+        #expect(line["someNewSetting"] as? Bool == true)
         let command = line["command"] as? String ?? ""
         #expect(StatusLineRelay.isRelay(command))
         #expect(!StatusLineRelay.isRelay("~/bin/line"))
@@ -785,6 +836,9 @@ struct IslandAnswerTests {
         let removed = IslandAnswers.removing(from: added)
         #expect(removed.keys.sorted() == ["PreToolUse"])
         #expect(((removed["PreToolUse"] as? [[String: Any]])?.first?["matcher"] as? String) == "Bash")
+        // Your own empty group, left from deleting its last hook, isn't Barn Owl's to tidy.
+        let leftover: [String: Any] = ["PreToolUse": [["matcher": "Bash", "hooks": [[String: Any]]()]], "Stop": [[String: Any]]()]
+        #expect(NSDictionary(dictionary: IslandAnswers.removing(from: leftover)).isEqual(to: leftover))
     }
 
     @Test func turnsOnAndOffThroughTheSettingsFile() throws {

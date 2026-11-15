@@ -79,5 +79,6 @@ Still to verify: display profiles with a real external display.
 
 ## Later
 
-- Test on macOS 27 and place Barn Owl's own icons there
+- macOS 27: start presenting when the screen is shared (macOS no longer says
+  when), and verify a second display and full-screen apps
 - Verify display profiles and closed-lid mode on real hardware

@@ -10,6 +10,11 @@ final class SectionController {
     var onStateChange: ((SectionState) -> Void)?
     /// Displays were connected, disconnected or rearranged.
     var onScreensChanged: (() -> Void)?
+    /// The apps with an icon in a hidden section, whose open menus keep the
+    /// icons showing.
+    var hiddenIconOwners: () -> Set<pid_t> = { [] }
+    /// Whether presenter mode has every other app's icon out of view.
+    var isPresenting: () -> Bool = { false }
 
     /// Keeps hidden icons showing, e.g. while setup or Settings asks the user
     /// to arrange them. Clearing it starts the auto-rehide timer again.
@@ -55,6 +60,64 @@ final class SectionController {
         set(state)
     }
 
+    /// The layout or the running apps changed. Unlike `refresh`, nothing is
+    /// announced and the rehide timer keeps running: the state is the same,
+    /// only which icons it hides may differ.
+    func layoutChanged() {
+        Task { await engine.refresh() }
+    }
+
+    /// Whether icons in `section` are in view now.
+    func shows(_ section: MenuBarSection) -> Bool {
+        switch state {
+        case .collapsed: section == .visible
+        case .expanded: section != .alwaysHidden || !Preferences.alwaysHiddenEnabled
+        case .expandedAll: true
+        }
+    }
+
+    /// What shows or stays out of view for now, whatever the rows say.
+    private var temporary = TemporaryVisibility()
+
+    /// macOS 27: shows these apps' icons until `reason` peeks at something
+    /// else or at nothing. False where macOS can't show one app's icons on
+    /// their own (macOS 26: the icon is moved instead).
+    func peek(_ apps: Set<String>, for reason: String) async -> Bool {
+        temporary.peek(apps, for: reason)
+        return await applyTemporary()
+    }
+
+    /// macOS 27: whether a capture has every other app's icon out of view,
+    /// for a clean menu bar.
+    var isCleanForCapture: Bool { temporary.isClean }
+    /// Whether `holdClean` can hide anything: only where macOS hides by app.
+    var canHoldClean: Bool { (engine as? NativeVisibilityEngine)?.isAvailable ?? false }
+    /// That started or ended.
+    var onCleanForCaptureChange: (() -> Void)?
+
+    /// macOS 27: takes every other app's icon out of view, the visible ones
+    /// included, until `endClean` is called for the same `reason`. The state,
+    /// presenting and peeks all carry on underneath, so when it ends the menu
+    /// bar is as they have it by then. If hiding fails the engine shows every
+    /// icon, and if Barn Owl quits macOS does: icons are never left hidden.
+    func holdClean(for reason: String) async {
+        let wasClean = temporary.isClean
+        temporary.holdClean(for: reason)
+        if !wasClean { onCleanForCaptureChange?() }
+        _ = await applyTemporary()
+    }
+
+    func endClean(for reason: String) async {
+        guard temporary.cleanFor.contains(reason) else { return }
+        temporary.endClean(for: reason)
+        if !temporary.isClean { onCleanForCaptureChange?() }
+        _ = await applyTemporary()
+    }
+
+    private func applyTemporary() async -> Bool {
+        await engine.reveal(temporary.revealed(opening: ItemOpener.peekReason), alone: temporary.isClean)
+    }
+
     /// `byUser`: the user asked (clicked the arrow, pressed the hotkey), so
     /// a problem is worth an alert. Collapses Barn Owl does by itself (the
     /// rehide timer, launch, a display change) only log it: a modal alert out
@@ -78,7 +141,8 @@ final class SectionController {
     }
 
     /// If the "|" divider ends up right of the toggle, collapsing would hide the
-    /// toggle too and leave only the hotkey to bring it back.
+    /// toggle too and leave only the hotkey to bring it back. macOS 27 has no
+    /// dividers to get out of order.
     func arrangementProblem() -> String? {
         guard let toggle = StatusItems.frame(of: items.toggle),
               let separator = StatusItems.frame(of: items.separator) else { return nil }
@@ -97,6 +161,7 @@ final class SectionController {
         guard Preferences.autoRehide, !holdOpen else { return }
         let delay = Preferences.autoRehideDelay
         rehideTask = Task { [weak self] in
+            var menuOpenSince: Date?
             while true {
                 try? await Task.sleep(for: .seconds(delay))
                 guard !Task.isCancelled, let self else { return }
@@ -104,8 +169,13 @@ final class SectionController {
                 // about to click one of the revealed items.
                 if self.isPointerInMenuBar() { continue }
                 // Nor while a menu from one of them is open: hiding its icon
-                // would leave the menu hanging from nothing, or close it.
-                if ItemOpener.anyMenuOpen() { continue }
+                // would leave the menu hanging from nothing, or close it. Five
+                // minutes at most, in case a window only looks like a menu.
+                if ItemOpener.anyMenuOpen(ownedBy: self.hiddenIconOwners()) {
+                    let since = menuOpenSince ?? Date()
+                    menuOpenSince = since
+                    if Date().timeIntervalSince(since) < 300 { continue }
+                }
                 self.collapse()
                 return
             }

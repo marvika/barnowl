@@ -91,6 +91,11 @@ enum CodexSource {
         var limits: [PlanLimit] = []
         /// The model of its latest turn: "gpt-6-astra".
         var model: String?
+        /// A turn's start or end was read. Not yet when the log was first read
+        /// in the middle of a long turn: its start was further back.
+        var turnKnown = false
+        /// When it last logged something it does during a turn.
+        var lastWork: Date?
 
         mutating func consume(_ line: Substring) {
             guard line.utf8.count < 256_000, let data = line.data(using: .utf8),
@@ -101,6 +106,8 @@ enum CodexSource {
         mutating func consume(_ record: [String: Any]) {
             let time = (record["timestamp"] as? String).flatMap(ClaudeSource.LogState.date(from:))
             guard let payload = record["payload"] as? [String: Any] else { return }
+            if ["event_msg", "response_item"].contains(record["type"] as? String) { lastWork = time ?? lastWork }
+            if ["task_started", "task_complete", "turn_aborted"].contains(payload["type"] as? String) { turnKnown = true }
             switch (record["type"] as? String, payload["type"] as? String) {
             case ("turn_context", _):
                 if let model = payload["model"] as? String, !model.isEmpty, model.count < 80 { self.model = model }
@@ -154,7 +161,9 @@ enum CodexSource {
                now.timeIntervalSince(at) < 15 * 60 {
                 return (.teaBreak, "Paused for the plan limit")
             }
-            if busy {
+            // Followed from the middle of a turn: still logging, so still at work.
+            let midTurn = !turnKnown && lastWork.map { now.timeIntervalSince($0) < 30 } == true
+            if busy || midTurn {
                 if failures >= ClaudeSource.LogState.stuckAfter { return (.fixing, "Fixing after \(failures) failed commands") }
                 switch lastTool {
                 case "exec", "shell", "exec_command", "local_shell", "container.exec": return (.running, nil)

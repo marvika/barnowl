@@ -10,6 +10,9 @@ import ScreenCaptureKit
 /// hidden section is expanded) and keeps the pictures. One capture of the
 /// menu bar strip, filtered to the item windows so the background is
 /// transparent, is cropped into one image per item.
+///
+/// On macOS 27 the whole bar is one window of MenuBarAgent's. That window is
+/// captured instead, and cropped to where each icon in view is.
 @MainActor
 @Observable
 final class ItemImageCache {
@@ -73,9 +76,35 @@ final class ItemImageCache {
         guard Self.hasPermission, let screen = NSScreen.screens.first else { return }
         lastCapture = Date()
         defer { lastCapture = Date() }
-        // The clock's window runs a couple of points past the screen edge.
-        let onScreen = items.filter { $0.frame.minX >= screen.frame.minX && $0.frame.maxX <= screen.frame.maxX + 4 }
-        guard !onScreen.isEmpty, let captured = await Self.capture(onScreen, screen: screen) else { return }
+        var onScreen: [MenuBarItem] = []
+        var captured: [CGWindowID: Piece] = [:]
+        if MenuBarPlatform.hidesByApp {
+            // Icons slide into place as the bar makes room, and say where
+            // they'll end up before they get there. So the pictures are taken
+            // until two in a row are the same: a picture cut from a sliding
+            // icon would be kept for good.
+            var last: [CGWindowID: Data] = [:]
+            var steady = false
+            for _ in 0..<6 where !steady {
+                await LayoutController.waitForMenuBarToSettle()
+                onScreen = await Self.inView(items)
+                guard !onScreen.isEmpty, let pieces = await Self.capture(onScreen, screen: screen) else { return }
+                let pixels = pieces.compactMapValues(\.cgImage.pixels)
+                steady = !pixels.isEmpty && pixels == last
+                captured = pieces
+                last = pixels
+                if !steady { try? await Task.sleep(for: .milliseconds(250)) }
+            }
+            guard steady else {
+                Log.menuBar.info("The menu bar kept moving; no icon pictures taken this time")
+                return
+            }
+        } else {
+            // The clock's window runs a couple of points past the screen edge.
+            onScreen = items.filter { $0.frame.minX >= screen.frame.minX && $0.frame.maxX <= screen.frame.maxX + 4 }
+            guard !onScreen.isEmpty, let pieces = await Self.capture(onScreen, screen: screen) else { return }
+            captured = pieces
+        }
         // Drop pictures of windows that no longer exist.
         let live = Set(items.map(\.windowID))
         images = images.filter { !pruning || live.contains($0.key) }.merging(captured.mapValues(\.image)) { _, new in new }
@@ -86,6 +115,22 @@ final class ItemImageCache {
         }
     }
 
+    /// macOS 27: the items MenuBarAgent has in view, with the frames they have
+    /// now. A hidden icon still reports the place it last had, so its own
+    /// frame doesn't say it can be photographed.
+    private nonisolated static func inView(_ items: [MenuBarItem]) async -> [MenuBarItem] {
+        await Task.detached {
+            let icons = AgentBar.iconsInView()
+            return items.compactMap { item -> MenuBarItem? in
+                guard let frame = AccessibilityInventory.frame(of: item.element.raw),
+                      AgentBar.isShowing(pid: item.pid, frame: frame, among: icons) else { return nil }
+                var item = item
+                item.frame = frame
+                return item
+            }
+        }.value
+    }
+
     private struct Piece {
         let cgImage: CGImage
         let image: NSImage
@@ -93,16 +138,28 @@ final class ItemImageCache {
 
     private static func capture(_ items: [MenuBarItem], screen: NSScreen) async -> [CGWindowID: Piece]? {
         do {
-            let content = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true)
+            // MenuBarAgent's window says it's off screen, yet it's the one that draws the bar.
+            let content = try await SCShareableContent.excludingDesktopWindows(
+                false, onScreenWindowsOnly: !MenuBarPlatform.hidesByApp)
             let screenNumber = screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? CGDirectDisplayID
             guard let display = content.displays.first(where: { $0.displayID == screenNumber }) ?? content.displays.first
             else { return nil }
-            let ids = Set(items.map(\.windowID))
-            let windows = content.windows.filter { ids.contains($0.windowID) }
+            let windows: [SCWindow]
+            if MenuBarPlatform.hidesByApp {
+                windows = content.windows.filter {
+                    $0.owningApplication?.bundleIdentifier == MenuBarPlatform.agentBundle
+                        && $0.frame.height < 100 && $0.frame.intersects(display.frame)
+                }
+            } else {
+                let ids = Set(items.map(\.windowID))
+                windows = content.windows.filter { ids.contains($0.windowID) }
+            }
             guard !windows.isEmpty else { return nil }
 
             let scale = screen.backingScaleFactor
-            let stripHeight = items.map(\.frame.maxY).max() ?? 33
+            // Whole points: a strip 29.5 points tall comes back scaled to fit,
+            // and every icon is then cut from a little beside where it is.
+            let stripHeight = (items.map(\.frame.maxY).max() ?? 33).rounded(.up)
             let strip = CGRect(x: 0, y: 0, width: screen.frame.width, height: stripHeight)
             let config = SCStreamConfiguration()
             config.sourceRect = strip
@@ -131,6 +188,17 @@ final class ItemImageCache {
 }
 
 private extension CGImage {
+    /// The picture's pixels, drawn afresh (a crop shares its parent's buffer),
+    /// for telling whether two pictures are the same.
+    var pixels: Data? {
+        guard let context = CGContext(data: nil, width: width, height: height, bitsPerComponent: 8,
+                                      bytesPerRow: width * 4, space: CGColorSpaceCreateDeviceRGB(),
+                                      bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue),
+              let data = context.data else { return nil }
+        context.draw(self, in: CGRect(x: 0, y: 0, width: width, height: height))
+        return Data(bytes: data, count: width * height * 4)
+    }
+
     /// False for a fully transparent crop, e.g. an item that moved mid-capture.
     /// A crop shares its parent's pixel buffer, so it's redrawn on its own first.
     var hasVisiblePixels: Bool {

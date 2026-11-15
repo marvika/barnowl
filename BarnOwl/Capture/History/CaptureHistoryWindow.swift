@@ -18,10 +18,13 @@ protocol CaptureHistoryHost: AnyObject {
     func hasText(_ id: UUID) -> Bool
     /// Captures open in the editor: history keeps them while they are.
     var editingCaptures: Set<UUID> { get }
+    /// Those and any still being saved, opened or made into a GIF: pruning leaves them be.
+    var capturesInUse: Set<UUID> { get }
 }
 
 extension CaptureHistoryHost {
     func isEditing(_ id: UUID) -> Bool { editingCaptures.contains(id) }
+    var capturesInUse: Set<UUID> { editingCaptures }
 }
 
 extension CaptureCoordinator: CaptureHistoryHost {}
@@ -170,7 +173,7 @@ final class CaptureHistoryWindowController: NSWindowController, NSWindowDelegate
         startObserving()
         // Opens with its captures in place, not an empty window that fills a moment later;
         // those past their time go first, but never one open in the editor.
-        model.reload(pruning: host?.editingCaptures ?? []) { [weak self, weak window] in
+        model.reload(pruning: host?.capturesInUse ?? []) { [weak self, weak window] in
             guard let self, let window, self.isOpen, !window.isVisible else { return }
             self.present(window)
         }

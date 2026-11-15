@@ -59,14 +59,17 @@ enum SmartFit {
         return padded(line.rect)
     }
 
-    /// A Redact click: the private finding under the point, whole, or else the word.
-    static func redaction(at point: CGPoint, insight: CaptureInsight) -> (rect: CGRect, finding: SensitiveTextFinder.Finding?)? {
+    /// A Redact click: the private finding under the point, whole, or else the word, covered
+    /// the way a finding is: to the height of its line's ink in `image`, the capture.
+    static func redaction(at point: CGPoint, insight: CaptureInsight, image: CGImage? = nil)
+        -> (rect: CGRect, finding: SensitiveTextFinder.Finding?)? {
         if let finding = insight.text.findings.first(where: { $0.rect.contains(point) }) {
             return (finding.rect, finding)
         }
         for line in insight.text.lines where padded(line.rect).contains(point) {
             if let word = line.words.first(where: { padded($0.rect, line: line.rect).contains(point) }) {
-                return (SensitiveTextFinder.padded(word.rect, line: line.rect), nil)
+                guard let image else { return (SensitiveTextFinder.padded(word.rect, line: line.rect), nil) }
+                return (SensitiveTextFinder.cover(word.rect, line: line.rect, in: image), nil)
             }
         }
         return nil
@@ -237,7 +240,7 @@ extension EditorModel {
         case .highlighter:
             return SmartFit.line(at: point, insight: insight)
         case .redact:
-            return SmartFit.redaction(at: point, insight: insight)?.rect
+            return SmartFit.redaction(at: point, insight: insight, image: image)?.rect
         default:
             return nil
         }
@@ -251,7 +254,7 @@ extension EditorModel {
         mark.end = CGPoint(x: rect.maxX, y: rect.maxY)
         mark.origin = MarkOrigin(source: .fit, category: nil)
         if kind == .redact, mark.style.redact == .solid, let insight,
-           let hit = SmartFit.redaction(at: point, insight: insight) {
+           let hit = SmartFit.redaction(at: point, insight: insight, image: image) {
             mark.colour = redactionColour(over: hit.rect)
             if let finding = hit.finding { mark.origin = MarkOrigin(source: .privateInfo, category: finding.kind.rawValue) }
         }

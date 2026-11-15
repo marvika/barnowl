@@ -13,9 +13,12 @@ final class PresenterMode {
     private(set) var isChanging = false
     /// True when the current session started because screen sharing began.
     private(set) var startedAutomatically = false
-    /// True while the curtain keeps the visible icons out of view where they
-    /// are, rather than moved into the hidden section.
-    var iconsBehindCurtain: Bool { isPresenting && sections.items.curtain != nil }
+    /// True while the visible icons are kept out of view where they are (behind
+    /// the curtain, or by macOS 27 itself), rather than moved into the hidden
+    /// section.
+    var iconsBehindCurtain: Bool { isPresenting && (sections.items.curtain != nil || hidesInPlace) }
+    /// Whether the engine hid every other app's icon by itself.
+    private var hidesInPlace = false
     @ObservationIgnored var onChange: ((Bool) -> Void)?
 
     @ObservationIgnored private let sections: SectionController
@@ -47,7 +50,12 @@ final class PresenterMode {
         applySettings()
     }
 
+    /// macOS 27 no longer says in Control Center's description that the screen
+    /// is being shared, and nothing else readable has been found to say it.
+    static let canDetectSharing = !MenuBarPlatform.hidesByApp
+
     func applySettings() {
+        guard Self.canDetectSharing else { return }
         if Preferences.presenterAutomatic, task == nil {
             task = Task { [weak self] in
                 while !Task.isCancelled {
@@ -77,7 +85,7 @@ final class PresenterMode {
         Log.app.info("Presenter mode \(presenting ? "on" : "off")\(automatically ? " (screen sharing)" : "")")
         onChange?(presenting)
         sections.collapse()
-        let hidesInPlace = await sections.engine.setPresenting(presenting) && presenting
+        hidesInPlace = await sections.engine.setPresenting(presenting) && presenting
         if !hidesInPlace {
             presenting ? await hideVisibleIcons() : await restoreIcons()
         }
@@ -101,12 +109,14 @@ final class PresenterMode {
     }
 
     /// Moves every other app's visible icon into the hidden section, without
-    /// changing the saved layout. The clock and Control Center stay; macOS
-    /// won't move them.
+    /// changing the saved layout. macOS's own items stay: the clock and
+    /// Control Center can't move, and the rest (Battery, Wi‑Fi, Sound…) show
+    /// nothing private. A ⌘-drag of one of those is also how you take it off
+    /// the menu bar, so it isn't worth the risk.
     private func hideVisibleIcons() async {
         guard let divider = StatusItems.windowID(of: sections.items.separator) else { return }
         scanner.updateFrames()
-        for item in scanner.items where item.section == .visible && item.isMovable {
+        for item in scanner.items where Self.hidesForPresenting(item) {
             // Recorded first, so it's restored even if the move reports failure.
             // `scanner.items` runs left to right.
             movedKeys.append(item.key)
@@ -115,10 +125,16 @@ final class PresenterMode {
         scanner.updateFrames()
     }
 
+    nonisolated static func hidesForPresenting(_ item: MenuBarItem) -> Bool {
+        item.section == .visible && item.isMovable && !item.isSystem
+    }
+
     /// Each icon returns to the start of the visible section, so going from
     /// the rightmost to the leftmost keeps their order.
     private func restoreIcons() async {
         for key in movedKeys.reversed() { await layout.returnToRow(key) }
+        // Any the user was too busy for go back later, not stay where presenting put them.
+        for key in movedKeys { layout.takeBack(key) }
         movedKeys = []
     }
 

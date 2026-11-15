@@ -12,6 +12,8 @@ final class BarnModel {
         let name: String
         let size: Int64
         let modified: Date?
+        /// When the scan that showed it started: anything changed since is kept.
+        var scanned: Date? = nil
         var id: String { path }
     }
 
@@ -95,6 +97,7 @@ final class BarnModel {
         }
         refreshSpace()
         isMeasuring = true
+        remeasured = [:]
         measureRun += 1
         let run = measureRun
         // The places only you can judge are never cleaned and hardly change,
@@ -117,7 +120,7 @@ final class BarnModel {
                     if let suggestion {
                         found.append(suggestion)
                         // Show them as they come in.
-                        suggestions = Self.ordered(found)
+                        suggestions = withRemeasured(found)
                     }
                     if let rule = waiting.popFirst() {
                         group.addTask { await Self.measure(rule, fullDiskAccess: fullDiskAccess) }
@@ -125,7 +128,7 @@ final class BarnModel {
                 }
             }
             guard run == measureRun, !Task.isCancelled else { return }
-            suggestions = Self.ordered(found)
+            suggestions = withRemeasured(found)
             isMeasuring = false
             lastMeasured = Date()
             if measureYours { yoursMeasured = lastMeasured }
@@ -362,14 +365,18 @@ final class BarnModel {
         cleaning = "emptying"
         let before = DiskSpace.current()?.free ?? 0
         let size = report?.trashedSize ?? 0
-        var problems: [String] = []
-        for item in trashed {
-            do {
-                try CleanupRunner.removeFromTrash(item.to)
-            } catch {
-                problems.append("\(item.to.lastPathComponent): \(error.localizedDescription)")
+        // Off the main thread: a big folder takes a while, and the menu bar mustn't wait.
+        let problems = await Task.detached {
+            var problems: [String] = []
+            for item in trashed {
+                do {
+                    try CleanupRunner.removeFromTrash(item.to)
+                } catch {
+                    problems.append("\(item.to.lastPathComponent): \(error.localizedDescription)")
+                }
             }
-        }
+            return problems
+        }.value
         refreshSpace()
         report = Report(title: title, freed: max(0, (space?.free ?? before) - before), problems: problems,
                         expected: problems.count == trashed.count ? 0 : size)
@@ -380,9 +387,18 @@ final class BarnModel {
     private func measureAgain(_ rule: CleanupRule) {
         Task {
             let fresh = await Self.measure(rule, fullDiskAccess: fullDiskAccess)
+            if isMeasuring { remeasured[rule.id] = .some(fresh) }
             suggestions.removeAll { $0.id == rule.id }
             if let fresh { suggestions = Self.ordered(suggestions + [fresh]) }
         }
+    }
+
+    /// Rules measured again after a clean-up while the full look was still
+    /// going: its older numbers mustn't bring back what was just cleaned.
+    @ObservationIgnored private var remeasured: [String: Suggestion?] = [:]
+
+    private func withRemeasured(_ found: [Suggestion]) -> [Suggestion] {
+        Self.ordered(found.filter { remeasured[$0.id] == nil } + remeasured.values.compactMap { $0 })
     }
 
     // MARK: Exploring
@@ -491,7 +507,7 @@ final class BarnModel {
         guard canCollect(item.path) else { return }
         var item = item
         var info = stat()
-        if item.modified == nil, lstat(item.path, &info) == 0 {
+        if item.modified == nil, item.scanned == nil, lstat(item.path, &info) == 0 {
             // Noted now, so a change before it's trashed is noticed.
             item = Item(path: item.path, name: item.name, size: item.size,
                         modified: Date(timeIntervalSince1970: TimeInterval(info.st_mtimespec.tv_sec)))
@@ -513,18 +529,8 @@ final class BarnModel {
         var problems: [String] = []
         var size: Int64 = 0
         for item in basket {
-            if let refusal = Self.basketRefusal(DiskScanner.displayPath(item.path)) {
-                problems.append("\(item.name): kept, it's \(refusal)")
-                continue
-            }
-            var info = stat()
-            guard lstat(item.path, &info) == 0 else {
-                problems.append("\(item.name): no longer there")
-                continue
-            }
-            if let modified = item.modified,
-               abs(Date(timeIntervalSince1970: TimeInterval(info.st_mtimespec.tv_sec)).timeIntervalSince(modified)) > 1 {
-                problems.append("\(item.name): kept, it changed since the owl looked")
+            if let problem = Self.basketProblem(item) {
+                problems.append("\(item.name): \(problem)")
                 continue
             }
             var resulting: NSURL?
@@ -548,6 +554,31 @@ final class BarnModel {
         show(Report(title: "Your basket", freed: 0, trashed: trashed, trashedSize: size, problems: problems))
         refreshSpace()
         measureAgain(CleanupRule.trash)
+    }
+
+    /// Why something in the basket must stay where it is now, or nil if it can
+    /// go to the Trash: the scan may be old, and the path may hold something else.
+    nonisolated static func basketProblem(_ item: Item, home: String = CleanupRule.realHome) -> String? {
+        if let refusal = basketRefusal(DiskScanner.displayPath(item.path), home: home) { return "kept, it's \(refusal)" }
+        // Its folder must be the one the scan saw, not a link put there since,
+        // which would take the same name from somewhere you never looked.
+        let folder = (item.path as NSString).deletingLastPathComponent
+        guard realPath(folder) == folder else { return "kept, its folder is now somewhere else" }
+        var info = stat()
+        guard lstat(item.path, &info) == 0 else { return "no longer there" }
+        return changed(info, since: item) ? "kept, it changed since the owl looked" : nil
+    }
+
+    /// A file changed or put in its place after the scan (its content, or its
+    /// name pointing at another file) is newer than the scan.
+    nonisolated static func changed(_ info: stat, since item: Item) -> Bool {
+        let seconds = { (time: timespec) in TimeInterval(time.tv_sec) + TimeInterval(time.tv_nsec) / 1e9 }
+        let modified = Date(timeIntervalSince1970: seconds(info.st_mtimespec))
+        let changed = Date(timeIntervalSince1970: seconds(info.st_ctimespec))
+        if let scanned = item.scanned { return max(modified, changed) > scanned }
+        // Without a time to go by, it can't be told apart from something new.
+        guard let known = item.modified else { return true }
+        return abs(modified.timeIntervalSince(known)) > 1
     }
 }
 

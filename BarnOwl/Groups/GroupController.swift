@@ -67,7 +67,7 @@ final class GroupController {
         // A custom icon opens its one icon's menu right away.
         if let group = model.groups.groups.first(where: { $0.id == id }), group.opensDirectly,
            group.memberKeys.count == 1,
-           let member = model.scanner.items.first(where: { $0.key == group.memberKeys[0] }) {
+           let member = model.groups.members(of: group, among: model.scanner.items).first {
             close()
             model.opener.open(member, near: windowID(of: id))
             return
@@ -118,8 +118,7 @@ private struct GroupPanelView: View {
 
     private var members: [MenuBarItem] {
         guard let group else { return [] }
-        let byKey = Dictionary(model.scanner.items.map { ($0.key, $0) }, uniquingKeysWith: { a, _ in a })
-        return group.memberKeys.compactMap { byKey[$0] }
+        return model.groups.members(of: group, among: model.scanner.items)
     }
 
     var body: some View {

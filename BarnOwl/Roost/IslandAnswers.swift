@@ -356,19 +356,22 @@ enum IslandAnswers {
         return hooks
     }
 
-    /// The hooks without ours; events left empty are dropped.
+    /// The hooks without ours. A group or event left empty by taking ours out
+    /// goes too; everything else stays exactly as you had it.
     static func removing(from hooks: [String: Any]) -> [String: Any] {
         var hooks = hooks
+        let holdsOurs = { (group: [String: Any]) in ((group["hooks"] as? [[String: Any]]) ?? []).contains(where: isOurs) }
         for (event, value) in hooks {
-            guard var groups = value as? [[String: Any]] else { continue }
-            groups = groups.compactMap { group in
+            guard let groups = value as? [[String: Any]], groups.contains(where: holdsOurs) else { continue }
+            let left = groups.compactMap { group -> [String: Any]? in
+                guard holdsOurs(group) else { return group }
                 var group = group
                 let inner = ((group["hooks"] as? [[String: Any]]) ?? []).filter { !isOurs($0) }
                 guard !inner.isEmpty else { return nil }
                 group["hooks"] = inner
                 return group
             }
-            hooks[event] = groups.isEmpty ? nil : groups
+            hooks[event] = left.isEmpty ? nil : left
         }
         return hooks
     }

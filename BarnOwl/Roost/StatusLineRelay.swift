@@ -146,11 +146,12 @@ enum StatusLineRelay {
         }
     }
 
+    /// Your status line with the relay in front of its command; its other
+    /// settings (padding, how often it refreshes, any added later) stay.
     static func relayLine(replacing existing: [String: Any]?, binary: String) -> [String: Any] {
-        var line: [String: Any] = ["type": "command",
-                                   "command": command(binary: binary, original: existing?["command"] as? String)]
-        if let padding = existing?["padding"] { line["padding"] = padding }
-        if let interval = existing?["refreshInterval"] { line["refreshInterval"] = interval }
+        var line = existing ?? [:]
+        line["type"] = "command"
+        line["command"] = command(binary: binary, original: existing?["command"] as? String)
         return line
     }
 

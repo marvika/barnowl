@@ -277,3 +277,108 @@ struct TrackingSelectorTests {
         #expect(QuickPanelController.instancesRespond(to: NSSelectorFromString(selector)))
     }
 }
+
+struct OpenMenuTests {
+    private func window(pid: pid_t, layer: Int, y: CGFloat, width: CGFloat = 240) -> [String: Any] {
+        [kCGWindowOwnerPID as String: NSNumber(value: pid), kCGWindowLayer as String: NSNumber(value: layer),
+         kCGWindowBounds as String: ["X": CGFloat(800), "Y": y, "Width": width, "Height": CGFloat(300)]]
+    }
+
+    private let menuLevel = Int(CGWindowLevelForKey(.popUpMenuWindow))
+
+    @Test func theMenuBarItselfIsNoMenu() {
+        // Window Server's "Menubar" is always on screen at the top: counting it
+        // kept hidden icons showing for good.
+        let menuBar = window(pid: 418, layer: Int(CGWindowLevelForKey(.mainMenuWindow)), y: 0, width: 1728)
+        #expect(!ItemOpener.isMenu(menuBar, ownedBy: [418, 42], screenTops: [0]))
+        #expect(!ItemOpener.isMenu(menuBar, ownedBy: [42], screenTops: [0]))
+    }
+
+    @Test func aHiddenIconsMenuUnderTheBarCounts() {
+        #expect(ItemOpener.isMenu(window(pid: 42, layer: menuLevel, y: 33), ownedBy: [42], screenTops: [0]))
+        // On a second display above the main one.
+        #expect(ItemOpener.isMenu(window(pid: 42, layer: menuLevel, y: -1047), ownedBy: [42], screenTops: [0, -1080]))
+    }
+
+    @Test func otherAppsAndOtherPlacesDontCount() {
+        #expect(!ItemOpener.isMenu(window(pid: 7, layer: menuLevel, y: 33), ownedBy: [42], screenTops: [0]))
+        #expect(!ItemOpener.isMenu(window(pid: 42, layer: menuLevel, y: 400), ownedBy: [42], screenTops: [0]))
+        #expect(!ItemOpener.isMenu(window(pid: 42, layer: 0, y: 33), ownedBy: [42], screenTops: [0]))
+        let statusLevel = Int(CGWindowLevelForKey(.statusWindow))
+        #expect(!ItemOpener.isMenu(window(pid: 42, layer: statusLevel, y: 0), ownedBy: [42], screenTops: [0]))
+    }
+}
+
+@MainActor
+struct PresenterFallbackTests {
+    private func item(_ bundle: String, title: String? = nil, section: MenuBarSection = .visible) -> MenuBarItem {
+        var item = MenuBarItem(windowID: 1, frame: CGRect(x: 0, y: 0, width: 30, height: 24), pid: 1,
+                               bundleIdentifier: bundle, appName: "App", title: title,
+                               element: AXElement(raw: AXUIElementCreateSystemWide()))
+        item.section = section
+        return item
+    }
+
+    @Test func movesOtherAppsVisibleIcons() {
+        #expect(PresenterMode.hidesForPresenting(item("com.microsoft.teams2")))
+        #expect(!PresenterMode.hidesForPresenting(item("com.microsoft.teams2", section: .hidden)))
+    }
+
+    @Test func leavesMacOSItemsAlone() {
+        #expect(!PresenterMode.hidesForPresenting(item("com.apple.controlcenter", title: "Battery, 80 percent")))
+        #expect(!PresenterMode.hidesForPresenting(item("com.apple.controlcenter", title: "Wi‑Fi, connected")))
+        #expect(!PresenterMode.hidesForPresenting(item("com.apple.Spotlight")))
+    }
+}
+
+@MainActor
+struct AlwaysShownTests {
+    private func item(title: String?, windowName: String? = nil,
+                      bundle: String = "com.apple.controlcenter") -> MenuBarItem {
+        MenuBarItem(windowID: 1, frame: CGRect(x: 0, y: 0, width: 30, height: 24), pid: 1,
+                    bundleIdentifier: bundle, appName: "Control Center", title: title,
+                    element: AXElement(raw: AXUIElementCreateSystemWide()), windowName: windowName)
+    }
+
+    @Test func batteryAlwaysShowsAndIsNeverMovedByBarnOwl() {
+        for battery in [item(title: "Battery, 80 percent"), item(title: nil, windowName: "Battery")] {
+            #expect(battery.alwaysShows)
+            #expect(!battery.isMovable)
+            #expect(!PresenterMode.hidesForPresenting(battery))
+        }
+    }
+
+    @Test func otherIconsDont() {
+        let wifi = item(title: "Wi‑Fi, connected", windowName: "WiFi")
+        #expect(!wifi.alwaysShows)
+        #expect(wifi.isMovable)
+        #expect(!item(title: "Battery", bundle: "com.example.batterybar").alwaysShows)
+    }
+}
+
+/// Where the presenting curtain may land.
+struct PresenterCurtainTests {
+    private let arrow = CGRect(x: 1488, y: 0, width: 27, height: 33)
+    private let owl = CGRect(x: 1440, y: 0, width: 48, height: 33)
+
+    @Test func besideTheOwlLeavesItsMenuInReach() {
+        let curtain = CGRect(x: -2560, y: 0, width: 4000, height: 33)
+        #expect(StatusItems.isBeside(owl, arrow))
+        #expect(StatusItems.curtainLanded(curtain, arrow: arrow, owl: owl))
+    }
+
+    @Test func besideTheOwlButWithAnotherIconBetweenDoesntCount() {
+        // Landed one icon further left: that icon would show on the shared screen.
+        let curtain = CGRect(x: -2590, y: 0, width: 4000, height: 33)
+        #expect(!StatusItems.curtainLanded(curtain, arrow: arrow, owl: owl))
+        // The owl moved away from the arrow meanwhile.
+        let movedOwl = owl.offsetBy(dx: -30, dy: 0)
+        let besideMovedOwl = CGRect(x: movedOwl.minX - 4000, y: 0, width: 4000, height: 33)
+        #expect(!StatusItems.curtainLanded(besideMovedOwl, arrow: arrow, owl: movedOwl))
+    }
+
+    @Test func besideTheArrowItOnlyNeedsToBeLeftOfIt() {
+        #expect(StatusItems.curtainLanded(CGRect(x: -2512, y: 0, width: 4000, height: 33), arrow: arrow, owl: nil))
+        #expect(!StatusItems.curtainLanded(CGRect(x: -2400, y: 0, width: 4000, height: 33), arrow: arrow, owl: nil))
+    }
+}

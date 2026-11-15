@@ -135,6 +135,7 @@ final class AgentWatcher {
         all = []
         limits = []
         alerted.removeAll()
+        lastUsed.removeAll()
         widget.stop()
         onChange?()
     }
@@ -152,7 +153,11 @@ final class AgentWatcher {
         answersSource = nil
         activationObserver.map(NSWorkspace.shared.notificationCenter.removeObserver)
         activationObserver = nil
-        guard live else { return scheduleRefresh() }
+        guard live else {
+            // With the feature off nothing is read, not even once.
+            if tickTask != nil { scheduleRefresh() }
+            return
+        }
         watchAnswers()
         // Switching to a session's app to answer there: the usual prompt takes it.
         activationObserver = NSWorkspace.shared.notificationCenter.addObserver(
@@ -249,7 +254,7 @@ final class AgentWatcher {
     // MARK: Reading
 
     func refresh() async {
-        guard !DemoMode.isOn else { return }
+        guard !DemoMode.isOn, tickTask != nil else { return }
         guard !reading else {
             readAgain = true
             return
@@ -287,7 +292,9 @@ final class AgentWatcher {
             session.pid = read.file.pid
             session.name = read.file.name.flatMap { $0.isEmpty ? nil : $0 } ?? read.chat?.title
                 ?? read.place.worktree ?? read.place.repository
-            session.appChat = read.chat?.id
+            // The chat the session says it's in, which survives a resume; else the app's record.
+            let hostChat = read.file.entrypoint == "claude-desktop" ? read.file.hostSessionId : nil
+            session.appChat = hostChat.flatMap { ClaudeAppChats.link(to: $0) == nil ? nil : $0 } ?? read.chat?.id
             session.isScripted = read.file.isScripted
             session.helpers = read.helpers
             session.lastTurn = ClaudeSource.turnLength(read.log)
@@ -391,9 +398,11 @@ final class AgentWatcher {
     @ObservationIgnored private var lastUsed: [String: Double] = [:]
 
     /// One note when a window passes 80%, and one when a window that was
-    /// high resets ("a fresh window"). Never on the first reading.
+    /// high resets ("a fresh window"). Never on the first reading. A window
+    /// missing from a reading (a 5-hour one just after it resets) keeps its
+    /// last reading, so its reset is still noticed when it's back.
     private func noteLimits(_ fresh: [PlanLimit]) {
-        defer { lastUsed = Dictionary(fresh.map { ($0.id, $0.used) }, uniquingKeysWith: { a, _ in a }) }
+        defer { lastUsed.merge(fresh.map { ($0.id, $0.used) }, uniquingKeysWith: { _, new in new }) }
         guard Preferences.agentsLimitAlerts else { return }
         for limit in fresh {
             guard let before = lastUsed[limit.id] else { continue }
@@ -403,9 +412,10 @@ final class AgentWatcher {
                 alerted[limit.id] = Date()
                 let reset = limit.resetsAt.map { " It resets \(PlanLimit.when($0))." } ?? ""
                 notifyPlan(id: limit.id, title: "\(Int(limit.used))% of \(name) used", body: "Pace yourself a little.\(reset)")
-            } else if before >= 80, limit.used < 20 {
+            } else if limit.used < 20 {
+                // Low again: the next time it passes 80% is news.
                 alerted[limit.id] = nil
-                notifyPlan(id: limit.id, title: "A fresh window", body: "\(name) has reset.")
+                if before >= 80 { notifyPlan(id: limit.id, title: "A fresh window", body: "\(name) has reset.") }
             }
         }
     }

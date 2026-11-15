@@ -10,6 +10,9 @@ final class CaptureCoordinator {
     @ObservationIgnored private let scanner: ItemScanner
     /// Barn Owl's own menu bar items (the arrow, dividers, the owl), left out of a clean menu bar too.
     @ObservationIgnored var ownStatusWindows: () -> Set<CGWindowID> = { [] }
+    /// macOS 27: takes other apps' icons out of the menu bar while a capture is made. There
+    /// are no icon windows to leave out there.
+    @ObservationIgnored var cleanBar: CleanMenuBar?
     @ObservationIgnored private var overlay: SelectionOverlay?
     @ObservationIgnored lazy var cards = CaptureCards(coordinator: self)
     /// Screen recordings, from the countdown to the file.
@@ -23,6 +26,8 @@ final class CaptureCoordinator {
     @ObservationIgnored var videoEditors: [ObjectIdentifier: VideoEditing] = [:]
     /// Recordings whose editor is still reading the movie, so a second click doesn't open another.
     @ObservationIgnored var openingVideos: Set<UUID> = []
+    /// Recordings whose editor closed with Done while their file is still being saved.
+    @ObservationIgnored var finishingVideos: Set<UUID> = []
     @ObservationIgnored private var pins: [CapturePin] = []
     /// Editors closed with Done, so their close isn't mistaken for leaving.
     @ObservationIgnored private var finished: Set<UUID> = []
@@ -39,6 +44,8 @@ final class CaptureCoordinator {
     @ObservationIgnored private var lastOtherApp: NSRunningApplication?
     /// Each capture's file, clipboard and library writes, one after another.
     @ObservationIgnored private var writes: [UUID: Task<Void, Never>] = [:]
+    /// Writes asked for and not done yet: quitting waits for them.
+    @ObservationIgnored private var pendingWrites = 0
     /// The capture Barn Owl last put on the clipboard, and the clipboard's count right after.
     @ObservationIgnored private var onClipboard: (id: UUID, changeCount: Int)?
     /// Copies made ahead of a drag, so pulling a card out never waits on an encode.
@@ -132,13 +139,19 @@ final class CaptureCoordinator {
 
     /// Lets go of captures past their time, in the background; never one open in the editor.
     func pruneKept() {
-        let days = CaptureLibrary.keepDays, keeping = editingCaptures
+        let days = CaptureLibrary.keepDays, keeping = capturesInUse
         Task.detached(priority: .background) { CaptureLibrary.prune(days: days, keeping: keeping) }
     }
 
     /// Captures open in the editor: history and Clear Now leave them be while they are.
     var editingCaptures: Set<UUID> {
         Set(editors.values.map(\.captureID)).union(videoEditors.values.map(\.captureID))
+    }
+
+    /// Those, and recordings still being saved, made into a GIF or opened in the editor:
+    /// pruning and Clear Now mustn't take their files from under them.
+    var capturesInUse: Set<UUID> {
+        editingCaptures.union(openingVideos).union(finishingVideos).union(recording.inUse)
     }
 
     // MARK: Capturing
@@ -157,7 +170,7 @@ final class CaptureCoordinator {
         Task { [weak self] in
             guard let self else { return }
             do {
-                let snapshots = try await ScreenSnapshotter.snapshots(options: options)
+                let snapshots = try await snapshots()
                 guard !snapshots.isEmpty else { isCapturing = false; return NSSound.beep() }
                 targets = WindowLocator.onScreenWindows()
                 let overlay = SelectionOverlay(snapshots: snapshots, targets: targets, mode: mode,
@@ -171,7 +184,7 @@ final class CaptureCoordinator {
                     guard let self else { return }
                     // New pictures with the new choices; Barn Owl's overlay isn't in them.
                     Task {
-                        if let fresh = try? await ScreenSnapshotter.snapshots(options: self.options) { overlay?.replace(fresh) }
+                        if let fresh = try? await self.snapshots() { overlay?.replace(fresh) }
                     }
                 }
                 self.overlay = overlay
@@ -196,7 +209,7 @@ final class CaptureCoordinator {
         targets = WindowLocator.onScreenWindows()
         Task {
             defer { isCapturing = false }
-            guard let snapshot = try? await ScreenSnapshotter.snapshots(of: display, options: options).first else {
+            guard let snapshot = try? await snapshots(of: display).first else {
                 return NSSound.beep()
             }
             deliver(Capture(image: snapshot.image, scale: snapshot.scale, kind: .screen, date: Date(), appName: appName),
@@ -217,11 +230,23 @@ final class CaptureCoordinator {
         targets = WindowLocator.onScreenWindows()
         Task {
             defer { isCapturing = false }
-            guard let snapshot = try? await ScreenSnapshotter.snapshots(of: screen.displayID, options: options).first,
+            guard let snapshot = try? await snapshots(of: screen.displayID, area: area).first,
                   let image = snapshot.crop(area) else { return NSSound.beep() }
             deliver(Capture(image: image, scale: snapshot.scale, kind: .area, date: Date(), appName: appName),
                     action: .primary, windows: windowRects(in: area, scale: snapshot.scale))
         }
+    }
+
+    /// The frozen pictures of every display, or of one. With a clean menu bar on macOS 27,
+    /// other apps' icons are out of view while they're taken, and back right after; not for
+    /// an `area` that doesn't reach the menu bar, which has none of them in it.
+    private func snapshots(of display: CGDirectDisplayID? = nil, area: CGRect? = nil) async throws -> [DisplaySnapshot] {
+        let options = options
+        let showsBar = area.map { CleanMenuBar.reachesMenuBar($0) } ?? true
+        guard options.cleanMenuBar, showsBar, let cleanBar else {
+            return try await ScreenSnapshotter.snapshots(of: display, options: options)
+        }
+        return try await cleanBar.during { try await ScreenSnapshotter.snapshots(of: display, options: options) }
     }
 
     /// What's left out of pictures, and recordings too.
@@ -229,7 +254,8 @@ final class CaptureCoordinator {
 
     private var options: CaptureOptions {
         var hidden: Set<CGWindowID> = []
-        if Preferences.captureCleanMenuBar {
+        // macOS 27 has no icon windows to leave out: `cleanBar` hides the icons instead.
+        if Preferences.captureCleanMenuBar, !MenuBarPlatform.hidesByApp {
             // Only the icons go; the clock and Control Center stay.
             hidden = Set(scanner.items.filter(\.isMovable).map(\.windowID)).union(ownStatusWindows())
         }
@@ -352,7 +378,7 @@ final class CaptureCoordinator {
                 try CaptureStore.encode(image, scale: scale, as: .png, atOneX: false)
             }.value
             if copies, let png {
-                CaptureStore.copy(png: png)
+                CaptureStore.copy(png: png, captureID: id)
                 onClipboard = (id, NSPasteboard.general.changeCount)
             }
             // The file first, since the card already offers it; then the library.
@@ -414,7 +440,7 @@ final class CaptureCoordinator {
     private func copyInOrder(_ id: UUID, image: CGImage, scale: CGFloat) -> Task<Void, Never> {
         copied.insert(id)
         return inOrder(id) { [self] in
-            await CaptureStore.copy(image, scale: scale)
+            await CaptureStore.copy(image, scale: scale, captureID: id)
             onClipboard = (id, NSPasteboard.general.changeCount)
         }
     }
@@ -429,11 +455,15 @@ final class CaptureCoordinator {
     @discardableResult
     func inOrder<T: Sendable>(_ id: UUID, _ work: @escaping @MainActor () async -> T) -> Task<T, Never> {
         let previous = writes[id]
+        pendingWrites += 1
         let task = Task { @MainActor in
             await previous?.value
             return await work()
         }
-        writes[id] = Task { _ = await task.value }
+        writes[id] = Task {
+            _ = await task.value
+            pendingWrites -= 1
+        }
         return task
     }
 
@@ -483,7 +513,11 @@ final class CaptureCoordinator {
                 insight.text.findings = []
                 insight.lookedForPrivateInfo = false
             }
-            guard !Task.isCancelled else { return }
+            // Cropped or framed meanwhile: what was found is in the wrong places now.
+            guard !Task.isCancelled, captures[id].map({ $0.image === image }) ?? true else {
+                scans[id] = nil
+                return
+            }
             insights[id] = insight
             scans[id] = nil
             // Kept with the capture, for searching history and Copy Text later; read once.
@@ -592,9 +626,21 @@ final class CaptureCoordinator {
         if onACard || Preferences.captureThen == .card { cards.add(capture, status: status, kept: false) }
     }
 
-    /// A recording or a video being written: quitting waits for it.
+    /// A recording, a video or a capture's file being written: quitting waits for it.
     var hasWorkToFinish: Bool {
-        recording.hasWorkToFinish || videoEditors.values.contains { $0.editor.isWorking }
+        recording.hasWorkToFinish || videoEditors.values.contains { $0.editor.isWorking } || !finishingVideos.isEmpty
+            || pendingWrites > 0
+    }
+
+    /// Runs `action` once nothing is being recorded or written: an update waits for that before
+    /// it relaunches Barn Owl.
+    func whenDone(_ action: @escaping @MainActor () -> Void) {
+        Task { [weak self] in
+            while self?.hasWorkToFinish == true {
+                try? await Task.sleep(for: .milliseconds(500))
+            }
+            action()
+        }
     }
 
     /// Quitting: the recording is stopped and saved, and whatever the video editor is writing
@@ -602,7 +648,7 @@ final class CaptureCoordinator {
     func finishBeforeQuitting(within limit: Duration = .seconds(15)) async {
         let deadline = ContinuousClock.now + limit
         await recording.finishBeforeQuitting(within: limit)
-        while videoEditors.values.contains(where: { $0.editor.isWorking }), ContinuousClock.now < deadline {
+        while hasWorkToFinish, ContinuousClock.now < deadline {
             try? await Task.sleep(for: .milliseconds(50))
         }
     }
@@ -766,6 +812,12 @@ final class CaptureCoordinator {
         }
     }
 
+    /// Deletes the copy made for dragging: after a Hide it shows what's now covered.
+    private func forgetDragFile(_ id: UUID) {
+        guard let file = dragFiles.removeValue(forKey: id) else { return }
+        try? FileManager.default.removeItem(at: file.url)
+    }
+
     /// A file to drag: the saved one, or a temporary copy of what the card shows.
     func fileForDragging(_ id: UUID) -> URL? {
         guard let capture = capture(id) else { return nil }
@@ -813,8 +865,9 @@ final class CaptureCoordinator {
             }.value
             loadingForDrag.remove(id)
             // Loaded another way meanwhile (a drag that couldn't wait), or let go of: not needed.
+            // A drag that couldn't wait wrote the same path, and may be carrying it right now.
             guard captures[id] == nil, CaptureLibrary.entry(id) != nil else {
-                if let url = made.url { try? FileManager.default.removeItem(at: url) }
+                if let url = made.url, captures[id] == nil { try? FileManager.default.removeItem(at: url) }
                 return
             }
             var capture = kept
@@ -872,8 +925,15 @@ final class CaptureCoordinator {
         }
         let renderer = renderer(for: base, scale: capture.scale, document: document)
         let covering = document
-        // Nothing secret to paste while the covered copy is being made.
-        if clipboardHolds(id) { NSPasteboard.general.clearContents() }
+        // Nothing secret to paste while the covered copy is being made. The
+        // clipboard is still this capture's, so the covered copy goes there.
+        if clipboardHolds(id) {
+            NSPasteboard.general.clearContents()
+            onClipboard = (id, NSPasteboard.general.changeCount)
+        }
+        // Nor in Clipboard History, even if the clipboard has moved on.
+        NotificationCenter.default.post(name: .captureCovered, object: nil, userInfo: ["id": id])
+        forgetDragFile(id)
         cards.update(id, status: "Hiding…", kept: false)
         Task {
             guard let covered = await Task.detached(priority: .userInitiated, operation: { renderer.render(covering) }).value,
@@ -937,7 +997,7 @@ final class CaptureCoordinator {
         // Decided when its turn comes, after the first copy has landed.
         inOrder(id) { [self] in
             guard clipboardHolds(id) else { return }
-            await CaptureStore.copy(image, scale: scale)
+            await CaptureStore.copy(image, scale: scale, captureID: id)
             onClipboard = (id, NSPasteboard.general.changeCount)
         }
         if capture.fileURL != nil { saveFile(id, image: image) }

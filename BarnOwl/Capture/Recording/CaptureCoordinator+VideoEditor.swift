@@ -29,6 +29,15 @@ enum EditedVideo {
         return saved
     }
 
+    /// Whether Save may write over the saved file: not when it's the movie the editor is
+    /// reading (its kept copy is gone, so it's the only one), nor when it changed elsewhere
+    /// since Barn Owl wrote it. It's saved anew then.
+    static func mayOverwrite(_ saved: URL, stamp: CaptureLibrary.FileStamp?, source: URL?) -> Bool {
+        if let source, VideoExporter.isSameFile(saved, source) { return false }
+        if let stamp, !stamp.matches(CaptureLibrary.FileStamp(of: saved)) { return false }
+        return true
+    }
+
     /// Copies `file` to `url`, over whatever is there: written beside it first and swapped in,
     /// so a failed copy never leaves half a movie. `file` is never moved or removed.
     static func place(_ file: URL, at url: URL) -> Bool {
@@ -64,7 +73,7 @@ extension CaptureCoordinator: VideoEditorHost {
     func videoEditor(_ editor: VideoEditor, save file: URL) async -> URL? {
         guard let id = captureID(for: editor) else { return nil }
         let edit = editor.edit
-        let url = await saveEditedVideo(file, for: id, edit: edit)
+        let url = await saveEditedVideo(file, for: id, edit: edit, source: editor.model.info.url)
         if url != nil { videoEditors[ObjectIdentifier(editor)]?.savedEdit = edit }
         return url
     }
@@ -76,9 +85,12 @@ extension CaptureCoordinator: VideoEditorHost {
         videoEditors[ObjectIdentifier(editor)]?.finished = true
         let saves = capture.fileURL != nil || Preferences.captureSaves
         let edit = editor.edit
+        let source = editor.model.info.url
         let showsCard = Preferences.captureThen != .nothing
+        finishingVideos.insert(id)
         Task {
-            let saved = saves ? await saveEditedVideo(file, for: id, edit: edit) : nil
+            defer { finishingVideos.remove(id) }
+            let saved = saves ? await saveEditedVideo(file, for: id, edit: edit, source: source) : nil
             // The saved file, which lasts, rather than the editor's temporary one.
             RecordingStore.copy(saved ?? file)
             copied.insert(id)
@@ -137,10 +149,12 @@ extension CaptureCoordinator: VideoEditorHost {
 
     /// Puts the editor's file where the recording's goes: over its saved file when that's the
     /// same kind, or anew in the recordings folder; history and the card follow. `file` is only
-    /// ever copied.
-    func saveEditedVideo(_ file: URL, for id: UUID, edit: VideoEdit) async -> URL? {
+    /// ever copied, and `source`, the movie the editor reads, never written over.
+    func saveEditedVideo(_ file: URL, for id: UUID, edit: VideoEdit, source: URL?) async -> URL? {
         guard let capture = capture(id) else { return nil }
-        let over = EditedVideo.overwrites(isSaved(id) ? capture.fileURL : nil, with: file)
+        let over = EditedVideo.overwrites(isSaved(id) ? capture.fileURL : nil, with: file).flatMap { saved in
+            EditedVideo.mayOverwrite(saved, stamp: CaptureLibrary.entry(id)?.fileStamp, source: source) ? saved : nil
+        }
         let fileExtension = file.pathExtension.lowercased()
         let url = over ?? RecordingStore.reserveURL(date: capture.date, appName: capture.appName, fileExtension: fileExtension)
         let reserved = over == nil

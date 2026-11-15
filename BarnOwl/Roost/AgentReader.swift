@@ -240,9 +240,10 @@ actor AgentReader {
         }
         guard now.timeIntervalSince(lastChatScan) >= 30 else { return nil }
         lastChatScan = now
-        let known = Set(chats.values.map(\.url))
-        for url in ClaudeAppChats.records() where !known.contains(url) {
-            guard let date = modified(url), let head = ClaudeAppChats.head(of: url),
+        // Records changed since they were read too: a resumed chat names a new session.
+        let known = Dictionary(chats.values.map { ($0.url, $0.modified) }, uniquingKeysWith: { first, _ in first })
+        for url in ClaudeAppChats.records() {
+            guard let date = modified(url), known[url] != date, let head = ClaudeAppChats.head(of: url),
                   let parsed = ClaudeAppChats.parse(head: head) else { continue }
             chats[parsed.cliSession] = (url, date, parsed.chat)
         }

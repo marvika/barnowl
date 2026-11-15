@@ -487,7 +487,30 @@ enum CleanupRunner {
             process.waitUntilExit()
             if process.terminationStatus == 0 { return name }
         }
+        // npm, pnpm, yarn and brew are scripts, so their process is called
+        // node, ruby or bash: look at what each process runs.
+        let scripts = rule.ownerProcesses.filter { $0.first?.isUppercase != true }
+        guard !scripts.isEmpty else { return nil }
+        for pid in ProcessScan.allPIDs() where pid != getpid() {
+            let arguments = ProcessScan.arguments(of: pid)
+            if let name = scripts.first(where: { runs($0, arguments: arguments) }) { return name }
+        }
         return nil
+    }
+
+    /// Whether a process with these arguments is `tool`, itself or as a
+    /// script an interpreter runs (`node …/bin/npm`, `node …/npm-cli.js`,
+    /// `ruby … brew.rb`).
+    static func runs(_ tool: String, arguments: [String]) -> Bool {
+        guard let first = arguments.first else { return false }
+        let name = { (word: String) in (word as NSString).lastPathComponent }
+        if name(first) == tool { return true }
+        let interpreters: Set<String> = ["node", "bun", "ruby", "bash", "sh", "zsh"]
+        guard interpreters.contains(name(first)),
+              let script = arguments.dropFirst().first(where: { !$0.hasPrefix("-") }) else { return false }
+        let base = name(script)
+        let suffix = ["-cli.js", ".js", ".cjs", ".mjs", ".rb", ".sh"].first { base.hasSuffix($0) } ?? ""
+        return base.dropLast(suffix.count) == tool
     }
 
     /// Puts trashed items back where they were. Returns what couldn't go

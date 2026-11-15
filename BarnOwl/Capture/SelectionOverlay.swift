@@ -1069,7 +1069,11 @@ struct CaptureModeBar: View {
                 }
                 Divider().frame(height: 18).padding(.horizontal, 4)
                 Menu {
-                    Toggle("Clean Menu Bar", isOn: binding($cleanMenuBar))
+                    Toggle(isOn: binding($cleanMenuBar)) {
+                        Text("Clean Menu Bar")
+                        // macOS 27 can only hide them, and not its own.
+                        if MenuBarPlatform.hidesByApp { Text("Hides other apps' icons; macOS's own stay") }
+                    }
                     Toggle("Hide Desktop Icons", isOn: binding($hidesDesktopIcons))
                     Toggle("Show the Pointer", isOn: binding($showsPointer))
                 } label: {

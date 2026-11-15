@@ -32,6 +32,10 @@ enum ClaudeSource {
         var statusUpdatedAt: Double?
         /// When its process started, as `ps` prints it in UTC: "Mon Oct 19 14:48:25 2026".
         var procStart: String?
+        /// Whose PIDs `pid` counts in: "darwin" for this Mac's own.
+        var pidDomain: String?
+        /// The Claude app's chat it runs in ("local_…"), which outlasts `sessionId`.
+        var hostSessionId: String?
 
         var started: Date { startedAt.map { Date(timeIntervalSince1970: $0 / 1000) } ?? .distantPast }
         var statusSince: Date? { statusUpdatedAt.map { Date(timeIntervalSince1970: $0 / 1000) } }
@@ -55,7 +59,10 @@ enum ClaudeSource {
     /// Whether the session's process is still the one that wrote the file. A
     /// crashed session leaves its file behind, and macOS reuses PIDs.
     static func isLive(_ file: SessionFile) -> Bool {
-        guard kill(file.pid, 0) == 0, let started = ProcessScan.startTime(of: file.pid) else { return false }
+        // One from a container sharing this folder counts its PIDs apart from the Mac's.
+        guard file.pidDomain.map({ $0 == "darwin" }) ?? true else { return false }
+        guard kill(file.pid, 0) == 0, !ProcessScan.isZombie(file.pid),
+              let started = ProcessScan.startTime(of: file.pid) else { return false }
         if let text = file.procStart, let recorded = procStartDate(text) {
             return abs(recorded.timeIntervalSince(started)) < 2
         }
@@ -72,9 +79,16 @@ enum ClaudeSource {
     }
 
     /// Claude Code names a project's log folder after its path, with every
-    /// character other than a letter or digit turned into "-".
+    /// character other than a letter or digit turned into "-". It goes by
+    /// JavaScript's UTF-16 units, so an emoji turns into "--", and an accent
+    /// written as a separate mark into one more "-".
     static func projectFolderName(for cwd: String) -> String {
-        String(cwd.map { $0.isASCII && ($0.isLetter || $0.isNumber) ? $0 : "-" })
+        let dash = UInt16(UInt8(ascii: "-"))
+        let units = cwd.utf16.map { unit -> UInt16 in
+            guard unit < 128, let scalar = Unicode.Scalar(unit) else { return dash }
+            return Character(scalar).isLetter || Character(scalar).isNumber ? unit : dash
+        }
+        return String(decoding: units, as: UTF16.self)
     }
 
     static func transcript(for session: SessionFile) -> URL? {
@@ -257,17 +271,49 @@ enum ClaudeSource {
             }
         }
 
-        /// A huge line is almost always a tool result: find its call and
-        /// whether it failed without decoding it. The flags can come before
-        /// or after the content, so both ends are checked.
+        /// A huge line is a tool result, a prompt with a pasted picture or a
+        /// long paste, or a big file being written: tell which and act on it
+        /// without decoding it. The flags can come before or after the
+        /// content, so both ends are checked.
         private mutating func consumeLarge(_ line: Substring) {
             let head = line.prefix(4000), tail = line.suffix(4000)
-            guard head.contains("\"tool_result\""), !head.contains("\"isSidechain\":true"),
-                  !tail.contains("\"isSidechain\":true"),
-                  let range = head.range(of: "\"tool_use_id\":\"") else { return }
-            let id = head[range.upperBound...].prefix { $0 != "\"" }
-            let failed = head.contains("\"is_error\":true") || tail.contains("\"is_error\":true")
-            result(id: String(id), failed: failed, at: nil)
+            let flagged = { (flag: String) in head.contains(flag) || tail.contains(flag) }
+            guard !flagged("\"isSidechain\":true") else { return }
+            if head.contains("\"tool_result\"") {
+                guard let id = Self.value(of: "tool_use_id", in: head) else { return }
+                result(id: id, failed: flagged("\"is_error\":true"), at: nil)
+                return
+            }
+            // The timestamp comes after the message.
+            let time = (Self.value(of: "timestamp", in: tail) ?? Self.value(of: "timestamp", in: head))
+                .flatMap(LogState.date(from:))
+            if head.contains("\"type\":\"user\""), head.contains("\"role\":\"user\"") {
+                guard !flagged("\"isMeta\":true"), !flagged("\"isCompactSummary\":true") else { return }
+                if let time { lastActivity = time }
+                startTurn(at: time)
+            } else if head.contains("\"type\":\"assistant\""), let call = head.range(of: "\"type\":\"tool_use\"") {
+                let rest = head[call.upperBound...]
+                guard let id = Self.value(of: "id", in: rest), let name = Self.value(of: "name", in: rest) else { return }
+                if let time { lastActivity = time }
+                pending[id] = name
+                lastTool = name
+                lastToolAt = time
+                if let path = Self.value(of: "file_path", in: rest) {
+                    if ["Edit", "Write", "MultiEdit"].contains(name) { editedFiles.insert(path) }
+                    let input = ["file_path": path]
+                    if let request = LogState.request(tool: name, input: input, at: time ?? lastActivity ?? Date()) {
+                        requests[id] = request
+                    }
+                }
+            }
+        }
+
+        /// A string field's value in part of a line, if it's there whole.
+        private static func value(of key: String, in text: Substring) -> String? {
+            guard let range = text.range(of: "\"\(key)\":\"") else { return nil }
+            let rest = text[range.upperBound...]
+            guard let end = rest.firstIndex(of: "\"") else { return nil }
+            return String(rest[..<end])
         }
 
         /// The request a tool call makes of you, if it has to wait for you:

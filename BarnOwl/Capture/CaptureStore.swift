@@ -225,19 +225,24 @@ enum CaptureStore {
     /// Puts the image on the clipboard, at its on-screen size. Encodes off
     /// the main thread; TIFF is made only if an app asks for it.
     @MainActor
-    static func copy(_ image: CGImage, scale: CGFloat) async {
+    static func copy(_ image: CGImage, scale: CGFloat, captureID: UUID? = nil) async {
         guard let png = try? await Task.detached(priority: .userInitiated, operation: {
             try encode(image, scale: scale, as: .png, atOneX: false)
         }).value else { return }
-        copy(png: png)
+        copy(png: png, captureID: captureID)
     }
 
+    /// Says which capture a copy is, so Clipboard History keeps only its
+    /// latest version: a Hide replaces the uncovered picture there too.
+    static let captureIDType = NSPasteboard.PasteboardType("io.github.marvika.BarnOwl.capture-id")
+
     @MainActor
-    static func copy(png: Data) {
+    static func copy(png: Data, captureID: UUID? = nil) {
         let pasteboard = NSPasteboard.general
         pasteboard.clearContents()
         let item = NSPasteboardItem()
         item.setData(png, forType: .png)
+        if let captureID { item.setString(captureID.uuidString, forType: captureIDType) }
         item.setDataProvider(TIFFProvider.shared, forTypes: [.tiff])
         TIFFProvider.shared.png = png
         pasteboard.writeObjects([item])
@@ -309,4 +314,9 @@ private final class TIFFProvider: NSObject, NSPasteboardItemDataProvider, @unche
         guard type == .tiff, let png, let rep = NSBitmapImageRep(data: png) else { return }
         if let tiff = rep.tiffRepresentation { item.setData(tiff, forType: .tiff) }
     }
+}
+
+extension Notification.Name {
+    /// A capture's secrets were hidden; `userInfo["id"]` is its UUID.
+    static let captureCovered = Notification.Name("io.github.marvika.BarnOwl.captureCovered")
 }
