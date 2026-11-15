@@ -10,6 +10,101 @@
         <language>en</language>
         <!-- Releases, newest first -->
         <item>
+            <title>Barn Owl 0.17.0</title>
+            <link>https://github.com/marvika/barnowl/releases/tag/v0.17.0</link>
+            <pubDate>Sun, 15 Nov 2026 16:40:26 +0000</pubDate>
+            <sparkle:version>25</sparkle:version>
+            <sparkle:shortVersionString>0.17.0</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>26.0</sparkle:minimumSystemVersion>
+            <sparkle:fullReleaseNotesLink>https://github.com/marvika/barnowl/releases/tag/v0.17.0</sparkle:fullReleaseNotesLink>
+            <description sparkle:format="markdown"><![CDATA[
+- **Barn Owl works on macOS 27.** macOS 27 draws the menu bar in a new way:
+  icons can no longer be pushed off screen or moved by another app. That left
+  0.16.0 with an arrow that revealed nothing, and an empty Perch, search and
+  layout. Barn Owl now tells macOS which apps may show their icons instead.
+  The layout you had on macOS 26 carries over, the dividers are gone, and
+  dragging an icon to another row in Settings → Layout takes effect at once.
+  An icon opened from the Perch or search shows for as long as its menu is
+  open, then hides again.
+- **What macOS 27 doesn't allow.** An app's icons hide and show together.
+  macOS's own Sound, Battery, Wi‑Fi, Control Center and clock always show, and
+  Now Playing hides whenever anything is hidden. Presenting can't start by
+  itself when you share your screen, because macOS 27 no longer says when
+  that happens: start it from the owl's menu or its shortcut. Clean Menu Bar
+  can't leave icons out of a capture unseen any more, so it hides other apps'
+  icons while a picture is taken and for as long as a recording runs, then
+  shows them again. A picture waits about a second for them to go, and not
+  at all when none is in view. Barn Owl's icons and macOS's own stay in the
+  picture, and while a menu hangs from an icon the menu bar is captured as
+  it is.
+- **Hidden icons hide again by themselves.** Since 0.14.1, icons you revealed
+  stayed in the menu bar until you clicked the arrow: the check that waits
+  for an open menu took the menu bar itself for one. It now waits only for a
+  menu from a hidden icon's app, and for five minutes at most.
+- **Presenting leaves macOS's own icons alone.** When it can't hide everything
+  at once and moves icons one by one, Battery, Wi‑Fi, Sound and the like stay
+  where they are. They show nothing private, and dragging one is how macOS
+  takes it off the menu bar.
+- **Battery always shows.** Barn Owl keeps it right of the arrow, beside
+  Control Center, where hiding and presenting never reach it, and it can't be
+  hidden or grouped from the layout editor. If macOS took it off your menu
+  bar, turn it back on in System Settings › Menu Bar › Battery.
+- **Icons stay where you put them.** An app relaunching while you typed, an
+  icon you opened from the Perch, or presenting ending while you were busy
+  could leave an icon in the wrong section, and Barn Owl then remembered it
+  there. It now puts each one back once you pause.
+- **Nothing hidden shows while you present.** Option-click on the arrow, the
+  Show All shortcut and `barnowl://show-all` wait until presenting ends.
+- **The owl stays while you present.** Presenting hid Barn Owl's own owl
+  along with everything else, which put its menu, where presenting is turned
+  off, out of reach. The owl now stays beside the arrow in its sunglasses.
+- **The Barn checks again before it trashes.** Anything in the basket that
+  changed since the scan, or that sits in a folder now linked to somewhere
+  else, stays where it is. Clean-ups now notice npm, pnpm, yarn and Homebrew
+  running, and wait for them. Empty from Trash no longer freezes Barn Owl on a
+  big folder, and a card you cleaned while the owl was still looking no longer
+  comes back.
+- **Hide keeps your clipboard right.** Hide used to empty the clipboard; now it
+  holds the covered picture, and Clipboard History swaps the original for it.
+  The unhidden copy made for dragging is deleted, Copy Text leaves out a word
+  whose secret part is hidden, and a late text scan can no longer offer Hide
+  for the wrong places.
+- **Hide covers the whole of what it hides on macOS 27.** macOS 27 says less
+  exactly where the text in a picture is, so a cover could stop at the very
+  edge of the letters, sit too high, or run over the lines above and below.
+  Barn Owl now finds each line's letters in the picture itself: a cover takes
+  its line's full height and a little room, and stays on its own line. A
+  Redact click on a word does the same.
+- **Hide covers only the secret.** A password after its label
+  (`DB_PASSWORD=…`), your user name in a path, the password in a link: the
+  cover used to take the whole word, label, path and all. It now stops at the
+  gap between the secret and the rest, wherever the picture shows one. A long
+  key written as `NAME=value` is hidden without its name. Copy Text still
+  leaves the whole word out.
+- **Recordings are safer.** Save and Done in the video editor never write over
+  a recording's only copy, or over a file you changed elsewhere; they save a
+  new file instead. History no longer lets go of a recording while it's being
+  saved or opened. Quitting and updates wait for captures and edited videos
+  still being saved. A scrolling capture too big to put together says so.
+- **Keep awake fixes.** A download left unfinished in Downloads no longer
+  keeps your Mac awake for good. A negative number of minutes from Shortcuts
+  is refused instead of meaning "until you stop it". The question about the
+  old closed-lid setting doesn't come back after Not Now, and keep-awake rules
+  brought over from Barkeep are kept.
+- **Clipboard History** is saved when you quit, and a picture copied as you
+  turn it off is no longer added.
+- **Agents.** A prompt with a pasted screenshot now starts a turn, so the owlet
+  no longer says "finished after 2 h". The 80% plan alert comes again after
+  the 5-hour window resets. A Codex turn already under way when Barn Owl
+  starts shows as work. Show opens the right Claude app chat after you resume
+  it, and a session whose process is gone no longer lingers. Projects with an
+  emoji or accent in their path find their log. Turning island answers on or
+  off leaves your other Claude Code hooks exactly as they were, the status line
+  relay keeps every status line setting, and with Agents off nothing is read.
+]]></description>
+            <enclosure url="https://github.com/marvika/barnowl/releases/download/v0.17.0/BarnOwl-0.17.0.zip" sparkle:edSignature="qFh2Ydpc96pfDLq1EpcMc+izS8bLw5AjP08mCsh/uxX1WlfzGE278dwrueBOKIsBCwwsEwxlaJFhB7qC3FIUAw==" length="16533937" type="application/octet-stream"/>
+        </item>
+        <item>
             <title>Barn Owl 0.16.0</title>
             <link>https://github.com/marvika/barnowl/releases/tag/v0.16.0</link>
             <pubDate>Fri, 23 Oct 2026 06:42:27 +0000</pubDate>
