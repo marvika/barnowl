@@ -10,8 +10,8 @@ import Testing
 struct CaptureEditorPrivacyTests {
     /// A capture with lines of text drawn into it, and where `secrets` ended up, in image
     /// pixels from the top left. `rule` draws a line down the picture at that x, through the text.
-    static func textImage(lines: [String], secrets: [String], dark: Bool = false, size: CGFloat = 30, rule: CGFloat? = nil)
-        -> (image: CGImage, glyphs: [String: CGRect]) {
+    static func textImage(lines: [String], secrets: [String], dark: Bool = false, size: CGFloat = 30, rule: CGFloat? = nil,
+                          mono: Bool = false) -> (image: CGImage, glyphs: [String: CGRect]) {
         let width = 1600
         let height = 120 + lines.count * 70
         let space = CGColorSpace(name: CGColorSpace.sRGB)!
@@ -20,7 +20,8 @@ struct CaptureEditorPrivacyTests {
         let background: CGFloat = dark ? 0.12 : 0.98
         context.setFillColor(CGColor(srgbRed: background, green: background, blue: background, alpha: 1))
         context.fill(CGRect(x: 0, y: 0, width: width, height: height))
-        let font = NSFont.systemFont(ofSize: size)
+        let fixed = NSFont(name: "Menlo", size: size) ?? NSFont.monospacedSystemFont(ofSize: size, weight: .regular)
+        let font = mono ? fixed : NSFont.systemFont(ofSize: size)
         let ink = dark ? NSColor.white : NSColor(white: 0.1, alpha: 1)
         if let rule {
             context.setFillColor(ink.cgColor)
@@ -231,6 +232,100 @@ struct CaptureEditorPrivacyTests {
         #expect(model.fitTarget(at: point) == hit.rect)
         let placed = try #require(model.placeFitted(at: point)?.rect)
         #expect(placed.insetBy(dx: -0.01, dy: -0.01).contains(hit.rect) && hit.rect.insetBy(dx: -0.01, dy: -0.01).contains(placed))
+    }
+
+    // MARK: Part of a word
+
+    /// A line with a secret that is only part of a word, and what must stay readable beside it.
+    struct Part: Sendable, CustomTestStringConvertible {
+        let text: String
+        let secret: String
+        let shown: [String]
+        var testDescription: String { secret }
+
+        static let labelled = Part(text: "export OPENAI_API_KEY=sk-proj-AbCdEf0123456789XyZaBcDeF now",
+                                   secret: "sk-proj-AbCdEf0123456789XyZaBcDeF", shown: ["OPENAI_API_KE"])
+        static let userName = Part(text: "open /Users/kari/.ssh/id_ed25519 now", secret: "kari", shown: ["/User", "ssh/id_ed25519"])
+        // Where letters touch, as the slashes of a link do in the system's font, the cut is at
+        // the next gap out: "://" goes under the cover too, and its room reaches the "s".
+        static let linkPassword = Part(text: "psql postgres://admin:hunter2@db.example.com:5432/app now",
+                                       secret: "admin:hunter2@db.example.com", shown: ["postgre", "5432/app"])
+    }
+
+    /// What the scan does with one line: the cover for `part.secret`, from boxes as Vision gives
+    /// them, a word at a time and `loose` pixels out either side (in, when negative).
+    static func cover(of part: Part, size: CGFloat, mono: Bool, loose: CGFloat = 3) throws
+        -> (cover: CGRect, glyphs: [String: CGRect]) {
+        let text = part.text
+        let tokens: [Substring] = text.split(whereSeparator: \.isWhitespace)
+        let made = Self.textImage(lines: [text], secrets: tokens.map(String.init) + [text, part.secret] + part.shown,
+                                  dark: mono, size: size, mono: mono)
+        func box(_ wanted: Range<String.Index>) -> CGRect {
+            var union = CGRect.null
+            for token in tokens where token.startIndex < wanted.upperBound && wanted.lowerBound < token.endIndex {
+                if let rect = made.glyphs[String(token)] { union = union.union(rect.insetBy(dx: -loose, dy: 0)) }
+            }
+            return union
+        }
+        let range = try #require(text.range(of: part.secret))
+        let whole = try #require(made.glyphs[text])
+        let line = try #require(SensitiveTextFinder.fitted(whole.insetBy(dx: 0, dy: whole.height / 4), in: made.image))
+        let own = SensitiveTextFinder.span(of: range, words: tokens, on: line, in: made.image, box: box)
+        return (SensitiveTextFinder.padded(own, line: line), made.glyphs)
+    }
+
+    /// A value after its label, a user name in a path, a password in a link: text recognition
+    /// gives one box for the whole word, and the cover takes only the secret's own letters,
+    /// in monospaced type and in the system's, from the smallest text to large.
+    @Test(arguments: [Part.labelled, Part.userName, Part.linkPassword], [12, 13, 16, 22, 26, 30] as [CGFloat])
+    func coversTakeOnlyTheSecretInsideAWord(part: Part, size: CGFloat) throws {
+        for mono in [true, false] {
+            let made = try Self.cover(of: part, size: size, mono: mono)
+            let cover = made.cover
+            let secret = try #require(made.glyphs[part.secret])
+            let word = try #require(part.text.split(separator: " ").first { $0.contains(part.secret) }.flatMap { made.glyphs[String($0)] })
+            let type = mono ? "Menlo" : "system"
+            // All of the secret, however the rest turns out.
+            #expect(cover.contains(secret.insetBy(dx: 1, dy: 2)), "\(type) \(size): \(cover) for \(secret)")
+            // And not the label before it, nor the rest of the word after.
+            for visible in part.shown {
+                let kept = try #require(made.glyphs[visible])
+                let clear = kept.maxX <= cover.minX + 1 || kept.minX >= cover.maxX - 1
+                #expect(clear, "\(type) \(size): \(visible) at \(kept) under \(cover), word \(word)")
+            }
+        }
+    }
+
+    /// Vision's box for the word may be a few pixels inside its first and last letters, or
+    /// well outside them: the cut comes out the same.
+    @Test func partOfAWordIsFoundFromARoughBox() throws {
+        let exact = try Self.cover(of: .labelled, size: 24, mono: true, loose: 0).cover
+        for loose in [-4, 3, 7] as [CGFloat] {
+            let rough = try Self.cover(of: .labelled, size: 24, mono: true, loose: loose).cover
+            #expect(abs(rough.minX - exact.minX) <= 1, "box \(loose) out: \(rough) against \(exact)")
+        }
+    }
+
+    /// The real scan: the label, the path and the link stay readable; the secrets don't.
+    @Test func theScanCoversOnlyTheSecretInsideAWord() async throws {
+        let lines = ["$ export OPENAI_API_KEY=sk-proj-AbCdEf0123456789XyZaBcDeF",
+                     "$ ssh deploy@8.8.4.4 -i /Users/kari/.ssh/id_ed25519",
+                     "$ export DB_PASSWORD=Sup3rS3cret!gjpqy"]
+        let secrets = ["sk-proj-AbCdEf0123456789XyZaBcDeF", "kari", "Sup3rS3cret!gjpqy"]
+        let shown = ["OPENAI_API_KE", "/User", "ssh/id_ed25519", "DB_PASSWOR"]
+        let made = Self.textImage(lines: lines, secrets: secrets + shown, dark: true, size: 26, mono: true)
+        let text = try await SensitiveTextFinder.scan(made.image)
+        for secret in secrets {
+            let glyphs = try #require(made.glyphs[secret])
+            let finding = try #require(text.findings.first { $0.rect.contains(CGPoint(x: glyphs.midX, y: glyphs.midY)) })
+            #expect(finding.rect.contains(glyphs.insetBy(dx: 1, dy: 2)), "\(secret): \(finding.rect) for \(glyphs)")
+            for visible in shown {
+                let kept = try #require(made.glyphs[visible])
+                guard abs(kept.midY - glyphs.midY) < 10 else { continue }
+                let clear = kept.maxX <= finding.rect.minX + 1 || kept.minX >= finding.rect.maxX - 1
+                #expect(clear, "\(visible) at \(kept) under \(finding.rect) (\(finding.text))")
+            }
+        }
     }
 
     // MARK: Banner and Done

@@ -1,4 +1,5 @@
 import CoreGraphics
+import CoreText
 import Foundation
 import Vision
 
@@ -27,12 +28,15 @@ struct CaptureText: Sendable, Equatable {
     /// The text as you'd read it. `within` keeps only lines mostly inside it; words under
     /// `covered` (redactions) are left out. Both are in the same pixels as the lines.
     func plainText(within area: CGRect? = nil, excluding covered: [CGRect] = []) -> String {
-        // Hidden once a redaction covers a fifth of it: a secret is often only part of a word
-        // ("password=hunter2"), and a word's middle can fall on the part left showing.
+        // Hidden once a redaction covers a fifth of it, or lies mostly on it: a secret is often
+        // only part of a word ("password=hunter2"), and can be a small part of a long one (the
+        // name in "/Users/name/Documents/…"), whose cover is on nothing else.
         func hidden(_ rect: CGRect) -> Bool {
             covered.contains { cover in
                 let overlap = cover.intersection(rect)
-                return !overlap.isNull && overlap.width * overlap.height >= rect.width * rect.height * 0.2
+                guard !overlap.isNull else { return false }
+                if overlap.width * overlap.height >= rect.width * rect.height * 0.2 { return true }
+                return overlap.width >= cover.width * 0.5 && overlap.height >= rect.height * 0.5
             }
         }
         var kept: [Line] = []
@@ -238,7 +242,8 @@ enum SensitiveTextFinder {
             func box(_ range: Range<String.Index>) -> CGRect {
                 candidate.boundingBox(for: range)?.boundingBox.toImageCoordinates(size, origin: .upperLeft) ?? lineRect
             }
-            let words = string.split(whereSeparator: \.isWhitespace).map { word in
+            let tokens: [Substring] = string.split(whereSeparator: \.isWhitespace)
+            let words = tokens.map { word in
                 CaptureText.Word(rect: box(word.startIndex..<word.endIndex), text: String(word))
             }
             text.lines.append(CaptureText.Line(rect: lineRect, text: string, words: words))
@@ -247,8 +252,8 @@ enum SensitiveTextFinder {
             // Where the line's ink is: looked up once, for everything found on it.
             let inked: CGRect = fitted(lineRect, in: image) ?? lineRect
             for (range, kind) in found {
-                let reached: CGRect = reaching(box(range), on: inked, in: image)
-                let rect: CGRect = padded(reached, line: inked)
+                let own: CGRect = span(of: range, words: tokens, on: inked, in: image, box: box)
+                let rect: CGRect = padded(own, line: inked)
                 text.findings.append(Finding(rect: rect, kind: kind, text: String(string[range])))
             }
         }
@@ -368,6 +373,200 @@ enum SensitiveTextFinder {
         let minX: CGFloat = left < first ? window.minX + CGFloat(left) : rect.minX
         let maxX: CGFloat = right > last ? window.minX + CGFloat(right + 1) : rect.maxX
         return CGRect(x: minX, y: rect.minY, width: maxX - minX, height: rect.height)
+    }
+
+    // MARK: Part of a word
+
+    /// The box of `range`'s own letters on a line whose ink is `line`. Vision reads a word at a
+    /// time, so its box for a secret that starts or ends inside a word (`box`) is that whole
+    /// word: the label before a value, the rest of a path or a link. Where the picture shows
+    /// the gap between the secret and the rest, the box stops there; where it doesn't, the
+    /// whole word stays in, as before.
+    static func span(of range: Range<String.Index>, words: [Substring], on line: CGRect, in image: CGImage,
+                     box: (Range<String.Index>) -> CGRect) -> CGRect {
+        let whole: CGRect = reaching(box(range), on: line, in: image)
+        var left: CGFloat = whole.minX
+        var right: CGFloat = whole.maxX
+        if let word = words.first(where: { $0.startIndex < range.lowerBound && range.lowerBound < $0.endIndex }) {
+            let index: Int = word.distance(from: word.startIndex, to: range.lowerBound)
+            let wordBox: CGRect = box(word.startIndex..<word.endIndex)
+            if let x = edge(before: index, in: String(word), box: wordBox, on: line, in: image, hidingRight: true) {
+                left = max(left, x)
+            }
+        }
+        if let word = words.first(where: { $0.startIndex < range.upperBound && range.upperBound < $0.endIndex }) {
+            let index: Int = word.distance(from: word.startIndex, to: range.upperBound)
+            let wordBox: CGRect = box(word.startIndex..<word.endIndex)
+            if let x = edge(before: index, in: String(word), box: wordBox, on: line, in: image, hidingRight: false) {
+                right = min(right, x)
+            }
+        }
+        guard right - left >= 1 else { return whole }
+        return CGRect(x: left, y: whole.minY, width: right - left, height: whole.height)
+    }
+
+    /// Where `word` (Vision's `box` for it, on a line whose ink is `line`) divides before its
+    /// character number `index`, read from the gaps between its letters in the picture.
+    /// `hidingRight`: what's hidden is from there on (a secret's start); otherwise up to there.
+    /// Nil when the picture doesn't say for sure.
+    static func edge(before index: Int, in word: String, box: CGRect, on line: CGRect, in image: CGImage,
+                     hidingRight: Bool) -> CGFloat? {
+        let bounds = CGRect(x: 0, y: 0, width: image.width, height: image.height)
+        let whole: CGRect = reaching(box, on: line, in: image)
+        let rows: CGRect = line.integral.insetBy(dx: 0, dy: -2)
+        let across = CGRect(x: whole.minX, y: rows.minY, width: whole.width, height: rows.height)
+        let window: CGRect = across.integral.intersection(bounds)
+        guard !window.isNull, window.width >= 4, let strengths = changes(in: image, window: window, down: true) else {
+            return nil
+        }
+        // A column is a letter's when it is two fifths as sharp as the sharpest. Less is the
+        // smoothing where two letters all but touch, which counts as a gap here.
+        let sharpest: Int = strengths.max() ?? 0
+        let limit: Int = max(10, sharpest * 2 / 5)
+        let ink: [Bool] = strengths.map { $0 > limit }
+        guard var column = cut(before: index, in: word, ink: ink, hidingRight: hidingRight) else { return nil }
+        // Out over the faint edge of the letter to hide, as far as the gap goes.
+        let faint: Int = max(10, sharpest / 5)
+        if hidingRight {
+            while column > 0, !ink[column - 1], strengths[column - 1] > faint { column -= 1 }
+        } else {
+            while column < ink.count, !ink[column], strengths[column] > faint { column += 1 }
+        }
+        return window.minX + CGFloat(column)
+    }
+
+    /// The column at which `word` divides before its character number `index`, given which
+    /// columns across it have ink. The word is laid out as monospaced text and in a few
+    /// ordinary fonts; the layout whose letter boundaries fall in the gaps the ink shows says
+    /// about where the cut is, and the cut itself is always a gap: the one that estimate is
+    /// in, or else the next one out, so that a wrong guess hides a letter too many and never
+    /// one too few. Nil when no layout explains the gaps, or there is no gap to cut at.
+    static func cut(before index: Int, in word: String, ink: [Bool], hidingRight: Bool) -> Int? {
+        // A few hundred characters is as long as a word needs to be to be worth laying out.
+        let count: Int = word.count
+        guard count >= 2, count <= 300, index > 0, index < count else { return nil }
+        guard let first = ink.firstIndex(of: true), let last = ink.lastIndex(of: true), last > first else { return nil }
+        let width = Double(last + 1 - first)
+        let advance: Double = width / Double(count)
+        // The gaps between letters: runs of columns without ink, from…to (not including `to`),
+        // counted from the word's first column of ink.
+        var gaps: [(from: Double, to: Double)] = []
+        var start: Int?
+        for column in first...last {
+            if !ink[column], start == nil { start = column }
+            if ink[column], let from = start {
+                gaps.append((Double(from - first), Double(column - first)))
+                start = nil
+            }
+        }
+        guard gaps.count >= max(2, count / 4) else { return nil }
+        // Each layout, slid and stretched a little: letters are wider than their ink by the
+        // room either side of the first and the last. Its cost is how far the gaps are from
+        // its boundaries, in letters; a boundary inside a gap costs nothing.
+        var best: [Double] = []
+        var least = Double.greatestFiniteMagnitude
+        for shares in layouts(for: word) {
+            for stretch in -6...20 {
+                let total: Double = width + Double(stretch) * 0.05 * advance
+                for slide in -12...4 {
+                    let offset: Double = Double(slide) * 0.05 * advance
+                    let starts: [Double] = shares.map { offset + $0 * total }
+                    // Gaps and boundaries both run left to right, so one pass does it.
+                    var sum = 0.0
+                    var next = 1
+                    for gap in gaps {
+                        while next < count, starts[next] < gap.from { next += 1 }
+                        var away: Double = advance
+                        if next > 1 { away = min(away, gap.from - starts[next - 1]) }
+                        if next < count { away = starts[next] <= gap.to ? 0 : min(away, starts[next] - gap.to) }
+                        sum += away
+                    }
+                    let cost: Double = sum / Double(gaps.count) / advance
+                    if cost < least {
+                        least = cost
+                        best = starts
+                    }
+                }
+            }
+        }
+        guard least <= 0.04, best.count == count + 1 else { return nil }
+        let estimate: Double = best[index]
+        // Within three letters of the cut, the layout has to agree with every gap, closely.
+        let reach: Double = 3 * advance
+        let near: [(from: Double, to: Double)] = gaps.filter { $0.to >= estimate - reach && $0.from <= estimate + reach }
+        guard near.count >= 2 else { return nil }
+        for gap in near where distance(from: gap, to: best) > 0.1 * advance { return nil }
+        // Inward, only a gap the estimate is all but in; outward, the nearest within a letter and a half.
+        let inward: Double = 0.1 * advance
+        let outward: Double = 1.5 * advance
+        var chosen: (from: Double, to: Double)?
+        var nearest = Double.greatestFiniteMagnitude
+        for gap in gaps {
+            var away = 0.0
+            if estimate < gap.from {
+                away = gap.from - estimate
+                guard away <= (hidingRight ? inward : outward) else { continue }
+            } else if estimate > gap.to {
+                away = estimate - gap.to
+                guard away <= (hidingRight ? outward : inward) else { continue }
+            }
+            if away < nearest {
+                nearest = away
+                chosen = gap
+            }
+        }
+        guard let chosen else { return nil }
+        // Right up against the letters to hide.
+        return first + Int(hidingRight ? chosen.to : chosen.from)
+    }
+
+    /// How far `gap` is from the nearest boundary between letters in `starts` (where each
+    /// letter starts, then where the last ends; the two ends aren't boundaries).
+    private static func distance(from gap: (from: Double, to: Double), to starts: [Double]) -> Double {
+        var nearest = Double.greatestFiniteMagnitude
+        for boundary in starts.dropFirst().dropLast() {
+            if boundary < gap.from {
+                nearest = min(nearest, gap.from - boundary)
+            } else if boundary > gap.to {
+                return min(nearest, boundary - gap.to)
+            } else {
+                return 0
+            }
+        }
+        return nearest
+    }
+
+    /// Fonts whose letter widths stand for most text on a screen: the system's, and a few
+    /// that pages are set in.
+    nonisolated(unsafe) private static let layoutFonts: [CTFont] = {
+        var fonts: [CTFont] = []
+        if let system = CTFontCreateUIFontForLanguage(.system, 100, nil) { fonts.append(system) }
+        for name in ["Helvetica", "Times New Roman", "Verdana", "Georgia"] {
+            fonts.append(CTFontCreateWithName(name as CFString, 100, nil))
+        }
+        return fonts
+    }()
+
+    /// Ways `word` may be laid out: for each, the share of its width at which each character
+    /// starts, then 1. Monospaced first, then as each of `layoutFonts` sets it.
+    private static func layouts(for word: String) -> [[Double]] {
+        let count: Int = word.count
+        var result: [[Double]] = [(0...count).map { Double($0) / Double(count) }]
+        let key = NSAttributedString.Key(kCTFontAttributeName as String)
+        for font in layoutFonts {
+            let line = CTLineCreateWithAttributedString(NSAttributedString(string: word, attributes: [key: font]))
+            let length: Int = (word as NSString).length
+            let total = Double(CTLineGetOffsetForStringIndex(line, length, nil))
+            guard total > 0 else { continue }
+            var shares: [Double] = []
+            for index in word.indices {
+                let before: Int = NSRange(word.startIndex..<index, in: word).length
+                shares.append(Double(CTLineGetOffsetForStringIndex(line, before, nil)) / total)
+            }
+            shares.append(1)
+            result.append(shares)
+        }
+        return result
     }
 
     /// For each row of `window` (whole pixels, inside the image), the sharpest change along it;
@@ -492,8 +691,9 @@ enum SensitiveTextFinder {
         Rule(#"(?i)\bbearer\s+([A-Za-z0-9._~+/=-]{12,})"#, .key, group: 1),
         // user:password@ in a link: everything up to the @.
         Rule(#"\b[a-z][a-z0-9+.-]*://([^\s/:@]+:[^\s/@]+)@"#, .credentialLink, group: 1),
-        // Long, random-looking strings with mixed characters: tokens nobody named.
-        Rule(#"(?<![A-Za-z0-9])[A-Za-z0-9_+/=-]{32,}(?![A-Za-z0-9])"#, .key, accept: { looksRandom($0, minimum: 3.5) && classes($0) >= 3 }),
+        // Long, random-looking strings with mixed characters: tokens nobody named. "=" only as
+        // the padding at the end, so NAME=value is the value and not its label too.
+        Rule(#"(?<![A-Za-z0-9])[A-Za-z0-9_+/-]{32,}={0,2}(?![A-Za-z0-9])"#, .key, accept: { looksRandom($0, minimum: 3.5) && classes($0) >= 3 }),
         Rule(#"[A-Za-z0-9._%+-]+ ?@ ?[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}\b"#, .email, accept: isEmail),
         Rule(#"\b[A-Z]{2}\d{2}(?: ?[A-Z0-9]{4}){2,7}(?: ?[A-Z0-9]{1,4})?\b"#, .iban, accept: isIBAN),
         Rule(#"\b\d{6} ?\d{5}\b"#, .nationalID, accept: isNorwegianID),
